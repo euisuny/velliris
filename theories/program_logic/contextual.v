@@ -1,20 +1,15 @@
-From iris.bi Require Import bi.
-From iris.proofmode Require Import proofmode.
-From simuliris.logic Require Import satisfiable.
-From simuliris.simulation Require Import simulation language slsls.
-From simuliris.utils Require Import no_event.
 From iris.prelude Require Import options.
-Import bi.
+From iris.bi Require Import bi.
+
+From velliris.logic Require Import satisfiable.
+From velliris.program_logic Require Import weakest_pre wellformedness.
+From velliris.utils Require Import no_event tactics.
 
 Set Default Proof Using "Type*".
 
-From simuliris.logic Require Import satisfiable.
-From simuliris.simulation Require Import slsls wellformedness.
-From simuliris.utils Require Import tactics.
-
-From ITree Require Import ITree Eq Events.State Events.StateFacts.
-From ITree Require Import Eq.EqAxiom.
+From ITree Require Import ITree Eq Events.State Events.StateFacts EqAxiom.
 From ITree.Interp Require Import TranslateFacts RecursionFacts.
+
 From Paco Require Import paco.
 
 From Coq Require Import Program.Equality.

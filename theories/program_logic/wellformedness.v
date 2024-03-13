@@ -6,8 +6,8 @@ From Paco Require Import paco.
 
 From ITree Require Import ITree Eq.
 
-From simuliris.simulation Require Import slsls simulation.
-From simuliris.utils Require Import no_event tactics.
+From velliris.program_logic Require Import weakest_pre.
+From velliris.utils Require Import no_event tactics.
 
 Set Default Proof Using "Type*".
 

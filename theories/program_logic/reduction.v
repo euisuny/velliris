@@ -3,13 +3,11 @@
 (* Given a full simulation, [source_red] and [source_target] allows to focus the
   reasoning on the source and target expression. *)
 
-From iris.algebra Require Export ofe.
-From iris.bi Require Import bi fixpoint.
-From iris.proofmode Require Import proofmode.
-From simuliris.simulation Require Export simulation slsls language weakbisim.
 From iris.prelude Require Import options.
-From simuliris.utils Require Import tactics.
-Import bi.
+From iris.bi Require Import bi lib.fixpoint.
+
+From velliris.program_logic Require Export weakest_pre.
+From velliris.utils Require Import tactics.
 
 From ITree Require Import ITree
      Eq.Eqit Events.State Events.StateFacts Extra.IForest.

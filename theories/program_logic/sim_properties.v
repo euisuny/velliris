@@ -1,21 +1,15 @@
-From iris.algebra Require Export ofe.
-From iris.bi Require Import bi fixpoint.
-From iris.proofmode Require Import proofmode.
-From simuliris.simulation Require Export simulation slsls language weakbisim.
 From iris.prelude Require Import options.
-From simuliris.utils Require Import tactics.
-Import bi.
+
+From velliris.program_logic Require Export weakest_pre weakbisim.
+From velliris.utils Require Import tactics.
+
+From ITree Require Import ITree Eq EqAxiom Events.State Events.StateFacts.
 
 From Paco Require Import paco.
 
-From ITree Require Import ITree
-     Eq.Eqit Events.State Events.StateFacts.
+From Coq Require Import Program.Equality.
 
 From Equations Require Import Equations.
-
-From ITree Require Import EqAxiom Eq.
-
-From Coq Require Import Program.Equality.
 
 Section sim_expr_properties.
 
@@ -349,7 +343,7 @@ Section sim_expr_properties.
       by iApply "H2".
   Qed.
 
-  Local Instance sim_val_stutter : SimV PROP Λ := slsls.sim_stutter (η := η).
+  Local Instance sim_val_stutter : SimV PROP Λ := weakest_pre.sim_stutter (η := η).
   Local Instance sim_stutter : Sim PROP Λ := sim_val.
 
   Lemma sim_bind {R1 R2 Re1 Re2} (e_t:expr Λ Re1) (e_s:expr Λ Re2) k_t k_s (Φ:expr_rel R1 R2) :

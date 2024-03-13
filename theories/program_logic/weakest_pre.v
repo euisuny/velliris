@@ -1,14 +1,13 @@
 (** * SLSLS, Separation Logic Stuttering Local Simulation *)
 
-From iris.algebra Require Export ofe.
-From iris.bi Require Import bi.
-From iris.proofmode Require Import proofmode.
-From iris.bi Require Import bi fixpoint.
-From simuliris.simulation Require Export language.
-From simuliris.simulation Require Export simulation.
-From simuliris.utils Require Import tactics.
 From iris.prelude Require Import options.
-Import bi.
+
+From iris.algebra Require Export ofe.
+From iris.bi Require Import bi fixpoint.
+From iris.proofmode Require Import proofmode.
+
+From velliris.program_logic Require Export language simulation.
+From velliris.utils Require Import tactics.
 
 From ITree Require Import ITree
      Eq Events.State Events.StateFacts Props.Leaf.

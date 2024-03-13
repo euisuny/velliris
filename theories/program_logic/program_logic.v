@@ -4,6 +4,10 @@ From iris.prelude Require Import options.
 
 From velliris.program_logic Require Export
      language
+     simulation
      weakest_pre
-     adequacy
+     weakbisim
+     sim_properties
+     reduction
+     wellformedness
      contextual.
