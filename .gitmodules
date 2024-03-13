@@ -1,4 +1,4 @@
-[submodule "lib/vellvm"]
-	path = lib/vellvm
+[submodule "vellvm"]
+	path = vellvm
 	url = https://github.com/vellvm/vellvm
-	branch = 8.17
+  branch = 8.17
