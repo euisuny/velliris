@@ -1107,3 +1107,60 @@ Section logical_relations_properties.
 
 
 End logical_relations_properties.
+
+Section logical_relations_util.
+
+Lemma address_one_function_leaf a x0 x:
+  Leaf.Leaf x0 (address_one_function a) ->
+  Leaf.Leaf x (address_one_function a) ->
+  x0.2 = x.2.
+Proof.
+  rewrite /address_one_function.
+  intros.
+  apply Leaf.Leaf_bind_inv in H0.
+  destruct H0 as (?&?&?).
+  apply Leaf.Leaf_bind_inv in H.
+  destruct H as (?&?&?).
+  apply Leaf.Leaf_Ret_inv in H2, H1; subst. done.
+Qed.
+
+Lemma mcfg_definitions_leaf C g g_t' g_s' r_t r_s:
+  Leaf.Leaf (g_t', r_t) (interp_global (mcfg_definitions C) g) ->
+  Leaf.Leaf (g_s', r_s) (interp_global (mcfg_definitions C) g) ->
+  r_t = r_s.
+Proof.
+  destruct C; cbn in *.
+  revert r_t r_s g g_t' g_s'.
+  induction m_definitions.
+  { cbn in *.
+    intros.
+    inversion H; inv H1; eauto.
+    inversion H0; inv H1; eauto. }
+  { intros * Ht Hs. cbn in *.
+    rewrite interp_global_bind in Ht, Hs.
+    apply Leaf.Leaf_bind_inv in Ht, Hs.
+    destruct Ht as ((g_t&p_t)&bleaf_t&Ht).
+    destruct Hs as ((g_s&p_s)&bleaf_s&Hs).
+    unfold address_one_function in *.
+    rewrite interp_global_bind interp_global_trigger in bleaf_t, bleaf_s.
+    cbn in *.
+    destruct (g !! dc_name (df_prototype a)) eqn: G_lookup; try rewrite G_lookup in bleaf_t, bleaf_s.
+    { rewrite bind_ret_l interp_global_ret in bleaf_t, bleaf_s.
+      apply Leaf.Leaf_Ret_inv in bleaf_t, bleaf_s.
+      destruct p_t, p_s.
+      inv bleaf_t. inv bleaf_s.
+      rewrite interp_global_bind in Ht, Hs.
+      apply Leaf.Leaf_bind_inv in Ht, Hs.
+      destruct Ht as ((g_t&p_t)&bleaf_t&Ht).
+      destruct Hs as ((g_s&p_s)&bleaf_s&Hs).
+      do 2 rewrite interp_global_ret in Ht, Hs.
+      apply Leaf.Leaf_Ret_inv in Ht, Hs; inv Ht; inv Hs.
+      f_equiv.
+
+      eapply IHm_definitions; eauto. }
+
+    { rewrite bind_bind bind_vis in bleaf_t, bleaf_s.
+      inv bleaf_t; inv H; done. } }
+Qed.
+
+End logical_relations_util.

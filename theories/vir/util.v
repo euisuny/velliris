@@ -865,3 +865,42 @@ Proof.
   { rewrite not_elem_of_cons; split; eauto.
     by apply RelDec.neg_rel_dec_correct. }
 Qed.
+
+
+(* ========================================================================== *)
+
+From ITree Require Import ITree Eq.
+From Paco Require Import paco.
+
+(* ITree-related helpers *)
+
+Lemma euttge_tauR_inv E R (e1 e2 : itree E R):
+  e1 ≳ Tau e2 ->
+  e1 ≳ e2.
+Proof.
+  intros H. rewrite (itree_eta e2) in H.
+  punfold H; pstep; red. red in H.
+  remember (observe e1).
+  remember (observe e2).
+  clear Heqi Heqi0 e1 e2. cbn in H.
+  remember ((TauF {| _observe := i0 |})).
+  induction H; subst; try inversion Heqi1; eauto; pclearbot.
+  - constructor; eauto.
+    punfold REL. rewrite H0 in REL. done.
+  - constructor; eauto.
+  - inversion CHECK.
+Qed.
+
+Lemma euttge_tauR_inv' E R (e1 e2 : itree E R):
+  e1 ≳ Tau e2 ->
+  ∃ e1', observe e1 = TauF e1'.
+Proof.
+  intros H. rewrite (itree_eta e2) in H.
+  punfold H; red in H.
+  remember (observe e1).
+  remember (observe e2).
+  clear Heqi Heqi0 e1 e2. cbn in H.
+  remember ((TauF {| _observe := i0 |})).
+  induction H; subst; try inversion Heqi1; eauto; pclearbot.
+  inversion CHECK.
+Qed.

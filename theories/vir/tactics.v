@@ -48,3 +48,18 @@ Ltac cont :=
   iIntros (??) "H";
   iDestruct "H" as (?? Hret1 Hret2) "H";
     rewrite Hret1 Hret2 !bind_ret_l; clear Hret1 Hret2.
+
+Ltac to_inner G :=
+  change
+    (|==>
+      ∃ c : sim_case,
+        match c with
+        | BASE => ?Φ ?x ?y
+        | STUTTER_L => stutter_l
+        | STUTTER_R => stutter_r
+        | TAU_STEP => tau_step
+        | VIS_STEP => vis_step ?x ?y
+        | SOURCE_UB => source_ub
+        | SOURCE_EXC => source_exc
+        end)%I with
+        (sim_expr_inner G (sim_indF G) Φ x y).
