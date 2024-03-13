@@ -2,10 +2,13 @@ From iris.prelude Require Import options.
 
 From velliris.logic Require Import satisfiable.
 From velliris.program_logic Require Import program_logic.
-From velliris.vir Require Import vir logical_relations fundamental.
+From velliris.vir Require Import
+  vir val_rel heapbij adequacy spec globalbij logical_relations fundamental.
 
 From Vellvm Require Import Syntax.DynamicTypes Handlers Syntax.LLVMAst
   Semantics.InterpretationStack.
+
+From ITree Require Import Eq Recursion.
 
 Import LLVMEvents.
 
@@ -92,32 +95,38 @@ End CR_properties.
   The memory and frame is empty except for the main and null address. *)
 Definition I (main : addr) glo_t glo_s : vir_state -> vir_state -> Prop :=
   fun '(g_t, (l_t, ls_t), (m_t, f_t)) '(g_s, (l_s, ls_s), (m_s, f_s)) =>
-  main.1 <> Addr.null.1 /\
-  g_t = glo_t /\ g_s = glo_s
-  /\ l_t = nil /\ l_s = nil
-  /\ ls_t = nil /\ ls_s = nil
-  /\ m_t = ({[ main.1 := dvalue_to_block DVALUE_None;
-              Addr.null.1 := dvalue_to_block DVALUE_None ]},
-            {[ main.1; Addr.null.1 ]})
-  /\ m_s = ({[ main.1 := dvalue_to_block DVALUE_None;
-              Addr.null.1 := dvalue_to_block DVALUE_None ]},
-            {[ main.1; Addr.null.1 ]})
-  /\ f_t = Mem.Singleton [ main.1; Addr.null.1 ]
-  /\ f_s = Mem.Singleton [ main.1; Addr.null.1 ].
+    main.1 <> Addr.null.1 /\
+      g_t = glo_t /\ g_s = glo_s
+    /\ l_t = nil /\ l_s = nil
+    /\ ls_t = nil /\ ls_s = nil
+    /\ m_t = ({[ main.1 := dvalue_to_block DVALUE_None;
+                Addr.null.1 := dvalue_to_block DVALUE_None ]},
+              {[ main.1; Addr.null.1 ]})
+    /\ m_s = ({[ main.1 := dvalue_to_block DVALUE_None;
+                Addr.null.1 := dvalue_to_block DVALUE_None ]},
+              {[ main.1; Addr.null.1 ]})
+    /\ f_t = Mem.Singleton [ main.1; Addr.null.1 ]
+    /\ f_s = Mem.Singleton [ main.1; Addr.null.1 ].
 
-(** *Top-level soundness theorem *)
-Theorem soundness `{sheapGpreS Σ} `{heapbijGpreS Σ} `{checkedoutGpreS Σ}
-  e_t e_s main decl g:
-  isat (∀ `(sheapGS Σ, checkedoutGS Σ, heapbijGS Σ),
-    globals_WF g ∗ <pers> fun_logrel e_t e_s ∅) ->
-  contextual_refinement (I main g g) DTYPE_Void main [] g g
-      (decl, e_t) (decl, e_s).
+(* Well-formedness on globals: all global values are self-related *)
+Definition globals_WF `{heapbijGS Σ} (g : vir.globals) : iPropI Σ :=
+  ([∗ map] g0↦v ∈ g, ∃ v' : dvalue, ⌜g !! g0 = Some v'⌝ ∗ dval_rel v' v)%I.
+
+(* We can instantiate a state interpretation with corresponding ghost resources
+  on states that satisfy the initializaition relation [I] *)
+Lemma initialize_state_interp `{sheapGpreS Σ} `{heapbijGpreS Σ} `{checkedoutGpreS Σ} :
+  forall main g σ_t σ_s e_t e_s,
+    I main g g σ_t σ_s ->
+    (∀ `(sheapGS Σ, checkedoutGS Σ, heapbijGS Σ),
+        globals_WF g ∗ <pers> fun_logrel e_t e_s ∅) ==∗
+    ∃ (H_sh : sheapGS Σ) (H_bij : heapbijGS Σ) (H_c : checkedoutGS Σ),
+      state_interp σ_t σ_s ∗
+    target_globals g ∗ source_globals g ∗
+    ∃ γ_t γ_s,
+        checkout ∅ ∗ stack_tgt [γ_t] ∗ stack_src [γ_s].
 Proof.
-  intros Hf C ?? HI WF_name WF_cfg1 WF_cfg2 WF.
-  eapply (@adequacy Σ isat); eauto; try typeclasses eauto.
-
-  eapply sat_mono, Hf. clear Hf.
-  iStartProof. iIntros "#Hf".
+  rename H into H_shp, H0 into H_bijp, H1 into H_cp.
+  intros * HI.
 
   iMod (@sheap_init Σ _ g g) as (Hsh) "(Hh_t & Hh_s & H)".
   iMod (@heapbij_init Σ _ _ ∅) as (Hhb) "Hbij".
@@ -137,14 +146,14 @@ Proof.
 
   Opaque context.
   destruct HI as (Hun & ?&?&?&?&?&?&?&?&?&?); subst.
-  inv H8; inv H9.
+  inv H5; inv H6.
 
   (** *Allocate null address *)
   (* Allocate at [Addr.null] on target side *)
   iCombine ("Ha_t Hst_t Hh_t") as "H".
   iPoseProof
     (heap_ctx_alloc _ Addr.null.1
-       DVALUE_None ((∅, ∅), ∅) [γf] _ _ _ _ _ DTYPE_Void) as "Halloc_t";
+       DVALUE_None ((∅, ∅), Singleton ∅) [γf] _ _ _ _ _ DTYPE_Void) as "Halloc_t";
     [ set_solver | cbn; set_solver | constructor | ].
   rewrite allocaS_eq /allocaS_def. rewrite /stack.
   iSpecialize ("Halloc_t" with "H"). iMod "Halloc_t".
@@ -153,7 +162,7 @@ Proof.
   iCombine ("Ha_s Hst_s Hh_s") as "H".
   iPoseProof
     (heap_ctx_alloc _ Addr.null.1
-       DVALUE_None ((∅, ∅), ∅) [γf0] _ _ _ _ _ DTYPE_Void) as "Halloc_s";
+       DVALUE_None ((∅, ∅), Singleton ∅) [γf0] _ _ _ _ _ DTYPE_Void) as "Halloc_s";
     [ set_solver | cbn; set_solver | constructor | ].
   rewrite allocaS_eq /allocaS_def. rewrite /stack.
   iSpecialize ("Halloc_s" with "H"). iMod "Halloc_s".
@@ -167,7 +176,7 @@ Proof.
   { rewrite /lb_rel. cbn.
     rewrite /mem_byte_rel. rewrite /init_block; cbn.
     simpl. iSplit.
-    { iIntros (???). inversion H2. }
+    { iIntros (???). inversion H. }
     { done. } }
   iDestruct (heapbij_insert with "Hbij Hv_t Hv_s Hb hb_t hb_s") as ">(Hbij & #Haddr_null)".
 
@@ -207,39 +216,74 @@ Proof.
   iDestruct (heapbij_insert with "Hbij Hv_t Hv_s Hb hb_t hb_s") as ">(H & #Haddr_main)".
   iDestruct "Hg_t" as "#Hg_t"; iDestruct "Hg_s" as "#Hg_s".
 
-  iModIntro.
-  iExists Hsh, Hhb, Hc. cbn.
+  iIntros "#Hf".
+  iDestruct ("Hf" $! Hsh Hc Hhb) as "[Hg _]".
 
-  iSplitR "Hc1 Hf Hs_t Hs_s".
+  iModIntro.
+  iExists Hsh, Hhb, Hc.
+
+  iSplitR "Hc2 Hs_t Hs_s".
   { iExists ∅, {[(main.1, main.1); (Addr.null.1, Addr.null.1)]}, g; iFrame.
 
     (* Global init *)
-    rewrite /globalbij_interp; cbn.
+    rewrite /spec.globalbij_interp; cbn.
     rewrite !globals_eq /globals_def; cbn. iFrame.
     iDestruct "Haddr_null" as "(Haddr' & %H')".
-    iSplitL ""; first set_solver.
-    iSplitL ""; first (iSplitL ""; done).
-    iSplitL ""; first set_solver.
-    iFrame "Hg_t Hg_s".
-    iSpecialize ("Hf" $! _ _ _). iDestruct "Hf" as "(Hf & H)".
-    done. }
+    iSplitL "". { iPureIntro; set_solver. }
+    iSplitL "". { iSplitL ""; done. }
+    iSplitL "". { iPureIntro; set_solver. }
+    iFrame "Hg_t Hg_s". done. }
+  rewrite !globals_eq /globals_def. iFrame "Hg_t Hg_s".
+  iExists γf, γf0; iFrame.
+Qed.
 
-  (* Initialize state interpretation and resources *)
-  Transparent context. cbn.
-  rewrite !bind_bind. setoid_rewrite bind_ret_l.
+From ITree Require Import ITree.
+
+(* The contextual refinement statement, with ghost state instantiated *)
+Lemma contextual_ref `(sheapGS Σ, checkedoutGS Σ, heapbijGS Σ):
+  ∀ e_t e_s γ_t γ_s C decl main g,
+  (* Well-formedness conditions *)
+  dc_name (df_prototype (decl, e_t).2) = dc_name (df_prototype (decl, e_s).2) ->
+  CFG_WF (hole C (decl, e_t)) g g ->
+  CFG_WF (hole C (decl, e_s)) g g ->
+  (* The ghost resources for globals is set up *)
+  target_globals g -∗
+  source_globals g -∗
+  (* Hole is logically related *)
+  □ (fun_logrel e_t e_s ∅) -∗
+  (* Frame resources are set up *)
+  checkout ∅ ∗ stack_tgt [γ_t] ∗ stack_src [γ_s] ==∗
+  context DTYPE_Void main [] C (decl, e_t)
+  ⪯
+  context DTYPE_Void main [] C (decl, e_s)
+  [[ (λ x y : uvalue, ⌜obs_val x y⌝) ⤉ ]].
+Proof.
+  rename H into H_shp, H0 into H_bijp, H1 into H_cp.
+  iIntros (???????? WF_name WF_cfg1 WF_cfg2) "#Hg_t #Hg_s #Hfun Hstack".
+
+  (* Access stack resources *)
+  iDestruct "Hstack" as "(Hc & Hs_t & Hs_s)".
+
+  (* Unfold [context] definition *)
+  with_strategy transparent [context] cbn.
+
+  rewrite !bind_bind; setoid_rewrite bind_ret_l.
   iApply sim_expr'_bind.
-  cbn in WF_name; subst. rewrite WF_name.
-  iApply (sim_expr'_bupd_mono with "[Hc1 Hs_t Hs_s]");
+  cbn in WF_name; subst; rewrite WF_name.
+
+  (* Read the names of the functions ; they are the same *)
+  iApply (sim_expr'_bupd_mono with "[Hc Hs_t Hs_s]");
     [ | iApply sim_expr_lift; iApply sim_global_read ]; cycle 1.
-  { iIntros (??) "H'". iApply "H'". }
+  { iModIntro. iIntros (??) "H'". iApply "H'". }
+
   iIntros (??) "(%dv & %dv' & %Hr1 & %Hr2 & #Hdv)".
   rewrite Hr1 Hr2 !bind_ret_l; clear Hr1 Hr2.
   rewrite !bind_bind; setoid_rewrite bind_ret_l.
   iApply sim_expr'_bind.
 
-  iApply (sim_expr'_bupd_mono with "[Hc1 Hf Hs_t Hs_s]");
+  (* The mcfg is the same, so the resulting definitions are the same *)
+  iApply (sim_expr'_bupd_mono with "[Hc Hfun Hs_t Hs_s]");
     [ | iApply mcfg_definitions_refl' ]; eauto.
-  3, 4: by rewrite globals_eq /globals_def.
   2 : by eapply CFG_WF_hole.
 
   iIntros (??) "H".
@@ -249,10 +293,35 @@ Proof.
   setoid_rewrite bind_ret_l. iModIntro.
 
   pose proof (mcfg_definitions_leaf _ _ _ _ _ _ Hl1 Hl2) as Hsame. subst.
-  rewrite /mcfg_definitions in Hl1.
+  rewrite /mcfg_definitions in Hl1. iClear "Hrel Hlr".
 
-  iAssert (inv [γf] [γf0])%I with "[Hc1 Hs_t Hs_s]" as "Hinv".
-  { iFrame. auto. }
+  clear C Hl1 Hl2 WF_cfg1 WF_cfg2 WF_t WF_s H1 H2.
+  rename r_s into C.
+  iApply (contextual_denote_mcfg with "Hfun Hc Hs_t Hs_s").
+Qed.
 
-  rewrite -H4 in H5.
-  Admitted.
+
+(** *Top-level soundness theorem *)
+Theorem soundness `{sheapGpreS Σ} `{heapbijGpreS Σ} `{checkedoutGpreS Σ}
+  e_t e_s main decl g:
+  isat (∀ `(sheapGS Σ, checkedoutGS Σ, heapbijGS Σ),
+        globals_WF g ∗ <pers> fun_logrel e_t e_s ∅) ->
+  contextual_refinement (I main g g) DTYPE_Void main [] g g
+    (decl, e_t) (decl, e_s).
+Proof.
+  intros Hf C ?? HI WF_name WF_cfg1 WF_cfg2 WF.
+
+  (* Use adequacy to move into the Iris logic *)
+  eapply (@adequacy Σ isat); eauto; try typeclasses eauto; eapply sat_mono, Hf. clear Hf.
+
+  iStartProof; iIntros "#Hf".
+
+  (* Initialize state interpretation and resources *)
+  iPoseProof (initialize_state_interp _ _ _ _ _ _ HI with "Hf") as ">SI".
+  iDestruct "SI" as (???) "[SI [#Hg_t [#Hg_s [%γ_t [%γ_s Hc]]]]]".
+  iExists H_sh, H_bij, H_c; iFrame.
+  iSpecialize ("Hf" $! _ _ _); iDestruct "Hf" as "[#Hg #He]".
+
+  (* Follows by contextual refinement. *)
+  iApply (contextual_ref with "Hg_t Hg_s He Hc"); eauto.
+Qed.
