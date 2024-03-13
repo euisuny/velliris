@@ -1,4 +1,0 @@
--R ../QuickChick/src QuickChick
--I ../QuickChick/src
--R . FlocqQuickChick
-Generators.v
