@@ -14,13 +14,12 @@ From Equations Require Import Equations.
 
 From Paco Require Import paco.
 
-From simuliris.logic Require Import satisfiable.
-From simuliris.simulation Require Import slsls simulation sim_properties
-  wellformedness contextual.
-From simuliris.vir Require Import
-   vir spec globalbij heapbij frame_laws primitive_laws bij_laws logical_relations
-   fundamental_exp interp_properties.
-From simuliris.utils Require Import no_event.
+From velliris.logic Require Import satisfiable.
+From velliris.program_logic Require Import program_logic.
+From velliris.vir Require Import
+  vir spec globalbij heapbij frame_laws primitive_laws bij_laws logical_relations
+  fundamental_exp.
+From velliris.utils Require Import no_event.
 
 Set Default Proof Using "Type*".
 

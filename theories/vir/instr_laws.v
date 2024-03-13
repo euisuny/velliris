@@ -1,15 +1,9 @@
-From iris.algebra Require Import auth.
-From iris.proofmode Require Export proofmode.
 From iris.prelude Require Import options.
-From iris.program_logic Require Export weakestpre total_weakestpre.
-From iris.base_logic.lib Require Export gen_heap gen_inv_heap.
-From iris.base_logic Require Export lib.own.
 
-From simuliris.base_logic Require Export gen_sim_prog.
-From simuliris.simulation Require Import
-  slsls simulation weakbisim reduction sim_properties.
-From simuliris.vir Require Export
-  vir heap spec util frame_laws primitive_laws tactics vir_util.
+From velliris.base_logic Require Export gen_sim_prog.
+From velliris.program_logic Require Import program_logic.
+From velliris.vir Require Export
+  vir vir_state spec util frame_laws primitive_laws tactics vir_util.
 
 From ITree Require Import
   ITree Eq.Eqit Eq.EqAxiom Events.State Events.StateFacts.
@@ -1427,7 +1421,7 @@ Section instruction_laws.
     by iSpecialize ("HP" with "Hd Hf Hl Hp").
   Qed.
 
-  From simuliris.vir Require Import bij_laws.
+  From velliris.vir Require Import bij_laws.
 
   Lemma sim_call_instr C dt x_t x_s f args_t args_s i_t i_s L_t L_s P Q:
       (* SSA should ensure that this would hold *)
@@ -1575,7 +1569,7 @@ Section frame_resources.
   Context {Σ : gFunctors} `{!sheapGS Σ, !checkedoutGS Σ, !heapbijGS Σ}.
 
   Definition frame_res γ i A D :=
-    (heap.stack γ i
+    (vir_state.stack γ i
         ∗ allocaS γ (current_frame i) A
         ∗ ldomain γ (current_frame i) D)%I.
 

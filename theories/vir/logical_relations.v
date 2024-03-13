@@ -4,8 +4,7 @@ From iris.base_logic.lib Require Export gen_heap ghost_map.
 From iris.base_logic Require Import gset_bij.
 
 From ITree Require Import
-  ITree Eq
-  Interp.InterpFacts Interp.RecursionFacts Events.StateFacts TranslateFacts.
+  ITree Eq Interp.InterpFacts Interp.RecursionFacts Events.StateFacts TranslateFacts.
 
 From Vellvm Require Import Syntax.LLVMAst Syntax.DynamicTypes
   Semantics.InterpretationStack Handlers Utils.Util Semantics.LLVMEvents.
@@ -14,12 +13,11 @@ From Equations Require Import Equations.
 
 From Paco Require Import paco.
 
-From simuliris.logic Require Import satisfiable.
-From simuliris.simulation Require Import slsls simulation sim_properties
-  wellformedness contextual.
-From simuliris.vir Require Import
+From velliris.logic Require Import satisfiable.
+From velliris.program_logic Require Import program_logic.
+From velliris.vir Require Import
    vir spec globalbij heapbij frame_laws primitive_laws bij_laws.
-From simuliris.utils Require Import no_event.
+From velliris.utils Require Import no_event.
 
 Set Default Proof Using "Type*".
 

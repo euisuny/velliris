@@ -1,13 +1,10 @@
 (** *Local environment properties *)
 
-From iris.algebra Require Import big_op gmap frac agree numbers gmultiset.
-From iris.algebra Require Import csum excl auth cmra_big_op numbers gmap_view.
-From iris.bi Require Import fractional.
-From iris.base_logic Require Export lib.own.
-From iris.base_logic.lib Require Import ghost_map gset_bij ghost_var.
 From iris.prelude Require Import options.
-From iris.proofmode Require Export tactics.
-From simuliris.vir Require Export vir spec util.
+
+From velliris.program_logic Require Import program_logic.
+From velliris.vir Require Export vir spec util.
+
 Set Default Proof Using "Type*".
 Import uPred.
 
@@ -22,7 +19,7 @@ Section local_properties.
 
   (* Difference between this and [free_frame]? *)
   Definition remove_frame
-    : simulation.language.state vir_lang -> Z -> simulation.language.state vir_lang :=
+    : language.state vir_lang -> Z -> language.state vir_lang :=
     fun '(p, (m, f)) x => (p, (delete x m.1, m.2, delete_from_frame_stack f x)).
 
   Definition update_memory (f: memory_stack -> memory_stack)
@@ -97,7 +94,7 @@ Section local_properties.
     destruct m'. destruct σ_s, m, p, p; cbn in Hfree; destruct p0.
     cbn -[state_interp].
     iDestruct
-      (heap.free_frame _ _ _ _ _ _ _ _ _ _ _ Hlen Hfree with "H") as
+      (vir_state.free_frame _ _ _ _ _ _ _ _ _ _ _ Hlen Hfree with "H") as
       ">(Hh & H)".
     iFrame. cbn. iExists C, S, G; by iFrame.
   Qed.
@@ -122,7 +119,7 @@ Section local_properties.
     iCombine "HS Hh_t HA Hd Hp" as "H".
     destruct m'. destruct σ_t, m, p, p; cbn in Hfree; destruct p0.
     iDestruct
-      (heap.free_frame _ _ _ _ _ _ _ _ _ _ _ Hlen Hfree with "H") as
+      (vir_state.free_frame _ _ _ _ _ _ _ _ _ _ _ Hlen Hfree with "H") as
       ">(Hh_t & H)".
     iFrame. repeat iExists _; by iFrame.
   Qed.
@@ -297,7 +294,7 @@ Section local_properties.
     destruct f; inversion H; subst. eexists _; done.
   Qed.
 
-  From simuliris.vir Require Import bij_laws.
+  From velliris.vir Require Import bij_laws.
 
   Open Scope nat_scope.
 

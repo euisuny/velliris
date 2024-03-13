@@ -1,6 +1,6 @@
-From Coq Require Import String List Program.Equality.
 From iris.prelude Require Import options.
-From iris.bi Require Import bi.
+
+From Coq Require Import String List Program.Equality.
 From iris.base_logic.lib Require Export gen_heap ghost_map.
 From iris.base_logic Require Import gset_bij.
 
@@ -11,11 +11,10 @@ From Vellvm Require Import Syntax.LLVMAst Syntax.DynamicTypes
 
 From Equations Require Import Equations.
 
-From simuliris.logic Require Import satisfiable.
-From simuliris.simulation Require Import slsls simulation sim_properties
-  wellformedness contextual.
-From simuliris.utils Require Import tactics.
-From simuliris.vir Require Import vir.
+From velliris.logic Require Import satisfiable.
+From velliris.program_logic Require Import program_logic.
+From velliris.utils Require Import tactics.
+From velliris.vir Require Import vir.
 
 Set Default Proof Using "Type*".
 
@@ -1278,7 +1277,7 @@ Section interp_L2_conv_properties.
 
 End interp_L2_conv_properties.
 
-From simuliris Require Import vir.spec.
+From velliris Require Import vir.spec.
 
 Section vir_sim_expr_util.
 

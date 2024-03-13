@@ -1,18 +1,12 @@
 (** * Primitive Laws. *)
 
-From iris.algebra Require Import auth.
-From iris.proofmode Require Export proofmode.
 From iris.prelude Require Import options.
-From iris.program_logic Require Export weakestpre total_weakestpre.
-From iris.base_logic.lib Require Export gen_heap gen_inv_heap.
-From iris.base_logic Require Export lib.own.
 
-From simuliris.base_logic Require Export gen_sim_prog.
-From simuliris.simulation Require Import slsls simulation weakbisim reduction.
-From simuliris.vir Require Export vir heap spec util.
+From velliris.program_logic Require Import program_logic.
+From velliris.vir Require Export vir vir_state spec util.
 
-From ITree Require Import ITree Eq.Eqit Eq.EqAxiom Events.State Events.StateFacts
-  Extra.IForest.
+From ITree Require Import
+  ITree Eq.Eqit Eq.EqAxiom Events.State Events.StateFacts Extra.IForest.
 From Vellvm Require Import Semantics.LLVMEvents Handlers.Handlers Handlers.MemoryTheory.
 Set Default Proof Using "Type*".
 

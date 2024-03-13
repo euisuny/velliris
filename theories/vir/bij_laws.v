@@ -1,20 +1,16 @@
 (** * Primitive Laws with bijection on locations. *)
 
 From iris.algebra Require Import auth.
-From iris.proofmode Require Export proofmode.
 From iris.prelude Require Import options.
-From iris.program_logic Require Export weakestpre total_weakestpre.
-From iris.base_logic.lib Require Export gen_heap gen_inv_heap.
-From iris.base_logic Require Export lib.own.
 
-From simuliris.base_logic Require Export gen_sim_prog.
-From simuliris.simulation Require Import slsls simulation weakbisim reduction.
-From simuliris.vir Require Export vir heap spec primitive_laws.
+From velliris.base_logic Require Export gen_sim_prog.
+From velliris.program_logic Require Import program_logic.
+From velliris.vir Require Export vir vir_state spec primitive_laws.
 
-From ITree Require Import ITree Eq.Eqit Eq.EqAxiom Events.State
-     Events.StateFacts Extra.IForest.
-From Vellvm Require Import Semantics.LLVMEvents Handlers.Handlers
-     Utils.NoFailure Syntax.LLVMAst.
+From ITree Require Import
+  ITree Eq.Eqit Eq.EqAxiom Events.State Events.StateFacts Extra.IForest.
+From Vellvm Require Import
+  Semantics.LLVMEvents Handlers.Handlers Utils.NoFailure Syntax.LLVMAst.
 
 Open Scope Z_scope.
 From Equations Require Import Equations.
@@ -167,7 +163,7 @@ Section proof.
     Persistent (lb_rel v_t v_s).
   Proof. apply _. Qed.
 
-  From simuliris.utils Require Import tactics.
+  From velliris.utils Require Import tactics.
   Import DenoteTactics.
 
   Lemma interp_L2_load τ l σ:
@@ -926,12 +922,12 @@ Section proof.
   Lemma free_frame_empty γ i (m m' : memory) (mf mf': frame_stack) g L S :
     (1 < length i)%nat ->
       free_frame (m, mf) = inr (m', mf') ->
-      heap.stack γ i
+      vir_state.stack γ i
       ∗ heap_ctx γ (⊙ (m, mf), vir_dyn (m, mf)) mf g L S
       ∗ allocaS γ (current_frame i) ∅
       ==∗
     heap_ctx γ (⊙ (m, mf), vir_dyn (m, mf)) mf g L S ∗
-      heap.stack γ i
+      vir_state.stack γ i
         ∗ allocaS γ (current_frame i) ∅.
   Proof.
     iIntros (Hlen Hf) "(HFr & Hσ & Ha)".
@@ -1154,13 +1150,13 @@ Section proof.
 
   Lemma free_frame_empty1 γ i (m : memory) (mf : frame_stack) g L S :
     (1 < length i)%nat ->
-      heap.stack γ i
+      vir_state.stack γ i
       ∗ heap_ctx γ (⊙ (m, Snoc mf nil), vir_dyn (m, Snoc mf nil)) (Snoc mf nil) g L S
       ∗ allocaS γ (current_frame i) ∅
       ==∗
     heap_ctx γ (⊙ (free_frame_memory [] m, mf), vir_dyn (free_frame_memory [] m, mf)) mf g
     (hd L S) (tl S) ∗
-      heap.stack γ (tail i)
+      vir_state.stack γ (tail i)
         ∗ allocaS γ (current_frame i) ∅.
   Proof.
     iIntros (Hlen) "(HFr & Hσ & Ha)".
