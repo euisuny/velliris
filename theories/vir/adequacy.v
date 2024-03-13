@@ -1,25 +1,21 @@
-(* From Coq Require Import String List Program.Equality. *)
 From iris.prelude Require Import options.
 From iris.base_logic.lib Require Export iprop.
 
-(* From ITree Require Import ITree Eq Interp.InterpFacts Interp.RecursionFacts. *)
-
-(* From Vellvm Require Import Syntax.LLVMAst Syntax.DynamicTypes *)
-(*   Semantics.InterpretationStack Handlers Utils.Util Semantics.LLVMEvents. *)
+From ITree Require Import ITree Eq.
 
 From Equations Require Import Equations.
 
+From Vellvm Require Import Handlers.
+
 From Paco Require Import paco.
 
-From simuliris.logic Require Import satisfiable.
-From simuliris.simulation Require Import slsls simulation sim_properties contextual.
-
-From simuliris.simulation Require Import wellformedness slsls simulation sim_properties contextual.
-(*   vir spec globalbij heapbij logical_relations fundamental interp_properties. *)
-(* From simuliris.utils Require Import no_event. *)
+From velliris.logic Require Import satisfiable.
+From velliris.program_logic Require Import program_logic.
+From velliris.vir Require Import vir val_rel spec globalbij heapbij.
 
 Set Default Proof Using "Type*".
 
+Import LLVMEvents.
 Section Adequacy.
 
   Context {Σ : gFunctors}.

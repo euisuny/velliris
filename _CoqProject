@@ -43,6 +43,7 @@ theories/vir/instr_laws.v
 theories/vir/logical_relations.v
 theories/vir/fundamental_exp.v
 theories/vir/fundamental.v
+theories/vir/adequacy.v
 theories/vir/contextual.v
 theories/vir/contextual_laws.v
 
