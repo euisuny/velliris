@@ -1,7 +1,7 @@
 (** Notational typeclasses for simulation relations. *)
 
 From iris.bi Require Import bi.
-From simuliris.simulation Require Import language.
+From velliris.program_logic Require Import language.
 From iris.prelude Require Import options.
 Import bi.
 
