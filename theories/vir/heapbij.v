@@ -3,24 +3,20 @@
     This file provides the ghost state for establishing a bijection
     between source and target heaps.  *)
 
-From simuliris.vir Require Export vir heap.
 From iris.algebra Require Import auth.
+From iris.base_logic.lib Require Import ghost_map ghost_var gset_bij.
 From iris.algebra.lib Require Import gset_bij.
-From iris.proofmode Require Import proofmode.
-From iris.bi.lib Require Import fractional.
-From iris.base_logic.lib Require Import ghost_map gset_bij ghost_var.
 
 From Vellvm Require Import Syntax.DynamicTypes Utils.Util.
 
-From simuliris.base_logic Require Import gen_sim_heap gen_sim_prog.
-From simuliris.simulation Require Import slsls.
-From simuliris.vir Require Import base heap val_rel.
+From velliris.base_logic Require Import gen_sim_heap gen_sim_prog.
+From velliris.program_logic Require Import program_logic.
+From velliris.vir Require Export vir vir_state base val_rel.
 
 From iris.prelude Require Import options.
 Set Default Proof Using "Type*".
 Import uPred.
 
-(* From Vellvm Require Import Numeric.Integers. *)
 Open Scope Z_scope.
 
 Class sheapGS (Σ: gFunctors) := SHeapGS {
@@ -94,14 +90,14 @@ Notation "l ↦{ q }s v" := (mapsto_dval sheapG_heap_source l q v)
 Notation "l ↦{ q }t v" := (mapsto_dval sheapG_heap_target l q v)
                             (at level 20, format "l  ↦{ q }t  v") : bi_scope.
 
-Notation "l ↦s [ b ]" := (mapsto sheapG_heap_source l 1 b)
+Notation "l ↦s [ b ]" := (vir_state.mapsto sheapG_heap_source l 1 b)
                       (at level 20, format "l  ↦s  [ b ]") : bi_scope.
-Notation "l ↦t [ b ]" := (mapsto sheapG_heap_target l 1 b)
+Notation "l ↦t [ b ]" := (vir_state.mapsto sheapG_heap_target l 1 b)
                       (at level 20, format "l  ↦t  [ b ]") : bi_scope.
 
-Notation "l ↦{ q }s [ b ]" := (mapsto sheapG_heap_source l q b)
+Notation "l ↦{ q }s [ b ]" := (vir_state.mapsto sheapG_heap_source l q b)
                       (at level 20, format "l  ↦{ q }s  [ b ]") : bi_scope.
-Notation "l ↦{ q }t [ b ]" := (mapsto sheapG_heap_target l q b)
+Notation "l ↦{ q }t [ b ]" := (vir_state.mapsto sheapG_heap_target l q b)
                       (at level 20, format "l  ↦{ q }t  [ b ]") : bi_scope.
 
 Notation "[ l := v ]s i" := (lmapsto sheapG_heap_source (current_frame i) l v)

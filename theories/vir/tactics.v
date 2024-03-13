@@ -1,7 +1,7 @@
 From iris.proofmode Require Export proofmode.
 From iris.prelude Require Import options.
 
-From simuliris.utils Require Import tactics.
+From velliris.utils Require Import tactics.
 From ITree Require Import Eq.
 
 (* Vellvm-related tactics *)
@@ -18,7 +18,7 @@ Ltac noncall_solve :=
     try (left; repeat eexists _ ; by tau_steps).
 
 (* Simuliris-related tactics *)
-From simuliris.simulation Require Import sim_properties reduction.
+From velliris.program_logic Require Import program_logic.
 
 Ltac step :=
   setoid_rewrite InterpFacts.interp_bind; iApply sim_expr_bind.

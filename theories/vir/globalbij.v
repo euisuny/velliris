@@ -1,8 +1,9 @@
 (** * Bijection between global variables *)
 
-From simuliris.simulation Require Import slsls reduction sim_properties.
-From simuliris.vir Require Import heapbij spec.
 From iris.prelude Require Import options.
+
+From velliris.program_logic Require Import program_logic.
+From velliris.vir Require Import heapbij spec.
 
 From Vellvm Require Import Semantics.LLVMEvents Handlers.
 From ITree Require Import ITree Eq Eq.EqAxiom.

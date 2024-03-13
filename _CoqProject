@@ -6,6 +6,7 @@
 -R ./vellvm/src/coq Vellvm
 -I ./vellvm/lib/QuickChick/src
 -R ./vellvm/lib/QuickChick/src QuickChick
+
 theories/utils/tactics.v
 theories/utils/no_event.v
 
@@ -27,7 +28,7 @@ theories/vir/vir_util.v
 theories/vir/tactics.v
 
 theories/vir/vir.v
-theories/vir/heap.v
+theories/vir/vir_state.v
 theories/vir/val_rel.v
 theories/vir/globalbij.v
 theories/vir/heapbij.v

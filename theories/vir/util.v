@@ -3,8 +3,8 @@ From iris.prelude Require Import options.
 From iris.proofmode Require Export tactics.
 Set Default Proof Using "Type".
 
-From simuliris.utils Require Import tactics.
-From simuliris.vir Require Export vir.
+From velliris.utils Require Import tactics.
+From velliris.vir Require Export vir.
 From Vellvm Require Import Handlers.Handlers.
 
 (* Some equivalent computable functions for standard list manipulation *)
@@ -808,4 +808,60 @@ Proof.
     - destruct H1. by inv H5.
     - destruct H1.
       eapply IHr; eauto. }
+Qed.
+
+
+(* ========================================================================== *)
+
+(* List-related helpers *)
+
+Lemma list_fst_fmap_filter {A B} `{RelDec.RelDec A} L l:
+  (List.filter (λ x : A * B, negb (RelDec.rel_dec l x.1)) L).*1 =
+    List.filter (λ x, negb (RelDec.rel_dec l x)) L.*1.
+Proof.
+  revert l. induction L; eauto.
+  intros; cbn.
+  destruct a; cbn.
+  destruct (negb (RelDec.rel_dec l a)) eqn: Ha; cbn; [ by f_equiv | done ].
+Qed.
+
+#[global] Instance list_empty {A} : Empty (list A).
+  constructor; eauto.
+Defined.
+
+#[global] Instance list_singleton {A}: base.Singleton A (list A).
+  repeat red. intro. exact (X :: []).
+Defined.
+
+#[global] Instance list_union {A} `{EqDecision A} : Union (list A).
+  repeat intro. apply (list_union X X0).
+Defined.
+
+#[global] Instance list_semiset {A} `{EqDecision A}: SemiSet A (list A).
+constructor; try split; repeat intro; try set_solver.
+- repeat red in H. by apply elem_of_list_union in H.
+- by apply elem_of_list_union.
+Qed.
+
+Lemma no_dup_alist_add {V} `{EqDecision V} L l (v' : V) :
+  NoDup L.*1 ->
+  NoDup ((FMapAList.alist_add AstLib.eq_dec_raw_id l v' L).*1).
+Proof.
+  intros.
+  revert l v'.
+  induction L; eauto; [ constructor; set_solver | ].
+  inversion H; subst; eauto.
+  intros.
+  specialize (IHL H3 l v').
+  destruct a.
+  destruct (RelDec.rel_dec l r) eqn: Heq; [ cbn in *; rewrite Heq; cbn; eauto | ].
+  cbn in *. rewrite Heq; cbn.
+  inversion IHL; subst; eauto.
+  constructor; cycle 1.
+  { constructor; try set_solver.
+    intro; apply H2.
+    eapply elem_of_weaken; eauto.
+    rewrite list_fst_fmap_filter. apply list_filter_subseteq. }
+  { rewrite not_elem_of_cons; split; eauto.
+    by apply RelDec.neg_rel_dec_correct. }
 Qed.

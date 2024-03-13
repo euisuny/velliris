@@ -7,71 +7,14 @@ From iris.base_logic Require Export lib.own.
 From iris.base_logic.lib Require Import ghost_map ghost_var.
 From iris.prelude Require Import options.
 From iris.proofmode Require Export tactics.
-From simuliris.vir Require Export vir util.
+
+From velliris.vir Require Export vir util.
 Set Default Proof Using "Type".
 Import uPred.
 
 From Vellvm Require Import Syntax.DynamicTypes.
 From Vellvm Require Import Handlers.Handlers Numeric.Integers.
 Open Scope Z_scope.
-
-Lemma list_fst_fmap_filter {A B} `{RelDec.RelDec A} L l:
-  (List.filter (λ x : A * B, negb (RelDec.rel_dec l x.1)) L).*1 =
-    List.filter (λ x, negb (RelDec.rel_dec l x)) L.*1.
-Proof.
-  revert l. induction L; eauto.
-  intros; cbn.
-  destruct a; cbn.
-  destruct (negb (RelDec.rel_dec l a)) eqn: Ha; cbn; [ by f_equiv | done ].
-Qed.
-
-Lemma list_filter_subseteq {A} f (l : list A):
-  List.filter f l ⊆ l.
-Proof.
-  induction l; eauto.
-  cbn. destruct (f a) eqn: Ha; set_solver.
-Qed.
-
-#[global] Instance list_empty {A} : Empty (list A).
-  constructor; eauto.
-Defined.
-
-#[global] Instance list_singleton {A}: base.Singleton A (list A).
-  repeat red. intro. exact (X :: []).
-Defined.
-
-#[global] Instance list_union {A} `{EqDecision A} : Union (list A).
-  repeat intro. apply (list_union X X0).
-Defined.
-
-#[global] Instance list_semiset {A} `{EqDecision A}: SemiSet A (list A).
-constructor; try split; repeat intro; try set_solver.
-- repeat red in H. by apply elem_of_list_union in H.
-- by apply elem_of_list_union.
-Qed.
-
-Lemma no_dup_alist_add {V} `{EqDecision V} L l (v' : V) :
-  NoDup L.*1 ->
-  NoDup ((FMapAList.alist_add AstLib.eq_dec_raw_id l v' L).*1).
-Proof.
-  intros.
-  revert l v'.
-  induction L; eauto; [ constructor; set_solver | ].
-  inversion H; subst; eauto.
-  intros.
-  specialize (IHL H3 l v').
-  destruct a.
-  destruct (RelDec.rel_dec l r) eqn: Heq; [ cbn in *; rewrite Heq; cbn; eauto | ].
-  cbn in *. rewrite Heq; cbn.
-  inversion IHL; subst; eauto.
-  constructor; cycle 1.
-  { constructor; try set_solver.
-    intro; apply H2.
-    eapply elem_of_weaken; eauto.
-    rewrite list_fst_fmap_filter. apply list_filter_subseteq. }
-  { rewrite not_elem_of_cons; split; eauto.
-    by apply RelDec.neg_rel_dec_correct. }
-Qed.
 
 (* A points-to is a [block id * offset -> list byte] such that points-to's
   can be split and combined.
@@ -677,9 +620,9 @@ Section heap.
                         (at level 20, format "l  ↦  v") : bi_scope.
   Notation "l ↦{ q } v" := (mapsto_dval γ l q v)
                         (at level 20, format "l  ↦{ q }  v") : bi_scope.
-  Notation "l ↦ [ b ]" := (mapsto γ l 1 b)
+  Notation "l ↦ [ b ]" := (vir_state.mapsto γ l 1 b)
                         (at level 20, format "l  ↦  [ b ]") : bi_scope.
-  Notation "l ↦{ q } [ b ]" := (mapsto γ l q b)
+  Notation "l ↦{ q } [ b ]" := (vir_state.mapsto γ l q b )
                         (at level 20, format "l  ↦{ q }  [ b ]") : bi_scope.
   Local Notation block_size := (heap_block_size γ).
 
@@ -1991,7 +1934,7 @@ Section heap.
   Qed.
 
   Lemma heap_ctx_alloca_agree i A h mf g L LS:
-    heap.stack γ i -∗
+    stack γ i -∗
     allocaS γ (current_frame i) A -∗
     heap_ctx γ h mf g L LS -∗
     ⌜list_to_set (peek_frame mf) = A⌝.
@@ -1999,7 +1942,7 @@ Section heap.
     iIntros "Hs Ha HC".
     destruct_HC "HC".
     rewrite allocaS_eq /allocaS_def.
-    rewrite /heap.stack.
+    rewrite /stack.
     iDestruct (ghost_var_agree with "Hs HCF") as %Hcf; subst.
     iDestruct (ghost_var_agree with "Ha HA") as %HA.
     done.

@@ -1,26 +1,26 @@
+From iris.prelude Require Import options.
+
+From Equations Require Import Equations.
+
+From velliris.program_logic Require Import program_logic.
+From velliris.utils Require Import tactics.
+
+From Coq Require Import String.
+
 From ITree Require Import
      ITree
      ITreeFacts
      Events.StateFacts.
-
-From iris.algebra Require Export ofe.
-From simuliris.simulation Require Export language slsls simulation.
-From iris.prelude Require Import options.
-From iris Require Import bi.bi.
-
-From Equations Require Import Equations.
-
-From Coq Require Import String.
-
-(* Instantiation for [VIR] language *)
 
 From Vellvm Require Import
      Handlers.Handlers
      LLVMAst
      Semantics.LLVMEvents.
 
-From simuliris.utils Require Import tactics.
 Import DenoteTactics.
+
+
+(* Instantiation for [VIR] language *)
 
 Definition call_args : forall X, LLVMEvents.ExternalCallE X -> dvalue * list uvalue.
   intros. inversion H.
@@ -356,7 +356,6 @@ Definition byte_range intval := (-1 < intval < Byte.modulus)%Z.
 Global Program Instance byte_countable : Countable byte :=
   inj_countable Byte.intval (fun x => _) _.
 Next Obligation.
-  intros x.
   destruct (decide (-1 < x < Byte.modulus)%Z); last exact None.
   exact (Some (Byte.mkint x a)).
 Defined.

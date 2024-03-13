@@ -1,5 +1,6 @@
-From simuliris.utils Require Export tactics.
-From simuliris.vir Require Export vir heap tactics vir_util.
+From velliris.utils Require Export tactics.
+From velliris.vir Require Export vir vir_state tactics vir_util.
+From velliris.program_logic Require Import program_logic.
 
 From iris.algebra.lib Require Import gset_bij.
 From iris.bi Require Import fixpoint.

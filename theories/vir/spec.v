@@ -1,17 +1,13 @@
 (** *Specification of attributes and events. *)
 
-From iris.proofmode Require Export proofmode.
 From iris.prelude Require Import options.
-From iris.program_logic Require Export weakestpre total_weakestpre.
-From iris.algebra.lib Require Import gset_bij.
-From iris.base_logic.lib Require Export gen_heap gen_inv_heap ghost_var.
+From iris.base_logic.lib Require Export ghost_var.
 
-From simuliris.logic Require Import satisfiable.
-From simuliris.simulation Require Import slsls simulation weakbisim.
-From simuliris.vir Require Export vir heap heapbij val_rel.
+From velliris.program_logic Require Import program_logic.
+From velliris.vir Require Export vir vir_state heapbij val_rel.
 
-From ITree Require Import Eq.Eqit Basics.HeterogeneousRelations
-                          ITree RecursionFacts Interp.InterpFacts.
+From ITree Require Import
+  Eq.Eqit Basics.HeterogeneousRelations ITree RecursionFacts Interp.InterpFacts.
 From Vellvm.Semantics Require Import InterpretationStack LLVMEvents.
 From Vellvm Require Import Syntax.LLVMAst Handlers.Handlers.
 
@@ -283,7 +279,6 @@ Section vir_sim_properties.
 
 End vir_sim_properties.
 
-From simuliris.simulation Require Import sim_properties.
 From ITree Require Import Interp.TranslateFacts Events.StateFacts.
 
 Notation "et '⪯' es [[ Φ ]]" :=
