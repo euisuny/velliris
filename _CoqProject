@@ -1,0 +1,53 @@
+-Q theories simuliris
+# We sometimes want to locally override notation, and there is no good way to do that with scopes.
+-arg "-w none"
+# Cannot use non-canonical projections as it causes massive unification failures
+# (https://github.com/coq/coq/issues/6294).
+-R ./lib/vellvm/src/coq Vellvm
+-I ./lib/vellvm/lib/QuickChick/src
+-R ./lib/vellvm/lib/QuickChick/src QuickChick
+theories/utils/tactics.v
+theories/utils/no_event.v
+
+theories/logic/satisfiable.v
+
+theories/simulation/language.v
+theories/simulation/simulation.v
+theories/simulation/slsls.v
+theories/simulation/weakbisim.v
+theories/simulation/sim_properties.v
+theories/simulation/reduction.v
+theories/simulation/wellformedness.v
+theories/simulation/contextual.v
+
+theories/vir/base.v
+theories/vir/util.v
+theories/vir/vir_util.v
+theories/vir/tactics.v
+
+theories/vir/vir.v
+theories/vir/heap.v
+theories/vir/val_rel.v
+theories/vir/globalbij.v
+theories/vir/heapbij.v
+
+theories/vir/spec.v
+theories/vir/interp_properties.v
+theories/vir/primitive_laws.v
+theories/vir/bij_laws.v
+theories/vir/frame_laws.v
+theories/vir/instr_laws.v
+
+theories/vir/logical_relations.v
+theories/vir/fundamental_exp.v
+theories/vir/fundamental.v
+theories/vir/contextual.v
+theories/vir/contextual_laws.v
+
+theories/vir/examples/notations.v
+theories/vir/examples/examples.v
+theories/vir/examples/loop.v
+
+theories/base_logic/gen_sim_heap.v
+theories/base_logic/gen_sim_prog.v
+theories/base_logic/gen_heap_bij.v
