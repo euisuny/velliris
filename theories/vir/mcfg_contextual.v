@@ -2,7 +2,8 @@ From iris.prelude Require Import options.
 
 From velliris.program_logic Require Import program_logic.
 From velliris.vir Require Import
-  vir val_rel heapbij adequacy spec globalbij logical_relations fundamental.
+  vir val_rel heapbij adequacy spec globalbij logical_relations fundamental
+  interp_properties.
 
 From Vellvm Require Import Syntax.DynamicTypes Handlers Syntax.LLVMAst
   Semantics.InterpretationStack.
@@ -21,8 +22,7 @@ Section mcfg_contextual.
   (* Invariant for frame-related resources across a single function call that
      is satisfied by the fundamental theorem *)
   Definition frame_inv i_t i_s :=
-    (frame_WF i_t i_s ∗ checkout ∅ ∗ stack_tgt i_t ∗ stack_src i_s ∗
-       ⌜(length i_s > 0)%Z → (length i_t > 0)%Z⌝)%I.
+    (frame_WF i_t i_s ∗ checkout ∅ ∗ stack_tgt i_t ∗ stack_src i_s)%I.
 
   (* An obligation for each of the defined calls; it satisfies the external
       call specifications *)
@@ -36,7 +36,6 @@ Section mcfg_contextual.
           ⟅ f _ (Call dt1 fn1 args1 nil) ⟆ ⪯
           ⟅ g _ (Call dt2 fn2 args2 nil) ⟆
           [[ (fun v1 v2 => call_ans call1 v1 call2 v2 C) ⤉ ]]) )%I.
-
 
   Notation st_expr_rel' R1 R2 :=
     (@st_exprO' vir_lang R1 -d> @st_exprO' vir_lang R2 -d> iPropI Σ).
@@ -79,35 +78,170 @@ Section mcfg_contextual.
 
   From Equations Require Import Equations.
 
+  Definition args_rel :=
+    fun args_t args_s => ([∗ list] x;y ∈ args_t ;args_s, uval_rel x y)%I.
+
+  (* -------------------------------------------------------------------------- *)
+
   Lemma vir_call_ev_nil i_t i_s t dv args :
     frame_inv i_t i_s -∗
     dval_rel dv dv -∗
-    vir_call_ev Σ (ExternalCall t dv args []) (ExternalCall t dv args []) (∅, i_t, i_s).
+    args_rel args args -∗
+    vir_call_ev Σ
+    (ExternalCall t dv args []) (ExternalCall t dv args []) (∅, i_t, i_s).
+  Proof.
+    iIntros "(?&?&?&?&?) Hv Huv".
+    simp vir_call_ev; iFrame; eauto. iPureIntro; do 2 (split; eauto).
+    simp attribute_interp. cbn. exists OTHER. tauto.
+  Qed.
+
+  (* Access [frame_WF] predicate out of [frame_inv] *)
+  Lemma frame_inv_frame_WF i_t i_s :
+    frame_inv i_t i_s -∗
+    frame_WF i_t i_s.
+  Proof. iIntros "(?&?&?&?)"; done. Qed.
+
+(* -------------------------------------------------------------------------- *)
+
+  Local Definition interp_mrec_ind :=
+    (λ Φ e_t e_s,
+      ∀ (f g : ∀ T : Type, LLVMEvents.CallE T → L0'expr T) t dv args attr σ_t σ_s,
+        ⌜e_t = observe (⟦ ⟅ f uvalue (Call t dv args attr) ⟆ ⟧ σ_t) ⌝ -∗
+        ⌜e_s = observe (⟦ ⟅ g uvalue (Call t dv args attr) ⟆ ⟧ σ_s) ⌝ -∗
+        context_rel f g -∗
+        sim_indF interp_mrec_rec Φ
+        (observe (⟦ interp_mrec f (f uvalue (Call t dv args attr)) ⟧ σ_t))
+        (observe (⟦ interp_mrec g (g uvalue (Call t dv args attr)) ⟧ σ_s)))%I.
+
+  Local Instance interp_mrec_ind_ne:
+    NonExpansive (interp_mrec_ind: st_expr_rel' _ _ -d> st_expr_rel' _ _).
+  Proof.
+    solve_proper_prepare. clear -H. repeat f_equiv.
   Admitted.
 
-  Theorem Proper_mrec
-    (f g : ∀ T : Type, LLVMEvents.CallE T → L0'expr T)
-    (Ψ : _ -d> _ -d> iPropI Σ) i_t i_s t dv args attr:
+  Lemma Proper_mrec_interp_mrec_pred
+    (f g : ∀ T : Type, LLVMEvents.CallE T → L0'expr T) i_t i_s t dv args σ_t σ_s:
+      (* Function address value and arguments are self-related *)
+      dval_rel dv dv -∗
+      args_rel args args -∗
+      (* Frame invariant holds *)
+      frame_inv i_t i_s -∗
+      (* Contexts are related *)
+      context_rel f g -∗
+      state_interp σ_t σ_s ==∗
+      interp_mrec_pred (lift_rel ((λ _ _ : uvalue, frame_inv i_t i_s) ⤉))
+        (observe (⟦ interp_mrec f (f uvalue (Call t dv args [])) ⟧ σ_t))
+        (observe (⟦ interp_mrec g (g uvalue (Call t dv args [])) ⟧ σ_s)).
+  Proof.
+    rewrite /interp_mrec_pred.
+    iIntros "#Hdv #Hargs Hinv #Hrel SI".
+    iExists f, g, t, dv, args, nil, σ_t, σ_s.
+    do 2 (iSplitL ""; first done); iFrame "Hrel".
+    rewrite /call_ev; cbn -[state_interp].
+    iSpecialize ("Hrel" $! dv dv t t args args (∅, i_t, i_s)).
+    iPoseProof (frame_inv_frame_WF with "Hinv") as "%Hframe_WF".
+    iPoseProof (vir_call_ev_nil with "Hinv Hdv Hargs") as "Hev".
+    iSpecialize ("Hrel" with "Hev SI").
+    iMod "Hrel".
+
+    (* Establish postcondition. *)
+    iApply (sim_coindF_bupd_mono with "[] Hrel").
+    iIntros (??) "Hrel". rewrite /lift_rel.
+    iDestruct "Hrel" as (????) "(SI & %Ht & %Hs & Hrel)"; subst.
+    (* Access lifted postcondition *)
+    iDestruct "Hrel" as (????) "Hrel".
+    simp vir_call_ans. iDestruct "Hrel" as "(?&?&?&#?)"; iFrame.
+    (* Prove postcondition. *)
+    iExists σ_t0, σ_s0, e_t0, e_s0; iFrame.
+    do 2 (iSplitL ""; first done).
+    iExists v_t, v_s; done.
+  Qed.
+
+(* -------------------------------------------------------------------------- *)
+
+  (* ITree-related tactics *)
+  Ltac obs_hyp :=
+    match goal with
+      | [ H : {| _observe := observe _ |} = _ |- _] =>
+          let Hobs := fresh "Hobs" in
+          inversion H as [ Hobs ]; clear H
+    end.
+
+  (* Turn an [observe] hypothesis to an ITree equivalence. *)
+  Ltac simpobs_eqit :=
+    obs_hyp;
+    match goal with
+    | [ H : observe _ = _ |- _] =>
+        symmetry in H; apply Eqit.simpobs in H
+    end.
+
+(* -------------------------------------------------------------------------- *)
+
+  Theorem Proper_mrec f g i_t i_s t dv args:
+    (* Function address value and arguments are self-related *)
     dval_rel dv dv -∗
+    args_rel args args -∗
+    (* Frame invariant holds *)
     frame_inv i_t i_s -∗
+    (* Contexts are related *)
     context_rel f g -∗
-    mrec f (Call t dv args attr) ⪯ mrec g (Call t dv args attr)
-    [[ (fun x y => Ψ x y ∗ frame_inv i_t i_s) ⤉ ]].
+    mrec f (Call t dv args nil) ⪯ mrec g (Call t dv args nil)
+    [[ (fun x y => frame_inv i_t i_s) ⤉ ]].
   Proof.
     rewrite /mrec.
-    iIntros "#Hdv Hinv #Hrel"; iIntros (??) "SI".
+    iIntros "#Hdv #Hargs Hinv #Hrel"; iIntros (??) "SI".
 
+    (* Initialize coinductive hypothesis. *)
     iApply (sim_coindF_strong_coind interp_mrec_pred); cycle 1.
-    { rewrite /interp_mrec_pred.
-      iExists f, g, t, dv, args, attr, σ_t, σ_s.
-      do 2 (iSplitL ""; first done); iFrame "Hrel".
-      rewrite /call_ev; cbn -[state_interp].
-      iSpecialize ("Hrel" $! dv dv t t args args (∅, i_t, i_s)).
-      iPoseProof (vir_call_ev_nil with "Hinv Hdv") as "Hev".
-      iSpecialize ("Hrel" with "Hev SI").
-      iMod "Hrel". admit. }
+    { iApply (Proper_mrec_interp_mrec_pred with "Hdv Hargs Hinv Hrel SI"). }
 
-    iModIntro.
+    (* Set up context *)
+    iModIntro. iClear "Hdv Hrel". clear.
+    iIntros (Φ e_t e_s) "IH";
+    iDestruct "IH" as (??????????) "(#Hcrel & IH)"; subst.
+
+    (* Induction on simulation between (f call) and (g call). *)
+    rewrite sim_coindF_unfold.
+    iAssert (∀ Ψ e_t e_s, (sim_indF sim_coindF Ψ e_t e_s) -∗
+      interp_mrec_ind Ψ e_t e_s)%I as "Hgen"; last first.
+    { iSpecialize ("Hgen" with "IH").
+      iApply ("Hgen" $! _ _ _ _ _ _ _ _ eq_refl eq_refl with "Hcrel"). }
+
+    (* Set up context *)
+    iClear "Hcrel". clear. iIntros (Ψ e_t e_s) "Hsim".
+    iApply (sim_indF_strong_ind with "[] Hsim"); clear.
+    iModIntro; iIntros (Ψ e_t e_s) "Hinner".
+    iIntros (??????????) "#Hcrel"; subst.
+
+    (* [Hinner] for the "inner" expression, i.e. [e_s] *)
+    rewrite /sim_expr_inner;
+    cbn -[F] in *; rewrite sim_indF_unfold /sim_expr_inner.
+    iMod "Hinner"; to_inner interp_mrec_rec.
+
+    (* Case analysis on the inductive information. *)
+    iDestruct "Hinner" as ( c ) "Hinner";
+      destruct c; try case_solve; try done.
+
+    (* [BASE] case *)
+    { admit. }
+    (* [STUTTER_L] case *)
+    { admit. }
+    (* [STUTTER_R] case *)
+    { admit. }
+    (* [TAU_STEP] case *)
+    { admit. }
+    (* [VIS] case *)
+    { admit. }
+
+    (* [UB] case *)
+    { simpobs_eqit; by eapply interp_L2_conv_UB_inv in Hobs. }
+
+    (* [EXC] case *)
+    { simpobs_eqit; by eapply interp_L2_conv_failure_inv in Hobs. }
+
+
+
+
 
   Admitted. (* TODO : Port over proof *)
 
