@@ -14,19 +14,64 @@ Import LLVMEvents.
 
 Set Default Proof Using "Type*".
 
+(** *Whole-program refinement *)
+Section prog_ref.
+
+  (* Initial relation on states *)
+  Context (I : vir_state -> vir_state -> Prop).
+
+  (* If the initial states are related by some relation, and the expressions
+     are well formed (i.e. the source program does not "go wrong" and the
+     expressions are closed after denotation), then the resulting programs
+     are observationally equivalent to each other using [eutt]. *)
+  Definition prog_ref (e_t e_s : expr vir_lang uvalue) :=
+    ∀ σ_t σ_s,
+      I σ_t σ_s ->
+      well_formed (⟦ e_t ⟧ σ_t) (⟦ e_s ⟧ σ_s) ->
+      eutt obs_val_res (⟦ e_t ⟧ σ_t) (⟦ e_s ⟧ σ_s).
+
+End prog_ref.
+
+Import CFG.
+
+(* A context is a mutually recursive control flow graph [mcfg]. *)
+Notation context := (CFG.mcfg dtyp).
+
+(* Generating a well-formed global out of the definitions in a context *)
+Definition init_global (names : list function_id) :=
+  snd (List.fold_left
+    (fun '(acc, g) id =>
+      (S acc,
+        <[ id := DVALUE_Addr (Z.of_nat acc, 0%Z) ]> g)) names
+          (0%nat, (∅ : vir.globals))).
+
+(* Well-formedness over contexts *)
+Definition ctx_wf (C : context) :=
+  let funs := CFG.m_definitions C in
+  (* The context has the same definitions *)
+  (length (CFG.m_declarations C) = length (CFG.m_definitions C)) /\
+  (* There are no duplicate names in the context *)
+  NoDup (CFG_names C) /\
+  (* All the functions declared are well-formed *)
+  Forall fun_WF funs /\
+  (* The attributes list is empty for each function declaration *)
+  (* TODO : Do we want something a little more generic here?
+     This is the strongest statement that would follow automatically as a
+     consequence of the fundamental theorem. *)
+  Forall (fun x => dc_attrs x = nil) (CFG.m_declarations C)
+.
+
 (** *Top-level Contextual Refinement *)
 Section CR_definition.
 
   Context (Σ : gFunctors).
-  Context (I : vir_state -> vir_state -> Prop).
-  Context (ret_typ : dtyp) (main : Addr.addr)
-          (args : list uvalue)
-          (main_function : definition dtyp (CFG.cfg dtyp))
-          (glo_t glo_s : vir.globals).
+  Context (ret_typ : dtyp) (main : Addr.addr) (args : list uvalue)
+          (I : vir_state -> vir_state -> Prop).
 
-  Import CFG.
-
-  Definition hole (C : CFG.mcfg dtyp) (e : declaration dtyp * definition dtyp (CFG.cfg dtyp)) :=
+  (* The context takes a function (with its declaration and definition) as its
+     hole; we can extend the list of declarations and definitions with the hole. *)
+  Definition fill_mcfg_defs (C : context)
+    (e : declaration dtyp * definition dtyp (CFG.cfg dtyp)) :=
     {| m_name := m_name C;
       m_target := m_target C;
       m_datalayout := m_datalayout C;
@@ -35,53 +80,94 @@ Section CR_definition.
       m_declarations := e.1 :: m_declarations C;
       m_definitions := e.2 :: m_definitions C
     |}.
-  Opaque hole.
 
-  Definition context (C : CFG.mcfg dtyp) e :=
-      Monad.bind (mcfg_definitions (hole C e))
+  (* Filling the context involves (1) extending the function declaration map and
+    (2) restating the denotation of mutually-recursive control flow graps using
+        [denote_mcfg]. *)
+  Definition fill_ctx (C : context) e :=
+    Monad.bind (mcfg_definitions (fill_mcfg_defs C e))
         (fun defs => denote_mcfg defs ret_typ (DVALUE_Addr main) args).
 
-  Notation " C ⎨ e_t ⎬ " := (context C e_t) (at level 40).
-
-  Definition attributes (C : CFG.mcfg dtyp) := dc_attrs <$> CFG.m_declarations C.
-
-  Definition contextual_refinement e_t e_s: Prop :=
-    forall (C : CFG.mcfg dtyp) σ_t σ_s,
-      (* Assuming some initial relation on states, *)
-      I σ_t σ_s ->
+  (* Contextual refinement. *)
+  Definition ctx_ref e_t e_s: Prop :=
+    forall (C : CFG.mcfg dtyp),
+      (* The context needs to be well-formed *)
+      ctx_wf C ->
       (* The names of the declarations are the same *)
       dc_name (df_prototype e_t.2) = dc_name (df_prototype e_s.2) ->
-      (* The hole and context are syntactically well-formed *)
-      CFG_WF (hole C e_t) glo_t glo_s ->
-      CFG_WF (hole C e_s) glo_t glo_s ->
-      well_formed (⟦ C ⎨ e_t ⎬ ⟧ σ_t) (⟦ C ⎨ e_s ⎬ ⟧ σ_s) ->
-      eutt obs_val_res (⟦ C ⎨ e_t ⎬ ⟧ σ_t) (⟦ C ⎨ e_s ⎬ ⟧ σ_s).
+      (* Implies whole-program refinement *)
+      prog_ref I (fill_ctx C e_t) (fill_ctx C e_s).
 
 End CR_definition.
+
+(* Initial relation on states; there is a [main] and [null] address in the
+    state.
+  The memory and frame is empty except for the main and null address. *)
+Definition init_state (main : Addr.addr) (fun_names : list function_id) : vir_state -> Prop :=
+  fun '(g, (l, ls), (m, f)) =>
+    (* The global environment contains the names of function declarations in
+        the context [C]. *)
+      g = init_global (fun_names)
+    (* The local environment and local stack is empty *)
+    /\ l = nil /\ ls = nil
+    (* The memory has [main] and [null] allocated *)
+    /\ m = ({[ main.1 := dvalue_to_block DVALUE_None;
+              Addr.null.1 := dvalue_to_block DVALUE_None ]},
+            {[ main.1; Addr.null.1 ]})
+    (* The frame has the main and null address *)
+    /\ f = Mem.Singleton [ main.1; Addr.null.1 ].
+
+(* The relational variant, with the added condition that the [main] and [null]
+  addresses are not equivalent to each other. *)
+Definition init_state_rel (main : Addr.addr) C : vir_state -> vir_state -> Prop :=
+  fun σ_t σ_s =>
+    main.1 <> Addr.null.1 /\
+    init_state main C σ_t /\ init_state main C σ_s.
 
 Section CR_properties.
 
   Context {Σ} `{!sheapGS Σ, !checkedoutGS Σ, !heapbijGS Σ}.
+  Context (ret_typ : dtyp) (main : Addr.addr) (args : list uvalue).
 
-  Lemma CFG_WF_hole C decl e_t g_t g_s:
-    CFG_WF (hole C (decl, e_t)) g_t g_s ->
-    CFG_WF C g_t g_s.
+  (* TODO *)
+  Lemma contains_keys_init_global names :
+    contains_keys (init_global names) names.
   Proof.
-    rewrite /CFG_WF.
+    induction names; cbn; eauto; first set_solver.
+    rewrite /contains_keys. cbn. rewrite /init_global; cbn.
+  Admitted.
+
+  (* TODO *)
+  Lemma nodup_codomain_init_global names :
+    NoDup_codomain (filter_keys (init_global names) names).
+  Proof. Admitted.
+
+  Lemma ctx_wf_implies_CFG_WF C :
+   ctx_wf C ->
+   CFG_WF C (init_global (CFG_names C)) (init_global (CFG_names C)).
+  Proof.
+    intros (?&?&?&?).
+    repeat (split; eauto);
+      eauto using contains_keys_init_global, nodup_codomain_init_global.
+  Qed.
+
+  Lemma ctx_wf_fill_mcfg_defs C decl e_t:
+    ctx_wf (fill_mcfg_defs C (decl, e_t)) ->
+    ctx_wf C.
+  Proof.
+    rewrite /ctx_wf.
     intros. destructb.
-    apply nodup_codomain_cons_inv in H5,H6; eauto.
     cbn in *. split; eauto. nodup.
-    apply contains_keys_cons_inv in H3, H4.
     apply Forall_cons in H1, H2.
     destructb.
     repeat split; eauto.
   Qed.
 
-  Lemma CFG_WF_hole_attr C decl e_t g_t g_s:
-    CFG_WF (hole C (decl, e_t)) g_t g_s ->
+  Lemma ctx_wf_hole_attr C decl e_t:
+    ctx_wf (fill_mcfg_defs C (decl, e_t)) ->
     (dc_attrs decl = nil).
   Proof.
-    rewrite /CFG_WF.
+    rewrite /ctx_wf.
     intros. destructb.
     clear -H2. cbn in *.
     apply Forall_cons in H2; by destructb.
@@ -89,39 +175,25 @@ Section CR_properties.
 
 End CR_properties.
 
-(* Initial relation on states; there is a [main] and [null] address in the state
-  where the [main] and [null] addresses are not equivalent to each other.
-
-  The memory and frame is empty except for the main and null address. *)
-Definition I (main : addr) glo_t glo_s : vir_state -> vir_state -> Prop :=
-  fun '(g_t, (l_t, ls_t), (m_t, f_t)) '(g_s, (l_s, ls_s), (m_s, f_s)) =>
-    main.1 <> Addr.null.1 /\
-      g_t = glo_t /\ g_s = glo_s
-    /\ l_t = nil /\ l_s = nil
-    /\ ls_t = nil /\ ls_s = nil
-    /\ m_t = ({[ main.1 := dvalue_to_block DVALUE_None;
-                Addr.null.1 := dvalue_to_block DVALUE_None ]},
-              {[ main.1; Addr.null.1 ]})
-    /\ m_s = ({[ main.1 := dvalue_to_block DVALUE_None;
-                Addr.null.1 := dvalue_to_block DVALUE_None ]},
-              {[ main.1; Addr.null.1 ]})
-    /\ f_t = Mem.Singleton [ main.1; Addr.null.1 ]
-    /\ f_s = Mem.Singleton [ main.1; Addr.null.1 ].
-
 (* Well-formedness on globals: all global values are self-related *)
 Definition globals_WF `{heapbijGS Σ} (g : vir.globals) : iPropI Σ :=
   ([∗ map] g0↦v ∈ g, ∃ v' : dvalue, ⌜g !! g0 = Some v'⌝ ∗ dval_rel v' v)%I.
 
+Definition init_keys (main : Addr.addr) : list global_id :=
+  Raw main.1 :: Raw Addr.null.1 :: nil.
+
 (* We can instantiate a state interpretation with corresponding ghost resources
   on states that satisfy the initializaition relation [I] *)
 Lemma initialize_state_interp `{sheapGpreS Σ} `{heapbijGpreS Σ} `{checkedoutGpreS Σ} :
-  forall main g σ_t σ_s e_t e_s,
-    I main g g σ_t σ_s ->
+  forall main σ_t σ_s e_t e_s,
+    let init_keys := init_keys main in
+    let g := init_global init_keys in
+    init_state_rel main init_keys σ_t σ_s ->
     (∀ `(sheapGS Σ, checkedoutGS Σ, heapbijGS Σ),
         globals_WF g ∗ <pers> fun_logrel e_t e_s ∅) ==∗
     ∃ (H_sh : sheapGS Σ) (H_bij : heapbijGS Σ) (H_c : checkedoutGS Σ),
       state_interp σ_t σ_s ∗
-    target_globals g ∗ source_globals g ∗
+      target_globals g ∗ source_globals g ∗
     ∃ γ_t γ_s,
         checkout ∅ ∗ stack_tgt [γ_t] ∗ stack_src [γ_s].
 Proof.
@@ -144,9 +216,8 @@ Proof.
   destruct σ_t as ((?&?&?)&(?&?)&?).
   destruct σ_s as ((?&?&?)&(?&?)&?).
 
-  Opaque context.
-  destruct HI as (Hun & ?&?&?&?&?&?&?&?&?&?); subst.
-  inv H5; inv H6.
+  destruct HI as (Hun & ?&?&?&?&?&?); subst; inv H3.
+  destruct H as (?&?&?&?&?); subst; inv H2.
 
   (** *Allocate null address *)
   (* Allocate at [Addr.null] on target side *)
@@ -241,25 +312,25 @@ From ITree Require Import ITree.
 
 (* The contextual refinement statement, with ghost state instantiated *)
 Lemma contextual_ref `(sheapGS Σ, checkedoutGS Σ, heapbijGS Σ):
-  ∀ e_t e_s γ_t γ_s C decl main g,
+  ∀ e_t e_s γ_t γ_s C decl main,
   (* Well-formedness conditions *)
-  dc_name (df_prototype (decl, e_t).2) = dc_name (df_prototype (decl, e_s).2) ->
-  CFG_WF (hole C (decl, e_t)) g g ->
-  CFG_WF (hole C (decl, e_s)) g g ->
+  ctx_wf C ->
+  (* The names of the declarations are the same *)
+  dc_name (df_prototype e_t) = dc_name (df_prototype e_s) ->
   (* The ghost resources for globals is set up *)
-  target_globals g -∗
-  source_globals g -∗
+  target_globals (init_global (CFG_names C)) -∗
+  source_globals (init_global (CFG_names C)) -∗
   (* Hole is logically related *)
   □ (fun_logrel e_t e_s ∅) -∗
   (* Frame resources are set up *)
   checkout ∅ ∗ stack_tgt [γ_t] ∗ stack_src [γ_s] ==∗
-  context DTYPE_Void main [] C (decl, e_t)
+  fill_ctx DTYPE_Void main [] C (decl, e_t)
   ⪯
-  context DTYPE_Void main [] C (decl, e_s)
+  fill_ctx DTYPE_Void main [] C (decl, e_s)
   [[ (λ x y : uvalue, ⌜obs_val x y⌝) ⤉ ]].
 Proof.
   rename H into H_shp, H0 into H_bijp, H1 into H_cp.
-  iIntros (???????? WF_name WF_cfg1 WF_cfg2) "#Hg_t #Hg_s #Hfun Hstack".
+  iIntros (??????? H_wf WF_name) "#Hg_t #Hg_s #Hfun Hstack".
 
   (* Access stack resources *)
   iDestruct "Hstack" as "(Hc & Hs_t & Hs_s)".
@@ -269,7 +340,8 @@ Proof.
 
   rewrite !bind_bind; setoid_rewrite bind_ret_l.
   iApply sim_expr'_bind.
-  cbn in WF_name; subst; rewrite WF_name.
+
+  rewrite WF_name.
 
   (* Read the names of the functions ; they are the same *)
   iApply (sim_expr'_bupd_mono with "[Hc Hs_t Hs_s]");
@@ -284,7 +356,7 @@ Proof.
   (* The mcfg is the same, so the resulting definitions are the same *)
   iApply (sim_expr'_bupd_mono with "[Hc Hfun Hs_t Hs_s]");
     [ | iApply mcfg_definitions_refl' ]; eauto.
-  2 : by eapply CFG_WF_hole.
+  2 : apply ctx_wf_implies_CFG_WF; eauto.
 
   iIntros (??) "H".
   iDestruct "H" as (????????)
@@ -295,21 +367,19 @@ Proof.
   pose proof (mcfg_definitions_leaf _ _ _ _ _ _ Hl1 Hl2) as Hsame. subst.
   rewrite /mcfg_definitions in Hl1. iClear "Hrel Hlr".
 
-  clear C Hl1 Hl2 WF_cfg1 WF_cfg2 WF_t WF_s H1 H2.
-  rename r_s into C.
-  iApply (contextual_denote_mcfg with "Hfun Hc Hs_t Hs_s").
-Qed.
+(*   iApply (contextual_denote_mcfg with "Hfun Hc Hs_t Hs_s"). *)
+(* Qed. *)
+Admitted.
 
 
 (** *Top-level soundness theorem *)
 Theorem soundness `{sheapGpreS Σ} `{heapbijGpreS Σ} `{checkedoutGpreS Σ}
-  e_t e_s main decl g:
+  e_t e_s main decl:
   isat (∀ `(sheapGS Σ, checkedoutGS Σ, heapbijGS Σ),
-        globals_WF g ∗ <pers> fun_logrel e_t e_s ∅) ->
-  contextual_refinement (I main g g) DTYPE_Void main [] g g
-    (decl, e_t) (decl, e_s).
+      globals_WF (init_global (init_keys main)) ∗ <pers> fun_logrel e_t e_s ∅) ->
+  ctx_ref DTYPE_Void main [] (init_state_rel main (init_keys main)) (decl, e_t) (decl, e_s).
 Proof.
-  intros Hf C ?? HI WF_name WF_cfg1 WF_cfg2 WF.
+  intros Hf C WF WF_name ?? HI WF_pr.
 
   (* Use adequacy to move into the Iris logic *)
   eapply (@adequacy Σ isat); eauto; try typeclasses eauto; eapply sat_mono, Hf. clear Hf.
@@ -317,11 +387,11 @@ Proof.
   iStartProof; iIntros "#Hf".
 
   (* Initialize state interpretation and resources *)
-  iPoseProof (initialize_state_interp _ _ _ _ _ _ HI with "Hf") as ">SI".
+  iPoseProof (initialize_state_interp _ _ _ _ _ HI with "Hf") as ">SI".
   iDestruct "SI" as (???) "[SI [#Hg_t [#Hg_s [%γ_t [%γ_s Hc]]]]]".
   iExists H_sh, H_bij, H_c; iFrame.
   iSpecialize ("Hf" $! _ _ _); iDestruct "Hf" as "[#Hg #He]".
 
   (* Follows by contextual refinement. *)
-  iApply (contextual_ref with "Hg_t Hg_s He Hc"); eauto.
-Qed.
+  (* iApply (contextual_ref _ _ _ _ _ _ _ _ _ _ WF WF_name with "Hg_t Hg_s He Hc"); eauto. *)
+Admitted.
