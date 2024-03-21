@@ -1,5 +1,7 @@
 From iris.prelude Require Import options.
 
+From Coq Require Import Program.Equality.
+
 From velliris.program_logic Require Import program_logic.
 From velliris.vir Require Import
   vir val_rel heapbij adequacy spec globalbij logical_relations fundamental
@@ -17,8 +19,6 @@ Import LLVMEvents.
 
 Set Default Proof Using "Type*".
 
-Opaque mrec.
-
 (* -------------------------------------------------------------------------- *)
 
 (* ITree-related tactics *)
@@ -31,7 +31,7 @@ Ltac obs_hyp :=
 
 (* Turn an [observe] hypothesis to an ITree equivalence. *)
 Ltac simpobs_eqit :=
-  obs_hyp;
+  try obs_hyp;
   match goal with
   | [ H : observe _ = _ |- _] =>
       symmetry in H; apply Eqit.simpobs in H
@@ -73,43 +73,40 @@ Section mcfg_contextual.
   (* Auxiliary definitions for [Proper_interp_mrec] *)
   (* Because [sim_expr] includes stateful interpretation, showing properness result
     for [interp_mrec] amounts to proving a simulation *)
-  Local Definition mrec_pred :=
-    fun (Φ:st_expr_rel' _ _) (e_t:st_expr' vir_lang _) (e_s:st_expr' vir_lang _) =>
-      (∃ f g t dv args attr σ_t σ_s,
-          ⌜e_t = observe (⟦ mrec f (Call t dv args attr) ⟧ σ_t)⌝ ∗
-          ⌜e_s = observe (⟦ mrec g (Call t dv args attr) ⟧ σ_s)⌝ ∗
+  Local Definition mrec_pred {R} :=
+    fun (Φ:st_expr_rel' _ _) (e_t:st_expr' vir_lang R) (e_s:st_expr' vir_lang R) =>
+      (∃ f g a_t a_s σ_t σ_s,
+          ⌜e_t = observe (⟦ interp_mrec f a_t ⟧ σ_t)⌝ ∗
+          ⌜e_s = observe (⟦ interp_mrec g a_s ⟧ σ_s)⌝ ∗
           (* Function is called on related addresses and arguments *)
-          dval_rel dv dv ∗
-          args_rel args args ∗
           (* Postcondition contains [base] predicate*)
           □ contains_base Φ ∗
           (* Contexts are related *)
           □ context_rel f g ∗
           sim_coindF Φ
-              (observe (⟦ ⟅ f uvalue (Call t dv args attr) ⟆ ⟧ σ_t))
-              (observe (⟦ ⟅ g uvalue (Call t dv args attr) ⟆ ⟧ σ_s)))%I.
+              (observe (⟦ ⟅ a_t ⟆ ⟧ σ_t)) (observe (⟦ ⟅ a_s ⟆ ⟧ σ_s)))%I.
 
-  Local Definition mrec_rec :=
-    fun (Φ:st_expr_rel' _ _) (e_t:st_expr' vir_lang _) (e_s:st_expr' vir_lang _) =>
-      ((∃ f g t dv args attr σ_t σ_s,
-          ⌜e_t = observe (⟦ mrec f (Call t dv args attr) ⟧ σ_t)⌝ ∗
-          ⌜e_s = observe (⟦ mrec g (Call t dv args attr) ⟧ σ_s)⌝ ∗
-          dval_rel dv dv ∗ args_rel args args ∗
+  Local Definition mrec_rec {R} :=
+    fun (Φ:st_expr_rel' _ _) (e_t:st_expr' vir_lang R) (e_s:st_expr' vir_lang R) =>
+      ((∃ f g a_t a_s σ_t σ_s,
+          ⌜e_t = observe (⟦ interp_mrec f a_t ⟧ σ_t)⌝ ∗
+          ⌜e_s = observe (⟦ interp_mrec g a_s ⟧ σ_s)⌝ ∗
           □ contains_base Φ ∗
           □ context_rel f g ∗
          sim_coindF Φ
-          (observe (⟦ ⟅ f uvalue (Call t dv args attr) ⟆ ⟧ σ_t))
-          (observe (⟦ ⟅ g uvalue (Call t dv args attr) ⟆ ⟧ σ_s)))
+          (observe (⟦ ⟅ a_t ⟆ ⟧ σ_t)) (observe (⟦ ⟅ a_s ⟆ ⟧ σ_s)))
         ∨ sim_coindF Φ e_t e_s)%I.
 
-  Local Instance mrec_pred_ne:
-    NonExpansive (mrec_pred: st_expr_rel' _ _ -d> st_expr_rel' _ _).
+  Local Instance mrec_pred_ne {R}:
+    NonExpansive (mrec_pred: st_expr_rel' _ _ -d> st_expr_rel' _ R).
   Proof.
-    intros x y *. solve_proper_prepare. do 22 f_equiv; try solve_proper.
-  Qed.
+    intros x y *. solve_proper_prepare.
+  (*   repeat f_equiv; try solve_proper. *)
+  (* Qed. *)
+  Admitted.
 
-  Local Instance mrec_rec_ne:
-    NonExpansive (mrec_rec: st_expr_rel' _ _ -d> st_expr_rel' _ _).
+  Local Instance mrec_rec_ne {R}:
+    NonExpansive (mrec_rec: st_expr_rel' _ _ -d> st_expr_rel' _ R).
   Proof.
     intros x y *. solve_proper_prepare.
   Admitted.
@@ -141,24 +138,22 @@ Section mcfg_contextual.
 
 (* -------------------------------------------------------------------------- *)
 
-
   Notation mrec_body := (∀ T : Type, CallE T → L0'expr T).
 
   (* Induction hypothesis for [Proper_mrec] *)
-  Local Definition mrec_ind :=
+  Local Definition mrec_ind {R} :=
     (λ Φ e_t e_s,
-      ∀ {f g : mrec_body} {t dv args attr σ_t σ_s},
-        ⌜e_t = observe (⟦ ⟅ f uvalue (Call t dv args attr) ⟆ ⟧ σ_t) ⌝ -∗
-        ⌜e_s = observe (⟦ ⟅ g uvalue (Call t dv args attr) ⟆ ⟧ σ_s) ⌝ -∗
-        args_rel args args -∗
+      ∀ {f g : mrec_body} {a_t a_s : _ R} {σ_t σ_s},
+        ⌜e_t = observe (⟦ ⟅ a_t ⟆ ⟧ σ_t) ⌝ -∗
+        ⌜e_s = observe (⟦ ⟅ a_s ⟆ ⟧ σ_s) ⌝ -∗
         □ contains_base Φ -∗
         □ context_rel f g -∗
         sim_indF mrec_rec Φ
-        (observe (⟦ mrec f (Call t dv args attr) ⟧ σ_t))
-        (observe (⟦ mrec g (Call t dv args attr) ⟧ σ_s)))%I.
+        (observe (⟦ interp_mrec f a_t ⟧ σ_t))
+        (observe (⟦ interp_mrec g a_s ⟧ σ_s)))%I.
 
-  Local Instance mrec_ind_ne:
-    NonExpansive (mrec_ind: st_expr_rel' _ _ -d> st_expr_rel' _ _).
+  Local Instance mrec_ind_ne {R}:
+    NonExpansive (mrec_ind: st_expr_rel' _ _ -d> st_expr_rel' _ R).
   Proof.
     solve_proper_prepare. clear -H. repeat f_equiv.
   Admitted.
@@ -179,14 +174,14 @@ Section mcfg_contextual.
   Proof.
     rewrite /mrec_pred.
     iIntros "#Hdv #Hargs Hinv #Hrel SI".
-    iExists f, g, t, dv, args, nil, σ_t, σ_s.
+    iExists f, g, _, _, σ_t, σ_s.
+    rewrite /mrec.
     do 2 (iSplitL ""; first done); iFrame "Hrel".
     rewrite /call_ev; cbn -[state_interp].
     iSpecialize ("Hrel" $! dv dv t t args args (∅, i_t, i_s)).
     iPoseProof (frame_inv_frame_WF with "Hinv") as "%Hframe_WF".
     iPoseProof (vir_call_ev_nil with "Hinv Hdv Hargs") as "Hev".
     iSpecialize ("Hrel" with "Hev SI").
-    iFrame "Hdv Hargs".
 
     (* Base postcondition *)
     iSplitL "".
@@ -246,6 +241,8 @@ Section mcfg_contextual.
 
   Notation sim_ind := (sim_indF sim_coindF).
 
+  (* -------------------------------------------------------------------------- *)
+
   Lemma Proper_mrec_stutter_l {f g : mrec_body} {e_t t dv args attr σ_t σ_s Ψ}:
     o⟦ ⟅ f uvalue (Call t dv args attr) ⟆ ⟧ σ_t = TauF e_t ->
     args_rel args args -∗
@@ -258,7 +255,12 @@ Section mcfg_contextual.
     sim_mrec_ind Ψ
       (o⟦ mrec f (Call t dv args attr) ⟧ σ_t)
       (o⟦ mrec g (Call t dv args attr) ⟧ σ_s).
-  Proof. Admitted.
+  Proof.
+    iIntros (Hf) "#args #Hbase #Hrel IH".
+
+    simpobs_eqit.
+    apply interp_L2_conv_tau_inv in Hf.
+  Admitted.
 
   Lemma Proper_mrec_stutter_r {f g : mrec_body} {e_s t dv args attr σ_t σ_s Ψ}:
     o⟦ ⟅ g uvalue (Call t dv args attr) ⟆ ⟧ σ_s = TauF e_s ->
@@ -274,6 +276,8 @@ Section mcfg_contextual.
       (o⟦ mrec g (Call t dv args attr) ⟧ σ_s).
   Proof. Admitted.
 
+  (* -------------------------------------------------------------------------- *)
+
   Lemma Proper_mrec_tau  {f g : mrec_body} {e_t e_s t dv args attr σ_t σ_s Ψ}:
     o⟦ ⟅ f uvalue (Call t dv args attr) ⟆ ⟧ σ_t = TauF e_t ->
     o⟦ ⟅ g uvalue (Call t dv args attr) ⟆ ⟧ σ_s = TauF e_s ->
@@ -284,7 +288,42 @@ Section mcfg_contextual.
     sim_mrec_ind Ψ
       (o⟦ mrec f (Call t dv args attr) ⟧ σ_t)
       (o⟦ mrec g (Call t dv args attr) ⟧ σ_s).
-  Proof. Admitted.
+  Proof.
+  Admitted.
+
+  From ITree Require Import Interp.InterpFacts Events.StateFacts.
+
+  Lemma interp_L2_conv_vis_call {X} τ a args attr σ
+    (e : language.L2 vir_lang X) k
+    (k' : X -> itree (language.L2 vir_lang) (_ * uvalue)) :
+    ⟦ ⟅ vis (Call τ a args attr) k ⟆ ⟧ σ ≅ (Vis e k') ->
+    X = (state vir_lang * uvalue)%type /\
+    e ~= (inl1 (StateEff vir_calls
+      (σ, ExternalCall τ a args (FNATTR_Internal :: attr)))
+        : language.L2 vir_lang _)
+    /\ (forall x y, x ~= y -> Tau (Tau (⟦ ⟅ k x.2 ⟆ ⟧  x.1)) ~= k' y).
+  Proof.
+    intros Hv.
+    setoid_rewrite interp_vis in Hv.
+    setoid_rewrite interp_state_bind in Hv.
+    setoid_rewrite interp_state_vis in Hv.
+    setoid_rewrite bind_bind in Hv.
+    rewrite /subevent /resum /ReSum_inl /cat /Cat_IFun /inl_ /Inl_sum1
+      /resum /ReSum_id /id_ /Id_IFun in Hv.
+    simp call_conv in Hv. cbn in Hv.
+    rewrite bind_vis in Hv.
+    apply eqit_inv in Hv; cbn in Hv.
+    destruct Hv as (?&?&?); subst. red in H2, H3.
+    dependent destruction H2.
+    do 2 (split; eauto).
+    intros.
+    specialize (H3 x).
+    rewrite bind_ret_l in H3. rewrite interp_state_ret in H3.
+    rewrite bind_tau bind_ret_l in H3.
+    rewrite interp_state_tau in H3. cbn in *.
+    apply EqAxiom.bisimulation_is_eq in H3. rewrite H3.
+    dependent destruction H2. reflexivity.
+  Qed.
 
   Lemma Proper_mrec_vis {X Y} {f g : mrec_body}
     {et kt es ks t dv args attr σ_t σ_s Ψ}:
@@ -297,18 +336,58 @@ Section mcfg_contextual.
     sim_mrec_ind Ψ
       (o⟦ mrec f (Call t dv args attr) ⟧ σ_t)
       (o⟦ mrec g (Call t dv args attr) ⟧ σ_s).
-  Proof. Admitted.
+  Proof.
+    iIntros (??) "#Hargs #Hbase #Hcrel Hev"; repeat simpobs_eqit.
+    rename H2 into Hf, H3 into Hg.
+    pose proof (Hf' := Hf); pose proof (Hg' := Hg).
+
+    apply interp_L2_conv_vis_inv in Hf, Hg.
+
+    destruct Hf as [ (τ_t&a_t&args_t&attr_t&k_t&Hf) | (X'&ev_t&k_t&Hf) ];
+      destruct Hg as [ (τ_s&a_s&args_s&attr_s&k_s&Hg) | (Y'&ev_s&k_s&Hg) ].
+
+    2,3 : admit. (* ABSURD *)
+
+    { (* Internal *)
+
+      (* Prep *)
+      rewrite Hf in Hf'; rewrite Hg in Hg'.
+
+      cbn in *.
+
+      rewrite /resum /ReSum_id /id_ /Id_IFun.
+      simp handle_call_events.
+
+      (* force unfold mrec *)
+      with_strategy transparent [mrec] unfold mrec.
+      apply EqAxiom.bisimulation_is_eq in Hf, Hg.
+      rewrite Hf Hg !interp_mrec_call.
+
+      (* Invert information out of shape of call *)
+      apply interp_L2_conv_vis_call in Hf', Hg'.
+      destruct Hf' as (->&Het&Hkt); destruct Hg' as (->&Hes&Hks).
+      dependent destruction Het; dependent destruction Hes.
+
+      rewrite /handle_event; simp handle_call_events.
+
+      iDestruct "Hev" as "[ Hev | Hev ]"; cycle 1.
+
+      (* Internal call was "external" and now meets the spec *)
+      { iDestruct "Hev" as (?) "(SI & Hev & Hinner)".
+        provide_case: TAU_STEP.
+        iLeft. iExists f, g, _, _.
+  Admitted.
 
   (* -------------------------------------------------------------------------- *)
 
   Ltac intro_mrec_coind :=
     iIntros (Φ e_t e_s) "IH";
-    iDestruct "IH" as (??????????) "(#Hdv & #Hargs & #Hbase & #Hcrel & IH)";
+    iDestruct "IH" as (????????) "(#Hbase & #Hcrel & IH)";
     subst.
 
   Ltac intro_mrec_ind :=
     iModIntro; iIntros (Ψ e_t e_s) "Hinner";
-    iIntros (??????????) "#Hargs #Hbase #Hcrel"; subst.
+    iIntros (????????) "#Hargs #Hbase #Hcrel"; subst.
 
   (* Try to [iMod] a [sim_expr_inner] hypothesis. *)
   Ltac iMod_sim_inner :=
@@ -344,13 +423,21 @@ Section mcfg_contextual.
     iAssert (∀ Ψ e_t e_s, (sim_indF sim_coindF Ψ e_t e_s) -∗
       mrec_ind Ψ e_t e_s)%I as "Hgen"; last first.
     { iSpecialize ("Hgen" with "IH").
-      iApply ("Hgen" $! _ _ _ _ _ _ _ _ eq_refl eq_refl with "Hargs Hbase Hcrel"). }
+      iApply ("Hgen" $! _ _ _ _ _ _ eq_refl eq_refl with "Hbase Hcrel"). }
 
     (* Set up context *)
-    iClear "Hargs Hdv Hcrel Hbase"; clear.
+    iClear "Hcrel Hbase"; clear.
     iIntros (Ψ e_t e_s) "Hsim".
     iApply (sim_indF_strong_ind with "[] Hsim"); clear.
-    intro_mrec_ind; iMod_sim_inner.
+
+    iModIntro; iIntros (Ψ e_t e_s) "Hinner".
+
+    iIntros (????????) "#Hbase #Hcrel"; subst.
+
+
+    rewrite /sim_expr_inner;
+    cbn -[F] in *; rewrite sim_indF_unfold /sim_expr_inner;
+    iMod "Hinner"; to_inner (mrec_rec (R := uvalue)).
 
     (* Case analysis on the inductive information. *)
     iDestruct "Hinner" as ( c ) "Hinner"; destruct c; try case_solve;
@@ -359,39 +446,85 @@ Section mcfg_contextual.
     (* ------------------------------------------------------------------ *)
 
     (* [BASE] case *)
-    { iApply (Proper_mrec_base with "Hbase Hinner"). }
+    { admit. }
+    (* iApply (Proper_mrec_base with "Hbase Hinner"). } *)
 
     (* ------------------------------------------------------------------ *)
 
     (* Inductive cases: [STUTTER_L] and [STUTTER R] *)
 
     (* [STUTTER_L] case *)
-    { by iApply (Proper_mrec_stutter_l with "Hargs Hbase Hcrel Hinner"). }
+    { admit. }
+    (* by iApply (Proper_mrec_stutter_l with "Hargs Hbase Hcrel Hinner"). } *)
 
     (* [STUTTER_R] case; symmetric to [STUTTER_L] *)
-    { by iApply (Proper_mrec_stutter_r with "Hargs Hbase Hcrel Hinner"). }
+    { admit. }
+    (* by iApply (Proper_mrec_stutter_r with "Hargs Hbase Hcrel Hinner"). } *)
 
     (* ------------------------------------------------------------------ *)
 
     (* Coinductive cases : [TAU_STEP] and [VIS_STEP] case *)
 
     (* [TAU_STEP] case *)
-    { rename H4 into Hg, t0 into e_t, s into e_s.
-      by iApply (Proper_mrec_tau with "Hargs Hbase Hcrel Hinner"). }
+    { admit. }
 
     (* [VIS] case *)
-    { by iApply (Proper_mrec_vis with "Hargs Hbase Hcrel Hinner"). }
+    { rename H4 into Hg. do 2 simpobs_eqit.
+
+      pose proof (Hf' := Hf); pose proof (Hg' := Hg).
+
+      apply interp_L2_conv_vis_inv in Hf, Hg.
+
+      destruct Hf as [ (τ_t&addr_t&args_t&attr_t&k_t&Hf) | (X'&ev_t&k_t&Hf) ];
+        destruct Hg as [ (τ_s&addr_s&args_s&attr_s&k_s&Hg) | (Y'&ev_s&k_s&Hg) ].
+      2,3: admit. (* absurd *)
+
+      { (* Internal *)
+
+        cbn in *.
+
+        rewrite /resum /ReSum_id /id_ /Id_IFun.
+        simp handle_call_events.
+
+        (* force unfold mrec *)
+        apply EqAxiom.bisimulation_is_eq in Hf, Hg.
+        rewrite Hf Hg !interp_mrec_call.
+
+        rewrite Hf in Hf'; rewrite Hg in Hg'.
+        (* Invert information out of shape of call *)
+        apply interp_L2_conv_vis_call in Hf', Hg'.
+        destruct Hf' as (->&Het&Hkt); destruct Hg' as (->&Hes&Hks).
+        dependent destruction Het; dependent destruction Hes.
+
+        provide_case: TAU_STEP.
+
+
+        rewrite /handle_event. simp handle_call_events.
+
+        iDestruct "Hinner" as "[ Hinner | Hinner ]"; cycle 1.
+
+        (* Internal call was "external" and now meets the spec *)
+        { iLeft. iExists f, g, _, _, σ_t, σ_s.
+          repeat (iSplitL ""; first done); iFrame.
+          iDestruct "Hinner" as (?) "(SI & Hev & Hinner)".
+
+          (* Cut on internal call *)
+          rewrite !interp_L2_conv_bind; iApply sim_coindF_coind_bind.
+          rewrite /context_rel.
+          admit. }
+        (*   iSpecialize ("Hcrel" with "Hev"). *)
+        (*   match goal with *)
+        (*   | |- environments.envs_entails _ (sim_coindF ?Φ _ _) => remember Φ *)
+        (*   end. *)
+
+        (*   (* Cut on internal call *) *)
+        (*   rewrite !interp_L2_conv_bind. iApply sim_coindF_ *)
+
+
+        (* by iApply (Proper_mrec_vis with "Hargs Hbase Hcrel Hinner"). } *)
 
     (* ------------------------------------------------------------------ *)
-
-    (* Follows trivially : [UB] and [EXC] *)
-
-    (* [UB] case *)
-    { simpobs_eqit; by eapply interp_L2_conv_UB_inv in Hobs. }
-
-    (* [EXC] case *)
-    { simpobs_eqit; by eapply interp_L2_conv_failure_inv in Hobs. }
-  Qed.
+  Admitted.
 
 (* -------------------------------------------------------------------------- *)
 
@@ -502,6 +635,17 @@ Section mcfg_contextual.
     (* The frame invariant holds. *)
     iAssert (frame_inv [γ_t] [γ_s])%I with "[Hc Hs_t Hs_s]" as "Hinv".
     { by iFrame. }
+
+    rewrite mrec
+    rewrite sim_expr'.
+
+
+    iApply sim_coindF_strong_coind; cycle 1.
+    rewrite /fun_logrel.
+
+    rewrite /denote_mcfg.
+
+    (* Try to prove this directly on coinduction? *)
 
     iPoseProof
       (Proper_mrec _ _ (λ x y : uvalue, ⌜obs_val x y⌝)%I [γ_t] [γ_s]

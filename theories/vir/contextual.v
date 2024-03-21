@@ -184,6 +184,7 @@ Definition init_keys (main : Addr.addr) : list global_id :=
 
 (* We can instantiate a state interpretation with corresponding ghost resources
   on states that satisfy the initializaition relation [I] *)
+(* IY : Is there a cleaner way to state this lemma? *)
 Lemma initialize_state_interp `{sheapGpreS Σ} `{heapbijGpreS Σ} `{checkedoutGpreS Σ} :
   forall main σ_t σ_s e_t e_s,
     let init_keys := init_keys main in
@@ -367,8 +368,8 @@ Proof.
   pose proof (mcfg_definitions_leaf _ _ _ _ _ _ Hl1 Hl2) as Hsame. subst.
   rewrite /mcfg_definitions in Hl1. iClear "Hrel Hlr".
 
-(*   iApply (contextual_denote_mcfg with "Hfun Hc Hs_t Hs_s"). *)
-(* Qed. *)
+  (* IY: This is the difficult part; WIP version is in [mcfg_contextual.v] *)
+  (*   iApply (contextual_denote_mcfg with "Hfun Hc Hs_t Hs_s"). *)
 Admitted.
 
 
