@@ -336,12 +336,13 @@ Section fundamental.
       rewrite bind_vis; reflexivity. }
 
     iApply sim_coindF_vis. iRight.
-    iModIntro. cbn -[attribute_interp].
+    iModIntro.
     rewrite /resum /ReSum_id /id_ /Id_IFun.
+    rewrite /handle_event; cbn.
     simp handle_call_events. iLeft.
     iFrame.
     iDestruct "CI" as (??) "(?&?&Hs_t&Hs_s&#HWF&?&?&?&?&HC&?)".
-    iExists (∅, i_t, i_s).
+    iExists (i_t, i_s).
     iSplitL "Hs_t Hs_s HC".
     { rewrite /call_args_eq / arg_val_rel; cbn; iFrame.
       iFrame "HWF".

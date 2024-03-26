@@ -500,15 +500,15 @@ Section AuxDefs.
   Equations instrE_conv:
     forall T : Type, instr_E T -> L0 T :=
     instrE_conv T (inl1 (Call t f args attr)) :=
-      inl1 (ExternalCall t f args (FNATTR_Internal :: attr));
+      inl1 (ExternalCall t f args attr);
     instrE_conv T (inr1 e) := instr_to_L0 _ e.
 
   Equations call_conv:
     forall T : Type, L0' T -> L0 T :=
     call_conv T (inl1 (Call t f args attr)) :=
-      inl1 (ExternalCall t f args (FNATTR_Internal :: attr));
+      inl1 (ExternalCall t f args attr);
     call_conv T (inr1 (inl1 (ExternalCall t f args attr))) :=
-      inl1 (ExternalCall t f args (FNATTR_External :: attr));
+      inl1 (ExternalCall t f args attr);
     call_conv T (inr1 (inr1 e)) := inr1 e.
 
   Definition instr_conv {R} : itree instr_E R -> expr vir_lang R :=
