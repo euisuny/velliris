@@ -14,14 +14,6 @@ Section globalbij.
 
   Context {Σ : gFunctors} `{!sheapGS Σ, !checkedoutGS Σ, !heapbijGS Σ}.
 
-  Lemma update_global_id σ:
-    update_global (vglobal σ) σ = σ.
-  Proof. by destruct σ. Qed.
-
-  Lemma update_mem_id σ:
-    update_mem (vmem σ) σ = σ.
-  Proof. by destruct σ. Qed.
-
   Lemma sim_global_read (f: LLVMAst.global_id) Φ:
     (∀ (v_t v_s : dvalue),
         dval_rel v_s v_t -∗

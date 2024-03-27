@@ -9,6 +9,52 @@ From Vellvm Require Import Handlers.Handlers.
 
 Open Scope nat_scope.
 
+(* Lemmas about [Qp] *)
+Lemma add_le_sub_r_Some qr q qa:
+  (qr + q ≤ qa)%Qp ->
+  ∃ q', (qa - q = Some q')%Qp.
+Proof.
+  setoid_rewrite Qp.sub_Some.
+  intros Hq.
+  apply Qp.le_lteq in Hq. destruct Hq.
+  { rewrite Qp.lt_sum in H. destruct H; eauto.
+    exists (qr + x)%Qp. rewrite H. rewrite Qp.add_assoc.
+    f_equiv. apply Qp.add_comm. }
+  { exists qr. rewrite -H. apply Qp.add_comm. }
+Qed.
+
+Lemma add_le_sub_r_Some' qr q qa:
+  (qr + q ≤ qa)%Qp ->
+  ((∃ q', qa - q = Some (qr + q')) \/ (qa = qr + q))%Qp.
+Proof.
+  setoid_rewrite Qp.sub_Some.
+  intros Hq.
+  apply Qp.le_lteq in Hq. destruct Hq.
+  { rewrite Qp.lt_sum in H. destruct H; eauto. left.
+    exists x. rewrite H. rewrite Qp.add_assoc.
+    f_equiv. apply Qp.add_comm. }
+  { right. by rewrite -H. }
+Qed.
+
+Lemma add_le_sub_l_Some qr q qa:
+  (qr + q ≤ qa)%Qp ->
+  ∃ q', (qa - qr = Some q')%Qp.
+Proof.
+  rewrite Qp.add_comm.
+  apply add_le_sub_r_Some.
+Qed.
+
+Lemma le_eq (q q': Qp) :
+  (q' ≤ q)%Qp -> (q ≤ q')%Qp -> q = q'.
+Proof.
+  rewrite !Qp.le_lteq.
+  intros [] []; subst; eauto.
+  exfalso.
+  apply Qp.lt_nge in H.
+  apply H.
+  by apply Qp.lt_le_incl.
+Qed.
+
 (* Some equivalent computable functions for standard list manipulation *)
 
 Fixpoint In_b {A} `{EQ: EqDecision A} (a:A) (l:list A) : bool :=

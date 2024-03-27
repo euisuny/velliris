@@ -81,6 +81,8 @@ Proof.
     iDestruct "H2" as "(?&?&?&?)"; by iFrame.
 Qed.
 
+(* ------------------------------------------------------------------------ *)
+
 Notation "l ↦s v" := (mapsto_dval sheapG_heap_source l 1 v)
                       (at level 20, format "l  ↦s  v") : bi_scope.
 Notation "l ↦t v" := (mapsto_dval sheapG_heap_target l 1 v)
@@ -120,7 +122,9 @@ Notation alloca_src i := (allocaS sheapG_heap_source (current_frame i)).
 Notation stack_tgt := (stack sheapG_heap_target).
 Notation stack_src := (stack sheapG_heap_source).
 
+(* ------------------------------------------------------------------------ *)
 (** *Checked out resources *)
+
 Class checkedoutGS (Σ : gFunctors) := CheckedOutGS {
   checkedoutG :> ghost_varG Σ (gmap (loc * loc) frac);
   checkedoutG_bij_name : gname;
@@ -152,16 +156,82 @@ Proof.
   iPoseProof (ghost_var_split with "H") as "[H1 H2]"; iFrame.
 Qed.
 
-From Vellvm Require Import Handlers.Handlers.
-Import LLVMEvents.
+(* ------------------------------------------------------------------------ *)
 
-Section definitions.
+Class vellirisGS (Σ : gFunctors) := VellirisGS {
+  velliris_heapbijGS :> heapbijGS Σ;
+  velliris_sheapGS :> sheapGS Σ;
+  velliris_checkedoutGS :> checkedoutGS Σ;
+}.
 
-  Context `{!heapbijGS Σ, !sheapGS Σ, !checkedoutGS Σ}.
+Class vellirisGpreS Σ := {
+  velliris_pre_heapbijG :> heapbijGpreS Σ;
+  velliris_pre_sheapG :> sheapGpreS Σ;
+  velliris_pre_checkedoutG :> checkedoutGpreS Σ;
+}.
+
+Definition vellirisΣ := #[heapbijΣ; sheapΣ; checkedoutΣ].
+
+(* ------------------------------------------------------------------------ *)
+Section heapbij_definition.
+
+  Context `{!sheapGS Σ, !heapbijGS Σ}.
 
   (* Refinement of values *)
   Definition lb_rel (v_t v_s : logical_block) : iPropI Σ :=
     mem_byte_rel (lb_mem v_t) (lb_mem v_s).
+  (* Treat memory blocks as if it is an array storing [dvalue] elements, where
+      index [i] of the array has value [v] written to it.
+
+      If it is contained in the checkout set [C], the blocks are leaked to an
+      external source. *)
+  Definition alloc_rel (l_t l_s : loc) (C : gmap (loc * loc) frac) : iProp Σ :=
+    (∃ n v_t v_s,
+        (match n with
+        | Some _ =>
+          ∃ (q : option frac), ⌜C !! (l_t, l_s) = q⌝ ∗
+          match q with
+            | Some q =>
+                match (1 - q)%Qp with
+                  | Some q' =>
+                      l_t ↦{q'}t [ v_t ] ∗
+                      l_s ↦{q'}s [ v_s ] ∗
+                      lb_rel v_t v_s
+                  | None => True
+                end
+            | None =>
+                l_t ↦t [ v_t ] ∗
+                l_s ↦s [ v_s ] ∗
+                lb_rel v_t v_s
+          end
+        | None => True
+        end) ∗
+        target_block_size l_t n ∗
+        source_block_size l_s n).
+
+  Definition heapbij_interp (L : gset (loc * loc)) C :=
+    (heapbij_auth L ∗ [∗ set] p ∈ L, let '(b_t, b_s) := p in alloc_rel b_t b_s C)%I.
+
+End heapbij_definition.
+
+Lemma heapbij_init `{!heapbijGpreS Σ, !sheapGS Σ} P:
+  ⊢ |==> ∃ `(heapbijGS Σ), heapbij_interp ∅ P.
+Proof.
+  iMod (gset_bij_own_alloc ∅) as (γbij) "[Hbij _]".
+  { apply: gset_bijective_empty. }
+  iIntros "!>". iExists (HeapBijGS _ _ γbij).
+  rewrite /heapbij_interp /heapbij_auth /heapbijG_bij_name; iFrame.
+  iSplitL "Hbij"; [ iApply "Hbij" | ].
+  iApply big_sepS_empty. done.
+Qed.
+
+From Vellvm Require Import Handlers.Handlers.
+Import LLVMEvents.
+
+
+Section alloc_rel_properties.
+
+  Context `{!vellirisGS Σ}.
 
   (* Simple properties of [lb_rel] *)
   Lemma empty_mem_block_lookup τ k n:
@@ -195,35 +265,7 @@ Section definitions.
     apply empty_mem_block_lookup in H; by subst.
   Qed.
 
-  (* Treat memory blocks as if it is an array storing [dvalue] elements, where
-     index [i] of the array has value [v] written to it.
-
-     If it is contained in the checkout set [C], the blocks are leaked to an
-     external source. *)
-  Definition alloc_rel (l_t l_s : loc) (C : gmap (loc * loc) frac) : iProp Σ :=
-    (∃ n v_t v_s,
-       (match n with
-        | Some _ =>
-          ∃ (q : option frac), ⌜C !! (l_t, l_s) = q⌝ ∗
-          match q with
-            | Some q =>
-                match (1 - q)%Qp with
-                  | Some q' =>
-                      l_t ↦{q'}t [ v_t ] ∗
-                      l_s ↦{q'}s [ v_s ] ∗
-                      lb_rel v_t v_s
-                  | None => True
-                end
-            | None =>
-                l_t ↦t [ v_t ] ∗
-                l_s ↦s [ v_s ] ∗
-                lb_rel v_t v_s
-          end
-        | None => True
-        end) ∗
-        target_block_size l_t n ∗
-        source_block_size l_s n).
-
+  (* Properties about [alloc_rel] *)
   Lemma alloc_rel_read_None C b_t b_s σ_s σ_t v G mf L LS :
     σ_s.1 !! b_s = Some v →
     C !! (b_t, b_s) = None ->
@@ -302,40 +344,6 @@ Section definitions.
     iModIntro.
     iExists _, _, _; iFrame.
     iExists _; iSplitL ""; [ done | ]. cbn. iFrame.
-  Qed.
-
-  Lemma add_le_sub_r_Some qr q qa:
-    (qr + q ≤ qa)%Qp ->
-    ∃ q', (qa - q = Some q')%Qp.
-  Proof.
-    setoid_rewrite Qp.sub_Some.
-    intros Hq.
-    apply Qp.le_lteq in Hq. destruct Hq.
-    { rewrite Qp.lt_sum in H. destruct H; eauto.
-      exists (qr + x)%Qp. rewrite H. rewrite Qp.add_assoc.
-      f_equiv. apply Qp.add_comm. }
-    { exists qr. rewrite -H. apply Qp.add_comm. }
-  Qed.
-
-  Lemma add_le_sub_r_Some' qr q qa:
-    (qr + q ≤ qa)%Qp ->
-    ((∃ q', qa - q = Some (qr + q')) \/ (qa = qr + q))%Qp.
-  Proof.
-    setoid_rewrite Qp.sub_Some.
-    intros Hq.
-    apply Qp.le_lteq in Hq. destruct Hq.
-    { rewrite Qp.lt_sum in H. destruct H; eauto. left.
-      exists x. rewrite H. rewrite Qp.add_assoc.
-      f_equiv. apply Qp.add_comm. }
-    { right. by rewrite -H. }
-  Qed.
-
-  Lemma add_le_sub_l_Some qr q qa:
-    (qr + q ≤ qa)%Qp ->
-    ∃ q', (qa - qr = Some q')%Qp.
-  Proof.
-    rewrite Qp.add_comm.
-    apply add_le_sub_r_Some.
   Qed.
 
   Lemma alloc_rel_remove_frac q qr b_t b_s σ_s v_s C mf G L LS:
@@ -671,17 +679,6 @@ Section definitions.
       iExists None; by iFrame. }
   Qed.
 
-  Lemma le_eq (q q': Qp) :
-    (q' ≤ q)%Qp -> (q ≤ q')%Qp -> q = q'.
-  Proof.
-    rewrite !Qp.le_lteq.
-    intros [] []; subst; eauto.
-    exfalso.
-    apply Qp.lt_nge in H.
-    apply H.
-    by apply Qp.lt_le_incl.
-  Qed.
-
   Lemma alloc_rel_add_frac_None
     (q : Qp) b_t b_s C v_t v_s:
     C !! (b_t, b_s) = Some q ->
@@ -738,21 +735,7 @@ Section definitions.
     Unshelve. all: eauto.
   Qed.
 
- Definition heapbij_interp (L : gset (loc * loc)) C :=
-    (heapbij_auth L ∗ [∗ set] p ∈ L, let '(b_t, b_s) := p in alloc_rel b_t b_s C)%I.
-
-End definitions.
-
-Lemma heapbij_init `{!heapbijGpreS Σ, !sheapGS Σ} P:
-  ⊢ |==> ∃ `(heapbijGS Σ), heapbij_interp ∅ P.
-Proof.
-  iMod (gset_bij_own_alloc ∅) as (γbij) "[Hbij _]".
-  { apply: gset_bijective_empty. }
-  iIntros "!>". iExists (HeapBijGS _ _ γbij).
-  rewrite /heapbij_interp /heapbij_auth /heapbijG_bij_name; iFrame.
-  iSplitL "Hbij"; [ iApply "Hbij" | ].
-  iApply big_sepS_empty. done.
-Qed.
+End alloc_rel_properties.
 
 Section laws.
   Context `{!heapbijGS Σ, !sheapGS Σ, !checkedoutGS Σ}.
