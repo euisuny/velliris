@@ -71,11 +71,11 @@ Section spec.
            ∃ C S G,
                 heap_ctx sheapG_heap_source
                   (vir_heap σ_s.2, vir_dyn σ_s.2) (vir.frames σ_s) G
-                  (vir_locals σ_s)
+                  (vir_local_env σ_s)
                   (vir_local_stack σ_s)
               ∗ heap_ctx sheapG_heap_target
                   (vir_heap σ_t.2, vir_dyn σ_t.2) (vir.frames σ_t) G
-                  (vir_locals σ_t)
+                  (vir_local_env σ_t)
                   (vir_local_stack σ_t)
               ∗ ghost_var checkedoutG_bij_name (1/2) C
               ∗ heapbij_interp S C ∗ ⌜dom C ⊆ S⌝

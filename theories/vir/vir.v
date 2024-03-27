@@ -19,60 +19,6 @@ From Vellvm Require Import
 
 Import DenoteTactics.
 
-
-(* Instantiation for [VIR] language *)
-
-Definition call_args : forall X, LLVMEvents.ExternalCallE X -> dvalue * list uvalue.
-  intros. inversion H.
-  exact (f, args).
-Defined.
-
-Definition call_data : forall X, LLVMEvents.ExternalCallE X -> (DynamicTypes.dtyp * list fn_attr).
-  intros. by inversion H.
-Defined.
-
-Definition call_hval : forall X, LLVMEvents.ExternalCallE X -> X = uvalue.
-  intros. by inversion H.
-Defined.
-
-Canonical Structure vir_calls : call_event :=
-  Build_call_event LLVMEvents.ExternalCallE
-                   _
-                   uvalue
-                   _
-                   call_args
-                   call_data
-                   call_hval.
-
-(* VIR is an instance of the [lang] for the simulitree-style simulation. *)
-Definition vir_state : Type := (global_env * (local_env * lstack) *
-                                  ((gmap Z logical_block  * gset Z) * frame_stack))%type.
-Arguments vir_state /.
-
-Canonical Structure vir_lang : language :=
-  Language vir_state
-           LLVMGEnvE
-           (Handlers.LLVMEvents.LLVMEnvE +' Handlers.LLVMEvents.LLVMStackE)
-           LLVMEvents.MemoryE
-           vir_calls
-           IntrinsicE
-           LLVMEvents.UBE
-           (Exception.exceptE ())
-           LLVMEvents.PickE
-           LLVMEvents.DebugE.
-
-Definition vir_simulirisGS {PROP : bi} `{!BiBUpd PROP, !BiAffine PROP, !BiPureForall PROP}
-  := simulirisGS PROP vir_lang.
-
-From Vellvm Require Import
-     Semantics.InterpretationStack
-     Utilities
-     Syntax
-     Numeric.Integers.
-
-Delimit Scope expr_scope with E.
-Delimit Scope val_scope with V.
-
 (* We can instantiate the ITree-based Vellvm IR, [VIR], with our simulation
   relation.*)
 
@@ -121,237 +67,181 @@ Delimit Scope val_scope with V.
         a lightweight specification to how call events may affect memory.
  *)
 
+(** *Instantiation of [VIR] language *)
+
+(* ------------------------------------------------------------------------ *)
+(* Auxillary functions for function calls in VIR *)
+
+Definition call_args : forall X, LLVMEvents.ExternalCallE X -> dvalue * list uvalue.
+  intros. inversion H.
+  exact (f, args).
+Defined.
+
+Definition call_data : forall X, LLVMEvents.ExternalCallE X -> (DynamicTypes.dtyp * list fn_attr).
+  intros. by inversion H.
+Defined.
+
+Definition call_hval : forall X, LLVMEvents.ExternalCallE X -> X = uvalue.
+  intros. by inversion H.
+Defined.
+
+Canonical Structure vir_calls : call_event :=
+  Build_call_event LLVMEvents.ExternalCallE
+                   _
+                   uvalue
+                   _
+                   call_args
+                   call_data
+                   call_hval.
+
+(* ------------------------------------------------------------------------ *)
+(* VIR is an instance of the [lang] for the simulitree-style simulation. *)
+
+
+(* Local environment and local stack *)
+Definition local : Type := (local_env * lstack)%type.
+
+(* We observe the [logical] memory part of the quasi-concrete memory model
+  inherited from VIR.
+
+  N.B. For future work, we can support the full quasi-concrete memory model
+        to support integer arithmetic. *)
+Definition logical_memory : Type :=
+  ((gmap Z logical_block  * gset Z) * frame_stack)%type.
+
+Notation mem := logical_memory.
+
+(** *VIR state *)
+
+(* [VIR] state is composed of a global environment, local environment (and stack),
+   and logical view of the [VIR] memory. *)
+Record vir_state : Type := virState {
+  vglobal : global_env ;
+  vlocal : local;
+  vmem : mem }.
+
+(* Stateful operations on [vir_state] *)
+
+Definition apply_global (f : global_env -> global_env) : vir_state -> vir_state :=
+  fun σ => (virState (f σ.(vglobal)) σ.(vlocal) σ.(vmem)).
+
+Definition apply_local (f : local -> local) : vir_state -> vir_state :=
+  fun σ => (virState σ.(vglobal) (f σ.(vlocal)) σ.(vmem)).
+
+Definition apply_mem (f : mem -> mem) : vir_state -> vir_state :=
+  fun σ => (virState σ.(vglobal) σ.(vlocal) (f σ.(vmem))).
+
+Definition update_global (g : global_env) : vir_state -> vir_state :=
+  fun σ => (virState g σ.(vlocal) σ.(vmem)).
+
+Definition update_local (l : local) : vir_state -> vir_state :=
+  fun σ => (virState σ.(vglobal) l σ.(vmem)).
+
+Definition update_mem (l : mem) : vir_state -> vir_state :=
+  fun σ => (virState σ.(vglobal) σ.(vlocal) l).
+
+Definition write_global (id : global_id) (v : dvalue) : vir_state ->  vir_state :=
+  apply_global (fun g => <[id := v]> g).
+
+(* ------------------------------------------------------------------------ *)
+
+(* Instantiation of the [language] instance for the weakest precondition definition. *)
+Canonical Structure vir_lang : language :=
+  Language vir_state
+           LLVMGEnvE
+           (Handlers.LLVMEvents.LLVMEnvE +' Handlers.LLVMEvents.LLVMStackE)
+           LLVMEvents.MemoryE
+           vir_calls
+           IntrinsicE
+           LLVMEvents.UBE
+           (Exception.exceptE ())
+           LLVMEvents.PickE
+           LLVMEvents.DebugE.
+
+Definition vir_simulirisGS {PROP : bi} `{!BiBUpd PROP, !BiAffine PROP, !BiPureForall PROP}
+  := simulirisGS PROP vir_lang.
+
+From Vellvm Require Import
+     Semantics.InterpretationStack
+     Utilities
+     Syntax
+     Numeric.Integers.
+
+Delimit Scope expr_scope with E.
+Delimit Scope val_scope with V.
+
+(* ------------------------------------------------------------------------ *)
+
 (* This [vir_expr_] corresponds to the VIR [ L2 ] layer. *)
 Definition vir_expr_ :=
   itree (ExternalCallE +' MemoryE +' PickE +' UBE +' DebugE +' FailureE).
 
-(** *Logical state
+(* The semantics of [vir] is given through [vir_handler].  *)
+#[global] Instance vir_handler : handlers vir_lang := {|
 
-  The language has a *logical state* representation that corresponds to the
-  high-level heaps that are typically manipulated in the Iris logic.
+  local_handler := fun T X σ =>
+    ITree.bind
+      (interp_local_stack_h (handle_local (v := uvalue))
+        (inr1 (inr1 (inl1 X))) σ.(vlocal))
+              (fun '(l, v) => Ret (update_local l σ, v)) ;
 
-  The logical state will correspond to an Iris resource (i.e. an Iris heap),
-  and the adequacy statement should express the soundness between [state] and
-  [logical state].
+  global_handler := fun T X σ =>
+    ITree.bind
+      (interp_global_h (inr1 (inr1 (inl1 X))) σ.(vglobal))
+        (fun '(g, v) => Ret (update_global g σ, v));
 
-  The logical state is a *logical view* of the state, which is indicated by
-  [logical view]. *)
+  memory_handler := fun T X σ =>
+    (ITree.bind (handle_memory X σ.(vmem))
+      (fun '(l, v) => Ret (update_mem l σ, v))) ;
 
-Definition id := Z.
-Definition offset := Z.
+  intrinsics_handler := fun T X σ =>
+    (ITree.bind (handle_intrinsic X σ.(vmem))
+        (fun '(l, v) => Ret (update_mem l σ, v))) ;
 
-Canonical Structure bytesO := leibnizO (list byte).
-Canonical Structure idO := leibnizO id.
-Canonical Structure offsetO := leibnizO offset.
+  E_handler := fun T X σ =>
+    (ITree.bind (concretize_picks (E := language.L2 vir_lang) X)
+          (fun x => ret (σ, x)))
 
-#[global] Instance vir_handler : handlers vir_lang.
-  constructor; intros.
-- (* local_events *)
-  intro σ; unfold state in *; cbn in *.
-  destruct σ as ((?&?)&?).
-  (* Global environment and memory remain constant *)
-  eapply
-    ((fun x =>
-      ITree.bind (E := language.L2 vir_lang) x (fun '(a, c) => ret (g, a, p0, c)))
-      : itree (language.L2 vir_lang) (_ * T) ->
-        itree (language.L2 vir_lang) (global_env * _ * _ * T)).
+|}.
 
-  eapply interp_local_stack_h; eauto; cycle 3.
-  { exact (inr1 (inr1 (inl1 X))). }
-  all : try typeclasses eauto.
-  eapply handle_local; typeclasses eauto.
-
-- (* global_events *)
-  intro σ; unfold state in *; cbn in *.
-  destruct σ as ((?&?)&?).
-  (* Local environment and memory remain constant *)
-  eapply
-    ((fun x =>
-      ITree.bind (E := language.L2 vir_lang) x (fun '(a, c) => ret (a, p, p0, c)))
-      : itree (language.L2 vir_lang) (global_env * T) ->
-        itree (language.L2 vir_lang) (global_env * _ * _ * T)).
-
-  eapply (@interp_global_h raw_id dvalue); eauto; cycle 3.
-  3: exact (inr1 (inr1 (inl1 X))).
-  all : try typeclasses eauto.
-
-- (* MemoryE *)
-  intro σ; unfold state in *; cbn in *.
-  destruct σ as ((?&?)&?).
-
-  (* Global and local environment remain constant *)
-  eapply
-    ((fun x =>
-      ITree.bind (E := language.L2 vir_lang) x (fun '(a, c) => ret (g, p, a, c)))
-      : itree (language.L2 vir_lang) (_ * T) ->
-        itree (language.L2 vir_lang) (global_env * _ * _ * T)).
-
-  eapply handle_memory; eauto.
-
--  (* IntrinsicE *)
-  intros σ; unfold state in *; cbn in *.
-  destruct σ as ((?&?)&?).
-
-  (* Global and local environment remain constant *)
-  eapply
-    ((fun x =>
-      ITree.bind (E := language.L2 vir_lang) x (fun '(a, c) => ret (g, p, a, c)))
-      : itree (language.L2 vir_lang) (_ * T) ->
-        itree (language.L2 vir_lang) (global_env * _ * _ * T)).
-  eapply handle_intrinsic; eauto.
-- intros σ.
-  exact (ITree.bind (concretize_picks (E := language.L2 vir_lang) X)
-                 (fun x => ret (σ, x))).
-Defined.
+(* Instantiation of simulation definition *)
 
 #[global]
 Instance SimE_vir {PROP : bi} `{!BiBUpd PROP, !BiAffine PROP, !BiPureForall PROP}
          `{simulirisGS PROP vir_lang}
   : SimE PROP vir_lang:= sim_expr_stutter (η := vir_handler).
 
-(* VIR definitions *)
+(* ------------------------------------------------------------------------ *)
 
-Definition globals := gmap LLVMAst.global_id dvalue.
-Definition locals := gmap LLVMAst.raw_id uvalue.
+(* Address identifier *)
+Definition loc := Z.
+(* Address offset *)
+Definition offset := Z.
+(* The [val] stored in a heap is a logical block. *)
+Definition val := logical_block.
 
-Definition vir_locals :
-  language.state vir_lang -> local_env :=
-  fun '((_,(l,_)),_) => l.
+(* Leibniz equality for [VIR] constructs *)
+Canonical Structure locO := leibnizO loc.
+Canonical Structure offsetO := leibnizO offset.
+Canonical Structure valO := leibnizO val.
+Canonical Structure bytesO := leibnizO (list byte).
+Canonical Structure dvalO := leibnizO dvalue.
 
-Definition vir_local_stack :
-  language.state vir_lang -> stack :=
-  fun '((_,(_,s)),_) => s.
-
-Fixpoint frame_at (i : nat) (F : frame_stack) : mem_frame :=
-  match i with
-    | 0%nat =>
-        (match F with
-          | Snoc _ f => f
-          | Mem.Singleton f => f
-          end)
-    | S n =>
-      (match F with
-      | Snoc F f => frame_at n F
-      | Mem.Singleton _ => []
-      end)
-  end.
-
-Definition peek_frame := frame_at 0.
-
-Definition local_state : vir_state -> local_env := fun x => x.1.2.1.
-Definition frames : vir_state -> frame_stack := fun x => x.2.2.
-Definition frames1 {R} : (global_env * (local_env * lstack) * memory_stack * R) -> frame_stack :=
-  fun x => (x.1.2.2).
-
-Definition frame : (global_env * (local_env * lstack) * memory_stack) -> mem_frame :=
-  fun x => peek_frame (x.2.2).
-
-(* Utility functions on frame stack *)
-Definition flatten_frame_stack (m : frame_stack) : mem_frame :=
-  let fix _aux (m : frame_stack) (acc : mem_frame) :=
-    match m with
-      | Mem.Singleton m => (m ++ acc)%list
-      | Snoc m f => (f ++ _aux m acc)%list
-    end
-  in _aux m [].
-
-Fixpoint frame_count (m : frame_stack) : nat :=
-  match m with
-    | Mem.Singleton m => 1
-    | Snoc m f => S (frame_count m)
-  end.
-
-Definition add_to_frame_stack (f : frame_stack) (k : Z) : frame_stack :=
-  match f with
-  | Mem.Singleton f => Mem.Singleton (k :: f)
-  | Snoc s f => Snoc s (k :: f)
-  end.
-
-Definition delete_from_frame (f : mem_frame) (k : Z) : mem_frame :=
-  remove Z.eq_dec k f.
-
-Definition delete_from_frame_stack (f : frame_stack) (k : Z) : frame_stack :=
-  match f with
-  | Mem.Singleton f => Mem.Singleton (delete_from_frame f k)
-  | Snoc s f => Snoc s (delete_from_frame f k)
-  end.
-
-Definition free_locations_from_frame (mf d : mem_frame):=
-  (fold_left (fun m key => remove Z.eq_dec key m) d mf).
-
-Definition vir_allocaS :
-  language.state vir_lang -> gset Z :=
-  fun '((_,(_,_)),(_,l)) => list_to_set (peek_frame l).
-
-(* FIXME: Notation conflict: Need to shift a level *)
+(* FIXME/MOVE: Notation conflict: Need to shift a level *)
 Notation "x <- c1 ;; c2" := (ITree.bind c1 (fun x => c2))
                              (at level 63, c1 at next level, right associativity).
 
-(* vir instr notations *)
-Notation store l r := (trigger (Store l r)).
-Notation load τ l := (trigger (Load τ l)).
-
-(* Utilities for vir *)
-Definition new_lb := make_empty_logical_block.
-
-Definition interp_call :
-  itree L0 ~> Monads.stateT vir_state (itree (language.L2 vir_lang)) :=
-  fun _ t => State.interp_state (handle_L0_L2 vir_handler) t.
-
-(* Utilities for associative map for function lookup at the top-level *)
-Definition includes_keys : relation (list (dvalue * D.function_denotation)) :=
-  fun fundefs fundefs' =>
-  forall key value,
-    lookup_defn key fundefs = Some value ->
-    exists value', lookup_defn key fundefs' = Some value'.
-
-Definition same_keys : relation (list (dvalue * D.function_denotation)) :=
-  fun fundefs fundefs' =>
-    includes_keys fundefs fundefs' /\ includes_keys fundefs' fundefs.
-
-Instance same_keys_Symmetric : Symmetric same_keys.
-intros x y []; split; eauto.
-Qed.
-
-Instance same_keys_Reflexive : Reflexive same_keys.
-intros x; intros; split; repeat intro; eauto.
-Qed.
-
-Instance includes_keys_Transitive : Transitive includes_keys.
-  repeat intro. specialize (H _ _ H1).
-  destruct H as (?&?).
-  specialize (H0 _ _ H). eauto.
-Qed.
-
-Instance same_keys_Transitive : Transitive same_keys.
-  intros x y z [] []. split; etransitivity; eauto.
-Qed.
-
-Definition doesnt_include_keys {A} : relation (list (dvalue * A)) :=
-  fun fundefs fundefs' =>
-  forall key value,
-    lookup_defn key fundefs = Some value ->
-    not (exists value', lookup_defn key fundefs' = Some value').
-
-Definition disjoint_keys {A} : relation (list (dvalue * A)) :=
-  fun fundefs fundefs' =>
-    doesnt_include_keys fundefs fundefs' /\ doesnt_include_keys fundefs' fundefs.
-
-Notation L0'expr :=
-    (itree (CallE +' ExternalCallE +' IntrinsicE +' LLVMGEnvE +' (LLVMEnvE +' LLVMStackE) +' MemoryE +' PickE +' UBE +' DebugE +' FailureE)).
-
-(* Locations and values *)
-Canonical Structure dvalO := leibnizO dvalue.
-
-Definition loc := Z.
-Definition val := logical_block.
-Canonical Structure valO := leibnizO val.
+(* ------------------------------------------------------------------------ *)
 
 (* Instead of SProp, we axiomatize irrelevance of proof of byte range  *)
 Axiom proof_irrel_byte_range :
   forall intval, ProofIrrel (-1 < intval < Byte.modulus)%Z.
 
 Definition byte_range intval := (-1 < intval < Byte.modulus)%Z.
+
+(* ------------------------------------------------------------------------ *)
+
+(* Bureaucratic instances (Countable, EqDecision) *)
 
 Global Program Instance byte_countable : Countable byte :=
   inj_countable Byte.intval (fun x => _) _.
@@ -395,12 +285,16 @@ Proof.
   by intros [].
 Qed.
 
+(* ------------------------------------------------------------------------ *)
+
 Definition local_loc := LLVMAst.raw_id.
 Definition local_val := uvalue.
 Definition local_valO := leibnizO local_val.
 
 #[global] Instance local_val_eq_dec : EqDecision local_val := @uvalue_eq_dec.
 #[global] Instance dval_eq_dec : EqDecision dvalue := @dvalue_eq_dec.
+
+(* ------------------------------------------------------------------------ *)
 
 #[global] Instance fbinop_eq_dec : EqDecision fbinop.
 Proof. solve_decision. Qed.
@@ -452,10 +346,10 @@ Qed.
 
 #[global] Instance N_eq_dec : EqDecision N.
 Proof. solve_decision. Qed.
-
 #[global] Instance dtyp_eq_dec : EqDecision dtyp := dtyp_eq_dec.
 
 From Vellvm.Semantics Require Import DynamicValues.
+
 #[global] Instance int1_eq_dec : EqDecision DynamicValues.int1.
 Proof. repeat intro; red; apply Int1.eq_dec. Qed.
 #[global] Instance int8_eq_dec : EqDecision DynamicValues.int8.
@@ -465,153 +359,140 @@ Proof. repeat intro; red; apply Int32.eq_dec. Qed.
 #[global] Instance int64_eq_dec : EqDecision DynamicValues.int64.
 Proof. repeat intro; red; apply Int64.eq_dec. Qed.
 
-Definition to_addr : Z -> Z * Z :=
-  fun b => (b, 0)%Z.
+(* ------------------------------------------------------------------------ *)
 
-Section AuxDefs.
+(* Functions about event signature conversion and lifting *)
 
-  Definition find_fun e (τ : dtyp)
-    (fn : dvalue) (args : list uvalue) (attrs : list fn_attr) : L0'expr uvalue :=
-      match lookup_defn fn e with
-      | Some f_den => f_den args
-      | None =>
-          ITree.bind (map_monad (λ uv : uvalue, pickUnique uv) args)
-            (λ dargs : list dvalue,
-                (trigger (ExternalCall τ fn (dvalue_to_uvalue <$> dargs) attrs)))
-      end.
+Definition find_fun e (τ : dtyp)
+  (fn : dvalue) (args : list uvalue) (attrs : list fn_attr) : L0'expr uvalue :=
+    match lookup_defn fn e with
+    | Some f_den => f_den args
+    | None =>
+        ITree.bind (map_monad (λ uv : uvalue, pickUnique uv) args)
+          (λ dargs : list dvalue,
+              (trigger (ExternalCall τ fn (dvalue_to_uvalue <$> dargs) attrs)))
+    end.
 
-  Definition instr_to_L0 : IntrinsicE +' exp_E ~> L0 :=
-    fun T e =>
-      inr1
-        (match e with
-        (* Intrinsic *)
-        | inl1 l => inl1 l
-        (* LLVMGEnvE *)
-        | inr1 x => inr1 (match x with
-                           | inl1 l => inl1 l
-                           | inr1 x => inr1
-                                      (match x with
-                                       | inl1 e => (inl1 (inl1 e))
-                                       | inr1 e => inr1 e
-                                        end)
-                         end)
-        end).
+Definition instr_to_L0 : IntrinsicE +' exp_E ~> L0 :=
+  fun T e =>
+    inr1
+      (match e with
+      (* Intrinsic *)
+      | inl1 l => inl1 l
+      (* LLVMGEnvE *)
+      | inr1 x => inr1 (match x with
+                          | inl1 l => inl1 l
+                          | inr1 x => inr1
+                                    (match x with
+                                      | inl1 e => (inl1 (inl1 e))
+                                      | inr1 e => inr1 e
+                                      end)
+                        end)
+      end).
 
-  Equations instrE_conv:
-    forall T : Type, instr_E T -> L0 T :=
-    instrE_conv T (inl1 (Call t f args attr)) :=
-      inl1 (ExternalCall t f args (FNATTR_Internal :: attr));
-    instrE_conv T (inr1 e) := instr_to_L0 _ e.
+Equations instrE_conv:
+  forall T : Type, instr_E T -> L0 T :=
+  instrE_conv T (inl1 (Call t f args attr)) :=
+    inl1 (ExternalCall t f args (FNATTR_Internal :: attr));
+  instrE_conv T (inr1 e) := instr_to_L0 _ e.
 
-  Equations call_conv:
-    forall T : Type, L0' T -> L0 T :=
-    call_conv T (inl1 (Call t f args attr)) :=
-      inl1 (ExternalCall t f args (FNATTR_Internal :: attr));
-    call_conv T (inr1 (inl1 (ExternalCall t f args attr))) :=
-      inl1 (ExternalCall t f args (FNATTR_External :: attr));
-    call_conv T (inr1 (inr1 e)) := inr1 e.
+Equations call_conv:
+  forall T : Type, L0' T -> L0 T :=
+  call_conv T (inl1 (Call t f args attr)) :=
+    inl1 (ExternalCall t f args (FNATTR_Internal :: attr));
+  call_conv T (inr1 (inl1 (ExternalCall t f args attr))) :=
+    inl1 (ExternalCall t f args (FNATTR_External :: attr));
+  call_conv T (inr1 (inr1 e)) := inr1 e.
 
-  Definition instr_conv {R} : itree instr_E R -> expr vir_lang R :=
-    λ X : itree instr_E R,
-      interp (M := itree (language.L0 vir_lang))
-        (fun _ x => Vis (instrE_conv _ x) ret) X.
+Definition instr_conv {R} : itree instr_E R -> expr vir_lang R :=
+  λ X : itree instr_E R,
+    interp (M := itree (language.L0 vir_lang))
+      (fun _ x => Vis (instrE_conv _ x) ret) X.
 
-  Definition exp_conv {R} : itree exp_E R -> expr vir_lang R :=
-    fun e1 =>
-      interp (M := itree (language.L0 vir_lang))
-        (fun _ x => Vis (exp_to_L0 x) ret) e1.
+Definition exp_conv {R} : itree exp_E R -> expr vir_lang R :=
+  fun e1 =>
+    interp (M := itree (language.L0 vir_lang))
+      (fun _ x => Vis (exp_to_L0 x) ret) e1.
 
-  Definition L0'expr_conv {R} : itree L0' R -> expr vir_lang R :=
-    fun X =>
-      interp (M := itree (language.L0 vir_lang))
-        (fun _ x => Vis (call_conv _ x) ret) X.
-End AuxDefs.
+Definition L0'expr_conv {R} : itree L0' R -> expr vir_lang R :=
+  fun X =>
+    interp (M := itree (language.L0 vir_lang))
+      (fun _ x => Vis (call_conv _ x) ret) X.
 
-Section conv_properties.
+(* ------------------------------------------------------------------------ *)
 
-  Lemma instr_conv_ret {R} (x : R):
-    instr_conv (Ret x) ≅ Ret x.
-  Proof.
-    by rewrite /instr_conv interp_ret.
-  Qed.
+(* Properties of conversion *)
 
-  #[global] Instance eq_itree_L0'expr_conv {R} :
-    Proper (eq_itree eq ==> eq_itree (R2 := R) eq) L0'expr_conv.
-  Proof.
-    repeat intro.
-    unfold L0'expr_conv. rewrite H; done.
-  Qed.
+Lemma instr_conv_ret {R} (x : R):
+  instr_conv (Ret x) ≅ Ret x.
+Proof.
+  by rewrite /instr_conv interp_ret.
+Qed.
 
-  #[global] Instance eq_itree_instr_conv {R} :
-    Proper (eq_itree eq ==> eq_itree (R2 := R) eq) instr_conv.
-  Proof.
-    repeat intro.
-    unfold instr_conv. rewrite H; done.
-  Qed.
+#[global] Instance eq_itree_L0'expr_conv {R} :
+  Proper (eq_itree eq ==> eq_itree (R2 := R) eq) L0'expr_conv.
+Proof.
+  repeat intro.
+  unfold L0'expr_conv. rewrite H; done.
+Qed.
 
-  Lemma instr_conv_bind {X R} (e : _ X) (k : _ -> _ R) :
-    instr_conv (x <- e ;; k x) ≅ x <- instr_conv e ;; instr_conv (k x).
-  Proof.
-    rewrite /instr_conv.
-    by setoid_rewrite interp_bind.
-  Qed.
+#[global] Instance eq_itree_instr_conv {R} :
+  Proper (eq_itree eq ==> eq_itree (R2 := R) eq) instr_conv.
+Proof.
+  repeat intro.
+  unfold instr_conv. rewrite H; done.
+Qed.
 
-  Lemma instr_conv_nil :
-    instr_conv (denote_code nil) ≅ Ret tt.
-  Proof.
-    cbn. go.
-    by setoid_rewrite interp_ret.
-  Qed.
+Lemma instr_conv_bind {X R} (e : _ X) (k : _ -> _ R) :
+  instr_conv (x <- e ;; k x) ≅ x <- instr_conv e ;; instr_conv (k x).
+Proof.
+  rewrite /instr_conv.
+  by setoid_rewrite interp_bind.
+Qed.
 
-  Lemma exp_conv_ret {R} (r : R):
-    exp_conv (Ret r) ≅ Ret r.
-  Proof.
-    by setoid_rewrite interp_ret.
-  Qed.
+Lemma instr_conv_nil :
+  instr_conv (denote_code nil) ≅ Ret tt.
+Proof.
+  cbn. go.
+  by setoid_rewrite interp_ret.
+Qed.
 
-  Lemma instr_conv_localwrite :
-    forall x v,
-      instr_conv (trigger (LocalWrite x v)) ≅
-        vis (LocalWrite x v) (fun x => Tau (Ret x)).
-  Proof.
-    intros. rewrite /instr_conv.
-    rewrite interp_vis. setoid_rewrite interp_ret.
-    rewrite {1}/subevent /resum /ReSum_inr /cat /Cat_IFun /inr_ /Inr_sum1.
-    simp instrE_conv. rewrite bind_trigger.
-    reflexivity.
-  Qed.
+Lemma exp_conv_ret {R} (r : R):
+  exp_conv (Ret r) ≅ Ret r.
+Proof.
+  by setoid_rewrite interp_ret.
+Qed.
 
-  Lemma eq_handler_instrE_conv :
-    eq_Handler
-      (λ T (e : exp_E T), Vis (instrE_conv T (inr1 (inr1 e)))
-                            (λ x0 : T, Ret x0))
-      (λ T (e : exp_E T), Vis (exp_to_L0 e) Monad.ret).
-  Proof.
-    repeat intro. simp instrE_conv.
-    rewrite /instr_to_L0 /exp_to_L0;
-      destruct a; try destruct s; try reflexivity.
-  Qed.
+Lemma instr_conv_localwrite :
+  forall x v,
+    instr_conv (trigger (LocalWrite x v)) ≅
+      vis (LocalWrite x v) (fun x => Tau (Ret x)).
+Proof.
+  intros. rewrite /instr_conv.
+  rewrite interp_vis. setoid_rewrite interp_ret.
+  rewrite {1}/subevent /resum /ReSum_inr /cat /Cat_IFun /inr_ /Inr_sum1.
+  simp instrE_conv. rewrite bind_trigger.
+  reflexivity.
+Qed.
 
-End conv_properties.
+Lemma eq_handler_instrE_conv :
+  eq_Handler
+    (λ T (e : exp_E T), Vis (instrE_conv T (inr1 (inr1 e)))
+                          (λ x0 : T, Ret x0))
+    (λ T (e : exp_E T), Vis (exp_to_L0 e) Monad.ret).
+Proof.
+  repeat intro. simp instrE_conv.
+  rewrite /instr_to_L0 /exp_to_L0;
+    destruct a; try destruct s; try reflexivity.
+Qed.
+
+(* ------------------------------------------------------------------------ *)
 
 Ltac simp_instr :=
   rewrite /subevent /resum /ReSum_inr /cat /Cat_IFun /inr_ /Inr_sum1;
   simp instrE_conv.
 
-Lemma CFG_find_block_in {A} c i b :
-  CFG.find_block (T:= A) c i = Some b -> b ∈ c.
-Proof.
-  induction c; cbn; intros; [ inversion H | ].
-  destruct (Eqv.eqv_dec_p (blk_id a) i) eqn : Ha;
-    inversion H; subst; clear H;
-    [ apply elem_of_cons ; by left |].
-  apply elem_of_cons; right; eapply IHc; eauto.
-Qed.
-
-Definition lb_mem (b : logical_block) : mem_block :=
-  match b with
-    | LBlock _ m _ => m
-  end.
+(* ------------------------------------------------------------------------ *)
 
 (* Notations for [vir] *)
 Notation "⟅ e ⟆" := (L0'expr_conv e).

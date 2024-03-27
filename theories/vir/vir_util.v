@@ -5,6 +5,135 @@ From stdpp Require Import gmap.
 From Vellvm Require Import
   Syntax.DynamicTypes Handlers Utils.Util.
 
+(* [VIR] notations *)
+Notation store l r := (trigger (Store l r)).
+Notation load τ l := (trigger (Load τ l)).
+
+Notation L0'expr :=
+    (itree (CallE +' ExternalCallE +' IntrinsicE +' LLVMGEnvE +'
+     (LLVMEnvE +' LLVMStackE) +' MemoryE +' PickE +' UBE +' DebugE +' FailureE)).
+
+(* Misc. Utilities for vir *)
+Definition new_lb := make_empty_logical_block.
+
+Definition interp_call :
+  itree L0 ~> Monads.stateT vir_state (itree (language.L2 vir_lang)) :=
+  fun _ t => State.interp_state (handle_L0_L2 vir_handler) t.
+
+Lemma CFG_find_block_in {A} c i b :
+  CFG.find_block (T:= A) c i = Some b -> b ∈ c.
+Proof.
+  induction c; cbn; intros; [ inversion H | ].
+  destruct (Eqv.eqv_dec_p (blk_id a) i) eqn : Ha;
+    inversion H; subst; clear H;
+    [ apply elem_of_cons ; by left |].
+  apply elem_of_cons; right; eapply IHc; eauto.
+Qed.
+
+Definition lb_mem (b : logical_block) : mem_block :=
+  match b with
+    | LBlock _ m _ => m
+  end.
+
+(* Utilities for frame manipulation *)
+
+Fixpoint frame_at (i : nat) (F : frame_stack) : mem_frame :=
+  match i with
+    | 0%nat =>
+        (match F with
+          | Snoc _ f => f
+          | Mem.Singleton f => f
+          end)
+    | S n =>
+      (match F with
+      | Snoc F f => frame_at n F
+      | Mem.Singleton _ => []
+      end)
+  end.
+
+Definition peek_frame := frame_at 0.
+
+(* Utility functions on frame stack *)
+Definition flatten_frame_stack (m : frame_stack) : mem_frame :=
+  let fix _aux (m : frame_stack) (acc : mem_frame) :=
+    match m with
+      | Mem.Singleton m => (m ++ acc)%list
+      | Snoc m f => (f ++ _aux m acc)%list
+    end
+  in _aux m [].
+
+Fixpoint frame_count (m : frame_stack) : nat :=
+  match m with
+    | Mem.Singleton m => 1
+    | Snoc m f => S (frame_count m)
+  end.
+
+Definition add_to_frame_stack (f : frame_stack) (k : Z) : frame_stack :=
+  match f with
+  | Mem.Singleton f => Mem.Singleton (k :: f)
+  | Snoc s f => Snoc s (k :: f)
+  end.
+
+Definition delete_from_frame (f : mem_frame) (k : Z) : mem_frame :=
+  remove Z.eq_dec k f.
+
+Definition delete_from_frame_stack (f : frame_stack) (k : Z) : frame_stack :=
+  match f with
+  | Mem.Singleton f => Mem.Singleton (delete_from_frame f k)
+  | Snoc s f => Snoc s (delete_from_frame f k)
+  end.
+
+Definition free_locations_from_frame (mf d : mem_frame):=
+  (fold_left (fun m key => remove Z.eq_dec key m) d mf).
+
+(* Assumes that τ is not void *)
+Definition allocate_non_void τ : mem -> (mem * addr) :=
+  fun m =>
+    let new_block := make_empty_logical_block τ in
+    let key       := next_logical_key m in
+    let m         := add_logical_block key new_block m in
+    (add_to_frame m key, (key,0)%Z).
+
+(* Utilities for associative map for function lookup at the top-level *)
+Definition includes_keys : relation (list (dvalue * D.function_denotation)) :=
+  fun fundefs fundefs' =>
+  forall key value,
+    lookup_defn key fundefs = Some value ->
+    exists value', lookup_defn key fundefs' = Some value'.
+
+Definition same_keys : relation (list (dvalue * D.function_denotation)) :=
+  fun fundefs fundefs' =>
+    includes_keys fundefs fundefs' /\ includes_keys fundefs' fundefs.
+
+Instance same_keys_Symmetric : Symmetric same_keys.
+intros x y []; split; eauto.
+Qed.
+
+Instance same_keys_Reflexive : Reflexive same_keys.
+intros x; intros; split; repeat intro; eauto.
+Qed.
+
+Instance includes_keys_Transitive : Transitive includes_keys.
+  repeat intro. specialize (H _ _ H1).
+  destruct H as (?&?).
+  specialize (H0 _ _ H). eauto.
+Qed.
+
+Instance same_keys_Transitive : Transitive same_keys.
+  intros x y z [] []. split; etransitivity; eauto.
+Qed.
+
+Definition doesnt_include_keys {A} : relation (list (dvalue * A)) :=
+  fun fundefs fundefs' =>
+  forall key value,
+    lookup_defn key fundefs = Some value ->
+    not (exists value', lookup_defn key fundefs' = Some value').
+
+Definition disjoint_keys {A} : relation (list (dvalue * A)) :=
+  fun fundefs fundefs' =>
+    doesnt_include_keys fundefs fundefs' /\ doesnt_include_keys fundefs' fundefs.
+
+
 (* Util lemmas about uvalues and dvalues *)
 Lemma uvalue_to_dvalue_list :
   forall fields,
