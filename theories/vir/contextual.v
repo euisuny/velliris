@@ -3,7 +3,8 @@ From iris.prelude Require Import options.
 From velliris.logic Require Import satisfiable.
 From velliris.program_logic Require Import program_logic.
 From velliris.vir Require Import
-  vir val_rel heapbij adequacy spec globalbij logical_relations fundamental.
+  vir val_rel heapbij adequacy spec globalbij logical_relations fundamental
+  contextual_mcfg.
 
 From Vellvm Require Import Syntax.DynamicTypes Handlers Syntax.LLVMAst
   Semantics.InterpretationStack.
@@ -37,14 +38,6 @@ Import CFG.
 (* A context is a mutually recursive control flow graph [mcfg]. *)
 Notation context := (CFG.mcfg dtyp).
 
-(* Generating a well-formed global out of the definitions in a context *)
-Definition init_global (names : list function_id) :=
-  snd (List.fold_left
-    (fun '(acc, g) id =>
-      (S acc,
-        <[ id := DVALUE_Addr (Z.of_nat acc, 0%Z) ]> g)) names
-          (0%nat, (∅ : vir.globals))).
-
 (* Well-formedness over contexts *)
 Definition ctx_wf (C : context) :=
   let funs := CFG.m_definitions C in
@@ -60,8 +53,17 @@ Definition ctx_wf (C : context) :=
      consequence of the fundamental theorem. *)
   Forall (fun x => dc_attrs x = nil) (CFG.m_declarations C)
 .
+(* Generating a well-formed global out of the definitions in a context *)
+Definition init_global (names : list function_id) :=
+  snd (List.fold_left
+    (fun '(acc, g) id =>
+      (S acc,
+        <[ id := DVALUE_Addr (Z.of_nat acc, 0%Z) ]> g)) names
+          (0%nat, (∅ : vir.globals))).
+
 
 (** *Top-level Contextual Refinement *)
+
 Section CR_definition.
 
   Context (Σ : gFunctors).
@@ -85,8 +87,7 @@ Section CR_definition.
     (2) restating the denotation of mutually-recursive control flow graps using
         [denote_mcfg]. *)
   Definition fill_ctx (C : context) e :=
-    Monad.bind (mcfg_definitions (fill_mcfg_defs C e))
-        (fun defs => denote_mcfg defs ret_typ (DVALUE_Addr main) args).
+    denote_vellvm_main (fill_mcfg_defs C e).
 
   (* Contextual refinement. *)
   Definition ctx_ref e_t e_s: Prop :=
@@ -309,11 +310,9 @@ Proof.
   iExists γf, γf0; iFrame.
 Qed.
 
-From ITree Require Import ITree.
-
 (* The contextual refinement statement, with ghost state instantiated *)
 Lemma contextual_ref `(sheapGS Σ, checkedoutGS Σ, heapbijGS Σ):
-  ∀ e_t e_s γ_t γ_s C decl main,
+  ∀ e_t e_s γ_t γ_s C decl,
   (* Well-formedness conditions *)
   ctx_wf C ->
   (* The names of the declarations are the same *)
@@ -325,13 +324,13 @@ Lemma contextual_ref `(sheapGS Σ, checkedoutGS Σ, heapbijGS Σ):
   □ (fun_logrel e_t e_s ∅) -∗
   (* Frame resources are set up *)
   checkout ∅ ∗ stack_tgt [γ_t] ∗ stack_src [γ_s] ==∗
-  fill_ctx DTYPE_Void main [] C (decl, e_t)
+  fill_ctx C (decl, e_t)
   ⪯
-  fill_ctx DTYPE_Void main [] C (decl, e_s)
+  fill_ctx C (decl, e_s)
   [[ (λ x y : uvalue, ⌜obs_val x y⌝) ⤉ ]].
 Proof.
   rename H into H_shp, H0 into H_bijp, H1 into H_cp.
-  iIntros (??????? H_wf WF_name) "#Hg_t #Hg_s #Hfun Hstack".
+  iIntros (?????? H_wf WF_name) "#Hg_t #Hg_s #Hfun Hstack".
 
   (* Access stack resources *)
   iDestruct "Hstack" as "(Hc & Hs_t & Hs_s)".
@@ -366,7 +365,7 @@ Proof.
   setoid_rewrite bind_ret_l. iModIntro.
 
   pose proof (mcfg_definitions_leaf _ _ _ _ _ _ Hl1 Hl2) as Hsame. subst.
-  rewrite /mcfg_definitions in Hl1. iClear "Hrel Hlr".
+  rewrite /mcfg_definitions in Hl1; iClear "Hrel Hlr".
 
   (* IY: This is the difficult part; WIP version is in [mcfg_contextual.v] *)
   (*   iApply (contextual_denote_mcfg with "Hfun Hc Hs_t Hs_s"). *)
@@ -394,5 +393,5 @@ Proof.
   iSpecialize ("Hf" $! _ _ _); iDestruct "Hf" as "[#Hg #He]".
 
   (* Follows by contextual refinement. *)
-  (* iApply (contextual_ref _ _ _ _ _ _ _ _ _ _ WF WF_name with "Hg_t Hg_s He Hc"); eauto. *)
+  iApply (contextual_ref with "Hg_t Hg_s He Hc"); eauto.
 Admitted.
