@@ -756,7 +756,7 @@ Qed.
 
 Section laws.
   Context `{!heapbijGS Σ, !sheapGS Σ, !checkedoutGS Σ}.
-  Implicit Types (b_t b_s : id) (l_t l_s : loc).
+  Implicit Types (b_t b_s : loc) (l_t l_s : loc).
 
   Lemma heapbij_access L C b_t b_s:
     heapbij_interp L C -∗

@@ -31,7 +31,7 @@ Section spec.
     ((⌜length i_s > 0 -> length i_t > 0⌝)%Z)%I.
 
   Definition state_lookup (state : language.state vir_lang) (a : Z) v : iProp Σ :=
-    let h := (vir_heap state.2) in
+    let h := (vir_heap state.(vmem)) in
     ⌜h !! a = v⌝.
 
   Equations vir_call_ev {X Y} :
@@ -54,7 +54,7 @@ Section spec.
   Definition vir_E_ev : ∀ X Y : Type, E vir_lang X → E vir_lang Y → Prop :=
     λ (X Y : Type) (X0 : E vir_lang X) (X2 : E vir_lang Y), X0 ~= X2.
 
-  Definition globalbij_interp (gs_t gs_s : vir.globals) : iProp Σ :=
+  Definition globalbij_interp (gs_t gs_s : global_env) : iProp Σ :=
       (Addr.null ↔h Addr.null) ∗
      ⌜dom gs_s ⊆ dom gs_t⌝ ∗ (* LATER: duplicated info: remove? *)
       target_globals (gs_t : leibnizO _) ∗ source_globals gs_s  ∗
@@ -64,22 +64,24 @@ Section spec.
     Persistent (globalbij_interp gs_t gs_s).
   Proof. apply _. Qed.
 
+  Definition frames (m : mem) : frame_stack := m.2.
+
   #[global]
    Instance vir_simulirisGS : simulirisGS (iPropI Σ) vir_lang :=
     {| state_interp :=
         (fun (σ_t σ_s : vir_state) =>
            ∃ C S G,
                 heap_ctx sheapG_heap_source
-                  (vir_heap σ_s.2, vir_dyn σ_s.2) (vir.frames σ_s) G
-                  (vir_local_env σ_s)
-                  (vir_local_stack σ_s)
+                  (vir_heap σ_s.(vmem), vir_dyn σ_s.(vmem)) (frames σ_s.(vmem)) G
+                  (σ_s.(vlocal).1)
+                  (σ_s.(vlocal).2)
               ∗ heap_ctx sheapG_heap_target
-                  (vir_heap σ_t.2, vir_dyn σ_t.2) (vir.frames σ_t) G
-                  (vir_local_env σ_t)
-                  (vir_local_stack σ_t)
+                  (vir_heap σ_t.(vmem), vir_dyn σ_t.(vmem)) (frames σ_t.(vmem)) G
+                  (σ_t.(vlocal).1)
+                  (σ_t.(vlocal).2)
               ∗ ghost_var checkedoutG_bij_name (1/2) C
               ∗ heapbij_interp S C ∗ ⌜dom C ⊆ S⌝
-              ∗ globalbij_interp σ_t.1.1 σ_s.1.1
+              ∗ globalbij_interp σ_t.(vglobal) σ_s.(vglobal)
         )%I;
       call_ev := @vir_call_ev;
       call_ans := @vir_call_ans;
