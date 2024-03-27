@@ -97,6 +97,8 @@ Section toplevel.
     ⊢ denote_vellvm_main C_t ⪯ denote_vellvm_main C_s [[ Φ ]].
   Proof.
     rewrite /denote_vellvm_main /denote_vellvm.
+    
+  Admitted.
 
 End toplevel.
 
