@@ -14,6 +14,14 @@ Section globalbij.
 
   Context {Σ : gFunctors} `{!sheapGS Σ, !checkedoutGS Σ, !heapbijGS Σ}.
 
+  Lemma update_global_id σ:
+    update_global (vglobal σ) σ = σ.
+  Proof. by destruct σ. Qed.
+
+  Lemma update_mem_id σ:
+    update_mem (vmem σ) σ = σ.
+  Proof. by destruct σ. Qed.
+
   Lemma sim_global_read (f: LLVMAst.global_id) Φ:
     (∀ (v_t v_s : dvalue),
         dval_rel v_s v_t -∗
@@ -25,7 +33,6 @@ Section globalbij.
 
     rewrite sim_expr_unfold.
     iIntros "%σ_t %σ_s SI".
-    destruct σ_t as ((?&?)&?&?); destruct σ_s as ((?&?)&?&?).
     provide_case: TAU_STEP.
 
     (iSplitL ""; [ iPureIntro | ]).
@@ -43,7 +50,7 @@ Section globalbij.
     cbn.
     iDestruct "SI" as (???) "(Hhs & Hht & Hgv & Hi & %WF & Hlo & Hbij)".
     iDestruct "Hbij" as "(%Hsub&#Hgs_t&#Hgs_s&#Hrel)".
-    destruct (g0 !! f) eqn: Hs.
+    destruct (σ_s.(vglobal) !! f) eqn: Hs.
 
     { assert (Hs'' := Hs).
 
@@ -53,7 +60,7 @@ Section globalbij.
 
       iAssert (global sheapG_heap_source f d)%I as "Hs_elem".
       { rewrite global_eq /global_def.
-        iExists g0.
+        iExists σ_s.(vglobal).
         iSplitL ""; [ | iApply "Hgs_s"].
         by iPureIntro. }
       iDestruct "Helem" as (v' Hv') "Helem".
@@ -65,7 +72,7 @@ Section globalbij.
 
       iApply sim_coindF_tau; iApply sim_coindF_base.
       rewrite /lift_expr_rel.
-      iExists (g, p, (p0, f0)), v', (g0, p1, (p2, f1)), d; iFrame.
+      iExists σ_t, v', σ_s, d; iFrame.
       do 2 (iSplitL ""; [ iPureIntro; rewrite <- itree_eta; reflexivity | ]).
       rewrite /state_interp. cbn.
       iFrame.

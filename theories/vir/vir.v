@@ -144,7 +144,21 @@ Definition write_global (id : global_id) (v : dvalue) : vir_state ->  vir_state 
   apply_global (fun g => <[id := v]> g).
 
 (* ------------------------------------------------------------------------ *)
+(* Basic properties about [update_X] *)
 
+Lemma update_local_id σ:
+  update_local (vlocal σ) σ = σ.
+Proof. by destruct σ. Qed.
+
+Lemma update_global_id σ:
+  update_global (vglobal σ) σ = σ.
+Proof. by destruct σ. Qed.
+
+Lemma update_mem_id σ:
+  update_mem (vmem σ) σ = σ.
+Proof. by destruct σ. Qed.
+
+(* ------------------------------------------------------------------------ *)
 (* Instantiation of the [language] instance for the weakest precondition definition. *)
 Canonical Structure vir_lang : language :=
   Language vir_state
