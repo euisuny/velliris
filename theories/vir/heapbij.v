@@ -45,13 +45,13 @@ Lemma sheap_init `{sheapGpreS Σ} gs_t gs_s:
       ([∗ map] k↦v ∈ (gmap_empty : gmap loc (option nat)),
         k ↪[heap_block_size_name sheapG_heap_target] v) ∗
       own (globals_name sheapG_heap_target)
-        (to_agree (gs_t) : agreeR (leibnizO vir.globals)) ∗
+        (to_agree (gs_t) : agreeR (leibnizO global_env)) ∗
       own (sheapG_heap_source.(heap_name))
         (◯ (to_heap (gmap_empty : heap))) ∗
       ([∗ map] k↦v ∈ (gmap_empty : gmap loc (option nat)),
         k ↪[heap_block_size_name sheapG_heap_source] v) ∗
       own (globals_name sheapG_heap_source)
-        (to_agree (gs_s) : agreeR (leibnizO vir.globals)) ∗
+        (to_agree (gs_s) : agreeR (leibnizO global_env)) ∗
       (∃ γf : frame_names,
           ghost_var (stack_name sheapG_heap_target) (1 / 2) [γf] ∗
           ([∗ map] k↦v ∈ gmap_empty, k ↪[local_name γf] v) ∗

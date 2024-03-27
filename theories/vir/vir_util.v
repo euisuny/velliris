@@ -5,26 +5,17 @@ From stdpp Require Import gmap.
 From Vellvm Require Import
   Syntax.DynamicTypes Handlers Utils.Util.
 
-(* [VIR] notations *)
-Notation store l r := (trigger (Store l r)).
-Notation load τ l := (trigger (Load τ l)).
-
-Notation L0'expr :=
-    (itree (CallE +' ExternalCallE +' IntrinsicE +' LLVMGEnvE +'
-     (LLVMEnvE +' LLVMStackE) +' MemoryE +' PickE +' UBE +' DebugE +' FailureE)).
+From velliris Require Import vir.util.
 
 (* Misc. Utilities for vir *)
-Definition new_lb := make_empty_logical_block.
 
-Definition interp_call :
-  itree L0 ~> Monads.stateT vir_state (itree (language.L2 vir_lang)) :=
-  fun _ t => State.interp_state (handle_L0_L2 vir_handler) t.
+Definition new_lb := make_empty_logical_block.
 
 Lemma CFG_find_block_in {A} c i b :
   CFG.find_block (T:= A) c i = Some b -> b ∈ c.
 Proof.
   induction c; cbn; intros; [ inversion H | ].
-  destruct (Eqv.eqv_dec_p (blk_id a) i) eqn : Ha;
+  destruct (Eqv.eqv_dec_p (LLVMAst.blk_id a) i) eqn : Ha;
     inversion H; subst; clear H;
     [ apply elem_of_cons ; by left |].
   apply elem_of_cons; right; eapply IHc; eauto.
@@ -35,6 +26,7 @@ Definition lb_mem (b : logical_block) : mem_block :=
     | LBlock _ m _ => m
   end.
 
+(* ------------------------------------------------------------------------ *)
 (* Utilities for frame manipulation *)
 
 Fixpoint frame_at (i : nat) (F : frame_stack) : mem_frame :=
@@ -53,6 +45,7 @@ Fixpoint frame_at (i : nat) (F : frame_stack) : mem_frame :=
 
 Definition peek_frame := frame_at 0.
 
+(** *Utility about frame stacks *)
 (* Utility functions on frame stack *)
 Definition flatten_frame_stack (m : frame_stack) : mem_frame :=
   let fix _aux (m : frame_stack) (acc : mem_frame) :=
@@ -86,6 +79,127 @@ Definition delete_from_frame_stack (f : frame_stack) (k : Z) : frame_stack :=
 Definition free_locations_from_frame (mf d : mem_frame):=
   (fold_left (fun m key => remove Z.eq_dec key m) d mf).
 
+(* ------------------------------------------------------------------------ *)
+(* Properties about frame stack *)
+
+Lemma add_to_frame_stack_commute (A : frame_stack) (l : Z) :
+  list_to_set (flatten_frame_stack (add_to_frame_stack A l)) =
+  ({[ l ]} ∪ list_to_set (flatten_frame_stack A) : gset Z).
+Proof.
+  induction A; eauto.
+Qed.
+
+Lemma add_to_frame_stack_peek_frame_commute (A : frame_stack) (l : Z) :
+  list_to_set (peek_frame (add_to_frame_stack A l)) =
+  ({[ l ]} ∪ list_to_set (peek_frame A) : gset Z).
+Proof.
+  induction A; eauto.
+Qed.
+
+Lemma list_to_set_delete_from_frame (f : mem_frame) (l : Z) :
+  list_to_set (delete_from_frame f l) = (list_to_set f ∖ {[l]} : gset Z).
+Proof.
+  revert l.
+  induction f; cbn; eauto; first set_solver.
+  intros. destruct (Z.eq_dec l a); subst; set_solver.
+Qed.
+
+Lemma delete_from_frame_stack_subseteq (A : frame_stack) (l : Z) :
+  list_to_set (flatten_frame_stack (delete_from_frame_stack A l)) ⊆
+  (list_to_set (flatten_frame_stack A) : gset Z).
+Proof.
+  revert l.
+  induction A.
+  { intros; cbn; rewrite !app_nil_r; rewrite list_to_set_delete_from_frame.
+    set_solver. }
+  intros; cbn.
+  rewrite !list_to_set_app_L.
+  apply union_mono_r. rewrite list_to_set_delete_from_frame.
+  set_solver.
+Qed.
+
+Lemma delete_from_frame_stack_peek_frame_commute (A : frame_stack) (l : Z) :
+  list_to_set (peek_frame (delete_from_frame_stack A l)) =
+  (list_to_set (peek_frame A) ∖ {[ l ]} : gset Z).
+Proof.
+  revert l.
+  induction A.
+  { intros; cbn. by rewrite list_to_set_delete_from_frame. }
+  cbn. intros; by rewrite list_to_set_delete_from_frame.
+Qed.
+
+(* ------------------------------------------------------------------------ *)
+(* Utility lemma about frames *)
+
+Lemma free_locations_from_frame_all mf' mf:
+  NoDup mf ->
+  NoDup mf' ->
+  (list_to_set mf' : gset _) = list_to_set mf ->
+  free_locations_from_frame mf' mf = nil.
+Proof.
+  revert mf'. induction mf; eauto; cbn.
+  { cbn; intros; destruct mf'; set_solver. }
+  intros.
+
+  assert (list_to_set mf' = {[a]} ∪ (list_to_set (remove Z.eq_dec a mf'): gset _)).
+  { setoid_rewrite list_to_set_delete_from_frame.
+    rewrite -union_difference_singleton_L; try done.
+    set_solver. }
+  rewrite H2 in H1.
+
+  apply NoDup_cons in H; destruct H.
+  assert (list_to_set mf = (list_to_set (remove Z.eq_dec a mf') : gset _)).
+  { apply union_cancel_l_L in H1.
+    2 : rewrite list_to_set_delete_from_frame; set_solver.
+    2 : set_solver.
+    done. }
+  assert (a ∈ mf') by set_solver.
+
+  assert (NoDup (remove Z.eq_dec a mf')).
+  { by apply NoDup_remove. }
+  symmetry in H4.
+  specialize (IHmf _ H3 H6 H4).
+  symmetry.
+  rewrite -IHmf.
+  rewrite /free_locations_from_frame.
+  done.
+Qed.
+
+Lemma free_frame_memory_proper mf mf' g:
+  NoDup mf ->
+  NoDup mf' ->
+  (list_to_set mf : gset _) = list_to_set mf' ->
+  free_frame_memory mf g = free_frame_memory mf' g.
+Proof.
+  revert mf' g.
+  induction mf.
+  { intros; destruct mf'; set_solver. }
+  intros. cbn in H1.
+  rewrite /free_frame_memory.
+  cbn. destruct g; cbn; f_equiv.
+  assert (a ∈ mf') by set_solver.
+  assert (list_to_set mf' = {[a]} ∪ (list_to_set (remove Z.eq_dec a mf'): gset _)).
+  { setoid_rewrite list_to_set_delete_from_frame.
+    rewrite -union_difference_singleton_L; try done.
+    set_solver. }
+  rewrite H3 in H1.
+  apply NoDup_cons in H; destruct H.
+  assert (list_to_set mf = (list_to_set (remove Z.eq_dec a mf') : gset _)).
+  { apply union_cancel_l_L in H1.
+    2 : set_solver.
+    2 : rewrite list_to_set_delete_from_frame; set_solver.
+    done. }
+  assert (NoDup (remove Z.eq_dec a mf')) by (by apply NoDup_remove).
+
+  specialize (IHmf _ (delete a l, u) H4 H6 H5).
+  inversion IHmf.
+  rewrite H8.
+  clear -H2 H0.
+  rewrite fold_left_delete_comm.
+  rewrite -(fold_delete_distr a); eauto.
+  set_solver.
+Qed.
+
 (* Assumes that τ is not void *)
 Definition allocate_non_void τ : mem -> (mem * addr) :=
   fun m =>
@@ -93,6 +207,8 @@ Definition allocate_non_void τ : mem -> (mem * addr) :=
     let key       := next_logical_key m in
     let m         := add_logical_block key new_block m in
     (add_to_frame m key, (key,0)%Z).
+
+From Vellvm.Semantics Require Import InterpretationStack.
 
 (* Utilities for associative map for function lookup at the top-level *)
 Definition includes_keys : relation (list (dvalue * D.function_denotation)) :=

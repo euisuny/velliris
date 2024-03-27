@@ -8,7 +8,7 @@ From iris.base_logic.lib Require Import ghost_map ghost_var.
 From iris.prelude Require Import options.
 From iris.proofmode Require Export tactics.
 
-From velliris.vir Require Export vir util.
+From velliris.vir Require Export vir util vir_util.
 Set Default Proof Using "Type".
 Import uPred.
 
@@ -48,7 +48,7 @@ Class heapG Σ := HeapGS {
   (* Set of allocated locations in current frame *)
   heapGS_allocaSG :> ghost_varG Σ (gset Z);
   (* Global environment: read-only map *)
-  heap_globals_inG :> inG Σ (agreeR (leibnizO globals));
+  heap_globals_inG :> inG Σ (agreeR (leibnizO global_env));
   (* Local environment *)
   lheapG_localG :> ghost_mapG Σ local_loc local_val;
   (* Domain of local env *)
@@ -61,7 +61,7 @@ Definition heapΣ :=
     ghost_mapΣ loc (option nat);
     ghost_varΣ (list frame_names);
     ghost_varΣ (gset Z);
-    GFunctor (agreeR (leibnizO globals));
+    GFunctor (agreeR (leibnizO global_env));
     ghost_mapΣ local_loc local_val;
     ghost_varΣ (gset local_loc);
     ghost_varΣ lstack].
@@ -81,6 +81,7 @@ Record heap_names := {
 Definition vir_heap (m : memory_stack) : gmap Z logical_block := m.1.1.
 Definition vir_dyn (m : memory_stack) : gset Z := m.1.2.
 
+Definition to_addr (l : loc) := (l, 0)%Z.
 
 Notation "⊙ m" := (vir_heap m) (at level 30).
 
@@ -197,7 +198,7 @@ Section definitions.
   Definition heap_ctx
     (σ : heap * gset Z)
     (mf : frame_stack)
-    (G : vir.globals)
+    (G : global_env)
     (L : local_env)
     (LS : lstack) : iProp Σ :=
     let allocated_at_current_frame :=
@@ -1966,13 +1967,13 @@ Section heap.
 
 End heap.
 
-Lemma heap_init `{heapG Σ} (gs : vir.globals):
+Lemma heap_init `{heapG Σ} (gs : global_env):
   ⊢ |==> ∃ (γ : heap_names) (γf : frame_names),
       heap_ctx γ (gmap_empty, gset_empty) (Singleton []) gs [] [] ∗
       own γ.(heap_name) (◯ to_heap gmap_empty) ∗
       ([∗ map] k↦v ∈ gmap_empty, k ↪[γ.(heap_block_size_name)] v) ∗
       own (globals_name γ)
-        (to_agree (gs) : agreeR (leibnizO vir.globals)) ∗
+        (to_agree (gs) : agreeR (leibnizO global_env)) ∗
       ghost_var γ.(stack_name) (1 / 2) [γf] ∗
       ([∗ map] k↦v ∈ gmap_empty, k ↪[γf.(local_name)] v) ∗
       ghost_var γf.(ldomain_name) (1 / 2) (gset_empty : gset local_loc) ∗

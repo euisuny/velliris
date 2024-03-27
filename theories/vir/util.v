@@ -7,6 +7,8 @@ From velliris.utils Require Import tactics.
 From velliris.vir Require Export vir.
 From Vellvm Require Import Handlers.Handlers.
 
+Open Scope nat_scope.
+
 (* Some equivalent computable functions for standard list manipulation *)
 
 Fixpoint In_b {A} `{EQ: EqDecision A} (a:A) (l:list A) : bool :=
@@ -146,9 +148,12 @@ Proof.
     eapply IHl; eauto. }
 Qed.
 
+(* LATER: Generalize these [fold_alist] lemmas to general association lists *)
 Lemma fold_alist_insert_some_neq f l1 l2 r d d0:
-  FMapAList.fold_alist (λ (k : LLVMAst.raw_id) (v0 : dvalue) (acc : vir.globals), <[k:=v0]> acc) l2 l1 !! f = Some d -> r <> f ->
-  FMapAList.fold_alist (λ (k : LLVMAst.raw_id) (v0 : dvalue) (acc : vir.globals), <[k:=v0]> acc) (<[r:=d0]> l2) l1 !! f = Some d.
+  FMapAList.fold_alist (λ (k : LLVMAst.raw_id) (v0 : dvalue)
+   (acc : global_env), <[k:=v0]> acc) l2 l1 !! f = Some d -> r <> f ->
+  FMapAList.fold_alist (λ (k : LLVMAst.raw_id) (v0 : dvalue)
+   (acc : global_env), <[k:=v0]> acc) (<[r:=d0]> l2) l1 !! f = Some d.
 Proof.
   revert f l2 r d d0.
   induction l1; intros; cbn in H; cbn; auto.
@@ -162,8 +167,10 @@ Proof.
 Qed.
 
 Lemma fold_alist_insert_some_eq f l1 l2 r d:
-  FMapAList.fold_alist (λ (k : LLVMAst.raw_id) (v0 : dvalue) (acc : vir.globals), <[k:=v0]> acc) l2 l1 !! f = Some d -> r = f ->
-  FMapAList.fold_alist (λ (k : LLVMAst.raw_id) (v0 : dvalue) (acc : vir.globals), <[k:=v0]> acc) (<[r:=d]> l2) l1 !! f = Some d.
+  FMapAList.fold_alist (λ (k : LLVMAst.raw_id) (v0 : dvalue)
+   (acc : global_env), <[k:=v0]> acc) l2 l1 !! f = Some d -> r = f ->
+  FMapAList.fold_alist (λ (k : LLVMAst.raw_id) (v0 : dvalue)
+   (acc : global_env), <[k:=v0]> acc) (<[r:=d]> l2) l1 !! f = Some d.
 Proof.
   revert f l2 r d.
   induction l1; intros; cbn in H; cbn; auto.
@@ -176,13 +183,15 @@ Proof.
       rewrite insert_commute; auto. } }
 Qed.
 
-
 Lemma fold_alist_insert_some f l1 l2 r d:
-  FMapAList.fold_alist (λ (k : LLVMAst.raw_id) (v0 : dvalue) (acc : vir.globals), <[k:=v0]> acc) l2 l1 !! f = Some d ->
+  FMapAList.fold_alist (λ (k : LLVMAst.raw_id) (v0 : dvalue)
+   (acc : global_env), <[k:=v0]> acc) l2 l1 !! f = Some d ->
   (forall d0, r <> f /\
-    FMapAList.fold_alist (λ (k : LLVMAst.raw_id) (v0 : dvalue) (acc : vir.globals), <[k:=v0]> acc) (<[r:=d0]> l2) l1 !! f = Some d) \/
+    FMapAList.fold_alist (λ (k : LLVMAst.raw_id) (v0 : dvalue)
+      (acc : global_env), <[k:=v0]> acc) (<[r:=d0]> l2) l1 !! f = Some d) \/
   (r = f /\
-    FMapAList.fold_alist (λ (k : LLVMAst.raw_id) (v0 : dvalue) (acc : vir.globals), <[k:=v0]> acc) (<[r:=d]> l2) l1 !! f = Some d).
+    FMapAList.fold_alist (λ (k : LLVMAst.raw_id) (v0 : dvalue)
+      (acc : global_env), <[k:=v0]> acc) (<[r:=d]> l2) l1 !! f = Some d).
 Proof.
   intros.
   destruct (RelDec.rel_dec r f) eqn: Hrf;
@@ -196,7 +205,7 @@ Lemma alist_to_gmap_find_gen f g g' d :
   (FMapAList.alist_find AstLib.eq_dec_raw_id f g = None /\
     g' !! f = Some d)) ->
   (FMapAList.fold_alist
-    (λ (k : LLVMAst.raw_id) (v0 : dvalue) (acc : vir.globals),
+    (λ (k : LLVMAst.raw_id) (v0 : dvalue) (acc : global_env),
         <[k:=v0]> acc) g' (rev g)) !! f = Some d.
 Proof.
   intros; setoid_rewrite <- (rev_involutive g) in H.
@@ -224,7 +233,7 @@ Qed.
 Lemma alist_to_gmap_find f g d :
   FMapAList.alist_find AstLib.eq_dec_raw_id f g = Some d ->
   (FMapAList.fold_alist
-    (λ (k : LLVMAst.raw_id) (v0 : dvalue) (acc : vir.globals),
+    (λ (k : LLVMAst.raw_id) (v0 : dvalue) (acc : global_env),
         <[k:=v0]> acc) ∅ (rev g)) !! f = Some d.
 Proof.
   intros; eapply alist_to_gmap_find_gen; by left.
@@ -232,10 +241,10 @@ Qed.
 
 Lemma fold_alist_find_insert r d l l' f d0:
   FMapAList.fold_alist
-    (λ (k : LLVMAst.raw_id) (v0 : dvalue) (acc : vir.globals), <[k:=v0]> acc)
+    (λ (k : LLVMAst.raw_id) (v0 : dvalue) (acc : global_env), <[k:=v0]> acc)
     (<[r := d]>l') l !! f = Some d0 ->
   FMapAList.fold_alist
-    (λ (k : LLVMAst.raw_id) (v0 : dvalue) (acc : vir.globals), <[k:=v0]> acc)
+    (λ (k : LLVMAst.raw_id) (v0 : dvalue) (acc : global_env), <[k:=v0]> acc)
     l' l !! f = Some d0 \/
   (r = f /\ d = d0).
 Proof.
@@ -256,10 +265,10 @@ Qed.
 
 Lemma fold_alist_none_insert r d l l' f:
   FMapAList.fold_alist
-      (λ (k : LLVMAst.raw_id) (v0 : dvalue) (acc : vir.globals), <[k:=v0]> acc)
+      (λ (k : LLVMAst.raw_id) (v0 : dvalue) (acc : global_env), <[k:=v0]> acc)
       (<[r := d]> l') l !! f = None <->
   FMapAList.fold_alist
-      (λ (k : LLVMAst.raw_id) (v0 : dvalue) (acc : vir.globals), <[k:=v0]> acc)
+      (λ (k : LLVMAst.raw_id) (v0 : dvalue) (acc : global_env), <[k:=v0]> acc)
       l' l !! f = None /\ r <> f.
 Proof.
   split.
@@ -288,13 +297,13 @@ Qed.
 
 Lemma fold_alist_find_insert' r d l l' f d0:
   FMapAList.fold_alist
-    (λ (k : LLVMAst.raw_id) (v0 : dvalue) (acc : vir.globals), <[k:=v0]> acc)
+    (λ (k : LLVMAst.raw_id) (v0 : dvalue) (acc : global_env), <[k:=v0]> acc)
     (<[r := d]>l') l !! f = Some d0 ->
   FMapAList.fold_alist
-    (λ (k : LLVMAst.raw_id) (v0 : dvalue) (acc : vir.globals), <[k:=v0]> acc)
+    (λ (k : LLVMAst.raw_id) (v0 : dvalue) (acc : global_env), <[k:=v0]> acc)
     l' l !! f = Some d0 \/
   (FMapAList.fold_alist
-    (λ (k : LLVMAst.raw_id) (v0 : dvalue) (acc : vir.globals), <[k:=v0]> acc)
+    (λ (k : LLVMAst.raw_id) (v0 : dvalue) (acc : global_env), <[k:=v0]> acc)
     ∅ l !! f = None /\
     r = f /\ d = d0).
 Proof.
@@ -318,7 +327,7 @@ Qed.
 
 Lemma alist_to_gmap_none l f :
   FMapAList.fold_alist
-        (λ (k : LLVMAst.raw_id) (v0 : dvalue) (acc : vir.globals), <[k:=v0]> acc)
+        (λ (k : LLVMAst.raw_id) (v0 : dvalue) (acc : global_env), <[k:=v0]> acc)
         ∅ l !! f = None ->
   FMapAList.alist_find AstLib.eq_dec_raw_id f (rev l) = None.
 Proof.
@@ -333,7 +342,7 @@ Qed.
 
 Lemma alist_to_gmap_find' f g d :
   (FMapAList.fold_alist
-    (λ (k : LLVMAst.raw_id) (v0 : dvalue) (acc : vir.globals),
+    (λ (k : LLVMAst.raw_id) (v0 : dvalue) (acc : global_env),
         <[k:=v0]> acc) ∅ (rev g)) !! f = Some d ->
   FMapAList.alist_find AstLib.eq_dec_raw_id f g = Some d.
 Proof.
@@ -413,7 +422,6 @@ Lemma fold_delete_distr {A B} `{Countable A} `{EQA:EqDecision A}:
   delete a (fold_left (fun m key => delete key m) (remove EQA a d) m).
 Proof.
   intros * Ha Hnd_s'. rewrite -fold_left_delete_comm.
-  rewrite /delete_from_frame.
   revert a m Ha.
   induction d.
   { set_solver. }
@@ -636,52 +644,6 @@ Proof.
     eapply IHl; eauto. set_solver. }
 Qed.
 
-(* Utility about frame stacks *)
-Lemma add_to_frame_stack_commute (A : frame_stack) (l : Z) :
-  list_to_set (flatten_frame_stack (add_to_frame_stack A l)) =
-  ({[ l ]} ∪ list_to_set (flatten_frame_stack A) : gset Z).
-Proof.
-  induction A; eauto.
-Qed.
-
-Lemma add_to_frame_stack_peek_frame_commute (A : frame_stack) (l : Z) :
-  list_to_set (peek_frame (add_to_frame_stack A l)) =
-  ({[ l ]} ∪ list_to_set (peek_frame A) : gset Z).
-Proof.
-  induction A; eauto.
-Qed.
-
-Lemma list_to_set_delete_from_frame (f : mem_frame) (l : Z) :
-  list_to_set (delete_from_frame f l) = (list_to_set f ∖ {[l]} : gset Z).
-Proof.
-  revert l.
-  induction f; cbn; eauto; first set_solver.
-  intros. destruct (Z.eq_dec l a); subst; set_solver.
-Qed.
-
-Lemma delete_from_frame_stack_subseteq (A : frame_stack) (l : Z) :
-  list_to_set (flatten_frame_stack (delete_from_frame_stack A l)) ⊆
-  (list_to_set (flatten_frame_stack A) : gset Z).
-Proof.
-  revert l.
-  induction A.
-  { intros; cbn; rewrite !app_nil_r; rewrite list_to_set_delete_from_frame.
-    set_solver. }
-  intros; cbn.
-  rewrite !list_to_set_app_L.
-  apply union_mono_r. rewrite list_to_set_delete_from_frame.
-  set_solver.
-Qed.
-
-Lemma delete_from_frame_stack_peek_frame_commute (A : frame_stack) (l : Z) :
-  list_to_set (peek_frame (delete_from_frame_stack A l)) =
-  (list_to_set (peek_frame A) ∖ {[ l ]} : gset Z).
-Proof.
-  revert l.
-  induction A.
-  { intros; cbn. by rewrite list_to_set_delete_from_frame. }
-  cbn. intros; by rewrite list_to_set_delete_from_frame.
-Qed.
 
 Require Import Coq.Program.Equality.
 
@@ -930,76 +892,6 @@ Proof.
     exfalso. set_solver. }
 Qed.
 
-(* Utility lemma about frames *)
-
-Lemma free_locations_from_frame_all mf' mf:
-  NoDup mf ->
-  NoDup mf' ->
-  (list_to_set mf' : gset _) = list_to_set mf ->
-  free_locations_from_frame mf' mf = nil.
-Proof.
-  revert mf'. induction mf; eauto; cbn.
-  { cbn; intros; destruct mf'; set_solver. }
-  intros.
-
-  assert (list_to_set mf' = {[a]} ∪ (list_to_set (remove Z.eq_dec a mf'): gset _)).
-  { setoid_rewrite list_to_set_delete_from_frame.
-    rewrite -union_difference_singleton_L; try done.
-    set_solver. }
-  rewrite H2 in H1.
-
-  apply NoDup_cons in H; destruct H.
-  assert (list_to_set mf = (list_to_set (remove Z.eq_dec a mf') : gset _)).
-  { apply union_cancel_l_L in H1.
-    2 : rewrite list_to_set_delete_from_frame; set_solver.
-    2 : set_solver.
-    done. }
-  assert (a ∈ mf') by set_solver.
-
-  assert (NoDup (remove Z.eq_dec a mf')).
-  { by apply NoDup_remove. }
-  symmetry in H4.
-  specialize (IHmf _ H3 H6 H4).
-  symmetry.
-  rewrite -IHmf.
-  rewrite /free_locations_from_frame.
-  done.
-Qed.
-
-Lemma free_frame_memory_proper mf mf' g:
-  NoDup mf ->
-  NoDup mf' ->
-  (list_to_set mf : gset _) = list_to_set mf' ->
-  free_frame_memory mf g = free_frame_memory mf' g.
-Proof.
-  revert mf' g.
-  induction mf.
-  { intros; destruct mf'; set_solver. }
-  intros. cbn in H1.
-  rewrite /free_frame_memory.
-  cbn. destruct g; cbn; f_equiv.
-  assert (a ∈ mf') by set_solver.
-  assert (list_to_set mf' = {[a]} ∪ (list_to_set (remove Z.eq_dec a mf'): gset _)).
-  { setoid_rewrite list_to_set_delete_from_frame.
-    rewrite -union_difference_singleton_L; try done.
-    set_solver. }
-  rewrite H3 in H1.
-  apply NoDup_cons in H; destruct H.
-  assert (list_to_set mf = (list_to_set (remove Z.eq_dec a mf') : gset _)).
-  { apply union_cancel_l_L in H1.
-    2 : set_solver.
-    2 : rewrite list_to_set_delete_from_frame; set_solver.
-    done. }
-  assert (NoDup (remove Z.eq_dec a mf')) by (by apply NoDup_remove).
-
-  specialize (IHmf _ (delete a l, u) H4 H6 H5).
-  inversion IHmf.
-  rewrite H8.
-  clear -H2 H0.
-  rewrite fold_left_delete_comm.
-  rewrite -(fold_delete_distr a); eauto.
-  set_solver.
-Qed.
 
 Lemma assoc_lookup {A B} {RD : RelDec.RelDec (@eq A)}
   {RC: RelDec.RelDec_Correct RD} k (m : list (A * B)) (v : B):

@@ -13,13 +13,13 @@ From Vellvm Require Import Syntax.DynamicTypes Handlers.Handlers Utils.Util.
 Set Default Proof Using "Type*".
 
 Class heapbijGS (Σ : gFunctors) := HeapBijGS {
-  heapbijG_bijG :> gset_bijG Σ id id;
+  heapbijG_bijG :> gset_bijG Σ loc loc;
   heapbijG_bij_name : gname;
 }.
 Class heapbijGpreS (Σ: gFunctors) := HeapBijGpreS {
-  sbij_pre_progG :> gset_bijG Σ id id;
+  sbij_pre_progG :> gset_bijG Σ loc loc;
 }.
-Definition heapbijΣ := #[gset_bijΣ id id].
+Definition heapbijΣ := #[gset_bijΣ loc loc].
 Global Instance subG_heapbijΣ Σ :
   subG heapbijΣ Σ → heapbijGpreS Σ.
 Proof. solve_inG. Qed.
@@ -27,9 +27,9 @@ Proof. solve_inG. Qed.
 Section definitions.
   Context `{heapbijGS Σ}.
 
-  Definition heapbij_auth (L : gset (id * id)) :=
+  Definition heapbij_auth (L : gset (loc * loc)) :=
     gset_bij_own_auth heapbijG_bij_name (DfracOwn 1) L.
-  Definition block_rel (l_t : id) (l_s : id) :=
+  Definition block_rel (l_t : loc) (l_s : loc) :=
     gset_bij_own_elem heapbijG_bij_name l_t l_s.
 End definitions.
 
@@ -39,7 +39,7 @@ Notation "l_t '↔h' l_s" := (loc_rel l_t l_s) (at level 30) : bi_scope.
 
 Section laws.
   Context `{!heapbijGS Σ}.
-  Implicit Types (b_t b_s : id) (l_t l_s : loc * loc).
+  Implicit Types (b_t b_s : loc) (l_t l_s : loc * loc).
 
   Lemma heapbij_agree b_t1 b_t2 b_s1 b_s2 :
     block_rel b_t1 b_s1 -∗ block_rel b_t2 b_s2 -∗ ⌜b_t1 = b_t2 ↔ b_s1 = b_s2⌝.

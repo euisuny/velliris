@@ -12,7 +12,7 @@ From ITree Require Import
      ITreeFacts
      Events.StateFacts.
 
-From Vellvm Require Import
+From Vellvm Require Export
      Handlers.Handlers
      LLVMAst
      Semantics.LLVMEvents.
@@ -161,7 +161,7 @@ Canonical Structure vir_lang : language :=
 Definition vir_simulirisGS {PROP : bi} `{!BiBUpd PROP, !BiAffine PROP, !BiPureForall PROP}
   := simulirisGS PROP vir_lang.
 
-From Vellvm Require Import
+From Vellvm Require Export
      Semantics.InterpretationStack
      Utilities
      Syntax
@@ -348,7 +348,7 @@ Qed.
 Proof. solve_decision. Qed.
 #[global] Instance dtyp_eq_dec : EqDecision dtyp := dtyp_eq_dec.
 
-From Vellvm.Semantics Require Import DynamicValues.
+From Vellvm.Semantics Require Export DynamicValues.
 
 #[global] Instance int1_eq_dec : EqDecision DynamicValues.int1.
 Proof. repeat intro; red; apply Int1.eq_dec. Qed.
@@ -363,8 +363,13 @@ Proof. repeat intro; red; apply Int64.eq_dec. Qed.
 
 (* Functions about event signature conversion and lifting *)
 
+Notation L0'expr :=
+    (itree (CallE +' ExternalCallE +' IntrinsicE +' LLVMGEnvE +'
+     (LLVMEnvE +' LLVMStackE) +' MemoryE +' PickE +' UBE +' DebugE +' FailureE)).
+
 Definition find_fun e (τ : dtyp)
-  (fn : dvalue) (args : list uvalue) (attrs : list fn_attr) : L0'expr uvalue :=
+  (fn : dvalue) (args : list uvalue) (attrs : list fn_attr) :
+  L0'expr uvalue :=
     match lookup_defn fn e with
     | Some f_den => f_den args
     | None =>
