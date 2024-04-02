@@ -65,11 +65,13 @@ Section globalbij.
       iApply sim_coindF_tau; iApply sim_coindF_base.
       rewrite /lift_expr_rel.
       iExists σ_t, v', σ_s, d; iFrame.
-      do 2 (iSplitL ""; [ iPureIntro; rewrite <- itree_eta; reflexivity | ]).
+      do 2 (iSplitL ""; [
+            iPureIntro; rewrite <- itree_eta, update_global_id;
+            reflexivity | ]).
       rewrite /state_interp. cbn.
       iFrame.
       iSplitL "Hhs Hht Hgv Hi".
-      { iExists C, S, G. repeat iExists _. iFrame. destruct p; iFrame.
+      { iExists C, S, G. repeat iExists _. iFrame.
         iSplitL ""; first done.
 
         rewrite /globalbij_interp.
@@ -99,7 +101,6 @@ Section globalbij.
 
     rewrite sim_expr_eq.
     iIntros "%σ_t %σ_s SI".
-    destruct σ_t as ((?&?)&?&?); destruct σ_s as ((?&?)&?&?).
     iDestruct "SI" as (???) "(Hhs & Hht & Hgv & Hi & %WF & Hlo & Hbij)".
     iDestruct "Hbij" as "(%Hsub&#Hgs_t&#Hgs_s&#Hrel)".
     iDestruct (globals_agree with "Hgs_t Hg") as %Ht; subst.
@@ -114,7 +115,7 @@ Section globalbij.
     iApply sim_coind_base; eauto.
     iFrame.
       iSplitL "Hhs Hht Hgv Hi".
-    { iExists C, S, G. repeat iExists _. iFrame. destruct p; iFrame.
+    { iExists C, S, G. repeat iExists _. iFrame.
       repeat (iSplitL ""; first done). done. }
     iExists _, _; eauto.
     repeat (iSplitL ""; first done). cbn.
@@ -135,7 +136,6 @@ Section globalbij.
 
     rewrite sim_expr_unfold.
     iIntros "%σ_t %σ_s SI".
-    destruct σ_t as ((?&?)&?&?); destruct σ_s as ((?&?)&?&?).
     provide_case: TAU_STEP.
 
     (iSplitL ""; [ iPureIntro | ]).
@@ -161,13 +161,13 @@ Section globalbij.
     iApply sim_coindF_tau.
     iApply sim_coindF_base.
     rewrite /lift_expr_rel.
-    iExists (g , p, (p0, f0)), tt,
-      (g0, p1, (p2, f1)), tt; iFrame.
-    do 2 (iSplitL ""; [ iPureIntro; rewrite <- itree_eta; reflexivity | ]).
+    iExists σ_t, tt, σ_s, tt; iFrame.
+    do 2 (iSplitL ""; [
+      iPureIntro; rewrite <- itree_eta, update_global_id; reflexivity | ]).
     rewrite /state_interp. cbn.
     iFrame.
       iSplitL "Hhs Hht Hgv Hi".
-    { iExists C, S, G. repeat iExists _. iFrame. destruct p; iFrame.
+    { iExists C, S, G. repeat iExists _. iFrame.
       repeat (iSplitL ""; first done). done. }
     iExists tt, tt; eauto.
   Qed.

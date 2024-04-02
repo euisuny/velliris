@@ -738,7 +738,7 @@ Section alloc_rel_properties.
 End alloc_rel_properties.
 
 Section laws.
-  Context `{!heapbijGS Σ, !sheapGS Σ, !checkedoutGS Σ}.
+  Context `{!vellirisGS Σ}.
   Implicit Types (b_t b_s : loc) (l_t l_s : loc).
 
   Lemma heapbij_access L C b_t b_s:
