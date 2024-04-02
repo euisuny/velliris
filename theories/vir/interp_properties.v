@@ -48,14 +48,12 @@ Definition eq_rect' {X Y : Type} (H : X = Y) : X -> Y.
   by rewrite H.
 Defined.
 
-
 (* Some tactics *)
 Ltac destruct_match_goal :=
   repeat match goal with
     | |- context[match ?x with | _ => _ end] =>
         destruct x; cbn
   end.
-
 
 Ltac noncall_solve' :=
   destruct_match_goal;
@@ -251,11 +249,11 @@ Section interp_mrec_properties.
         Vis (subevent _ (e : F _ _)) (fun x => Ret (σ, x)) /\
         x0 = (subevent _ (e : F _ _))).
   Proof.
-    destruct σ as ((?&(?&?))&(?&?)&?).
     destruct x0 as [ | [ | [ | [ | [ | [ | [ | ] ] ] ] ] ] ]; cbn.
-    - noncall_solve.
-    - destruct g2; cbn; noncall_solve.
-    - destruct l1; cbn; [ | destruct l1 ]; try destruct l1; cbn.
+    - destruct (vmem σ); cbn; noncall_solve.
+    - destruct g; cbn; noncall_solve.
+    - destruct l; cbn; [ | destruct l ]; try destruct l;
+        destruct (vlocal σ); cbn.
       all : noncall_solve.
 
     - cbn. destruct m; cbn;
@@ -357,46 +355,49 @@ Section interp_mrec_properties.
         rewrite -H. cbn. reflexivity. }
   Qed.
 
+  (* TODO: Refactor this and [handle_noncall_L0_L2_case1] *)
   Lemma handle_noncall_L0_L2_case x x0 σ:
     (∃ t, handle_noncall_L0_L2 x x0 σ ≅ Ret t) \/
-    (∃ X k (e : _ X), handle_noncall_L0_L2 x x0 σ ≅ Vis (subevent _ (e : FailureE _)) k) \/
-    (∃ X k (e : _ X), handle_noncall_L0_L2 x x0 σ ≅ Vis (subevent _ (e : UBE _)) k) \/
+    (∃ X k (e : _ X), handle_noncall_L0_L2 x x0 σ ≅
+        Vis (subevent _ (e : FailureE _)) k) \/
+    (∃ X k (e : _ X), handle_noncall_L0_L2 x x0 σ ≅
+        Vis (subevent _ (e : UBE _)) k) \/
     (∃ e, handle_noncall_L0_L2 x x0 σ ≅
         Vis (subevent _ (e : F _ _)) (fun x => Ret (σ, x)) /\
         x0 = (subevent _ (e : F _ _))).
   Proof.
-    destruct σ as ((?&(?&?))&(?&?)&?).
     destruct x0 as [ | [ | [ | [ | [ | [ | [ | ] ] ] ] ] ] ]; cbn.
-    - noncall_solve'.
-    - destruct g2; cbn; noncall_solve'.
-    - destruct l1; cbn; [ | destruct l1 ]; try destruct l1; cbn.
+    - destruct (vmem σ); cbn; noncall_solve'.
+    - destruct g; cbn; noncall_solve'.
+    - destruct l; cbn; [ | destruct l ]; try destruct l;
+        destruct (vlocal σ); cbn.
       all : noncall_solve'.
-      all: destruct l1; cbn; noncall_solve'.
 
-     - cbn. destruct m; cbn;
-         rewrite /lift_pure_err /lift_err /allocate.
+    - cbn. destruct m; cbn;
+        rewrite /lift_pure_err /lift_err /allocate.
 
-       1-5,7 : noncall_solve'.
-       { destruct p; noncall_solve'. }
-       { noncall_solve'. }
-       { noncall_solve'. }
+      1-5,7 : noncall_solve'.
+      { destruct p; noncall_solve'. }
+      { noncall_solve'. }
+      { noncall_solve'. }
 
-     - rewrite /concretize_picks /lift_undef_or_err.
-       noncall_solve'.
+    - rewrite /concretize_picks /lift_undef_or_err.
+      noncall_solve'.
 
-     - rewrite /pure_state.
-        right; right; left ; repeat eexists _; by tau_steps.
+    - rewrite /pure_state.
+      right; right; left ; repeat eexists _; by tau_steps.
 
-     - rewrite /pure_state.
-        repeat right; repeat eexists _; split; eauto; tau_steps; cbn.
-        apply eqit_Vis; intros. by setoid_rewrite bind_ret_l.
+    - rewrite /pure_state.
+      repeat right; repeat eexists _; split; eauto; tau_steps; cbn.
+      apply eqit_Vis; intros. by setoid_rewrite bind_ret_l.
 
-     - rewrite /pure_state.
-        right; left ; repeat eexists _.
-        rewrite bind_vis. apply eqit_Vis.
-        intros; subst. rewrite bind_ret_l. apply eqit_Ret. reflexivity.
+    - rewrite /pure_state.
+      right; left ; repeat eexists _.
+      rewrite bind_vis. apply eqit_Vis.
+      intros; subst. rewrite bind_ret_l. apply eqit_Ret. reflexivity.
   Qed.
 
+  (* TODO Remove these [typeclasses eauto] hacks. *)
   Typeclasses eauto :=.
   Lemma interp_mrec_vis D T X (e : _ X) f σ k:
     ⟦ interp_mrec f (Vis (inr1 (inr1 e)) k) ⟧ σ =

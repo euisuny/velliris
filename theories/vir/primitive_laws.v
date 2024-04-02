@@ -12,7 +12,7 @@ Set Default Proof Using "Type*".
 
 Section proof.
 
-  Context {Σ} `{!sheapGS Σ, !checkedoutGS Σ, !heapbijGS Σ}.
+  Context {Σ} `{!vellirisGS Σ}.
 
   Lemma non_void_allocate_abs:
     forall τ σ s, non_void τ -> ~ (allocate σ τ = inl s).
@@ -35,7 +35,7 @@ Section proof.
     rewrite !source_red_eq !source_red_def_unfold /source_red_rec.
     iIntros "Hal Hf Hl". iLeft. iIntros (σ_t σ_s) "SI".
 
-    destruct (allocate σ_s.2 τ) eqn: Ht.
+    destruct (allocate (vmem σ_s) τ) eqn: Ht.
     { exfalso; eapply non_void_allocate_abs; eauto. }
     destruct p.
 
@@ -50,8 +50,9 @@ Section proof.
     iSpecialize ("Hl" $! _ Hdom with "Hl_s' Hal Hf Hbs").
 
     iModIntro.
-     destruct σ_s, p.
-    iExists dvalue, (DVALUE_Addr (z, z0)),(fun x => Tau (Ret x)), (g, p, m).
+    iExists dvalue,
+      (DVALUE_Addr (z, z0)),(fun x => Tau (Ret x)),
+      (update_mem m σ_s).
     iSplitL "".
 
     { iPureIntro.
@@ -80,12 +81,10 @@ Section proof.
     cbn.
 
     iExists C, S, G; iFrame.
-    cbn -[heap_ctx].
-    destruct p; cbn; unfold frames; cbn.
-    cbn in *.
 
     rewrite -!vir_logical_frame_add_to_frame.
-    destruct p0; cbn.
+    cbn in *. unfold frames; cbn.
+    destruct (vmem σ_s); cbn in *.
     destruct f; cbn -[frame_at]; iFrame.
   Qed.
 
@@ -104,7 +103,7 @@ Section proof.
     rewrite !target_red_eq !target_red_def_unfold /target_red_rec.
     iIntros "Hal Hf Hl". iLeft. iIntros (σ_t σ_s) "SI".
 
-    destruct (allocate σ_t.2 τ) eqn: Ht.
+    destruct (allocate (vmem σ_t) τ) eqn: Ht.
     { exfalso; eapply non_void_allocate_abs; eauto. }
     destruct p.
 
@@ -121,8 +120,9 @@ Section proof.
     iSpecialize ("Hl" $! _ Hdom with "Hl_t' Hal Hf Hbs").
 
     iModIntro.
-     destruct σ_t, p.
-    iExists dvalue, (DVALUE_Addr (z, z0)),(fun x => Tau (Ret x)), (g, p, m).
+    iExists dvalue,
+      (DVALUE_Addr (z, z0)),(fun x => Tau (Ret x)),
+      (update_mem m σ_t).
     iSplitL "".
 
     { iPureIntro.
@@ -140,25 +140,22 @@ Section proof.
       by rewrite interp_state_tau interp_state_ret. }
     iFrame.
 
+    apply allocate_inv in Ht.
+    destruct Ht as (?&?&?). inversion H0; subst.
+    inversion H1; subst.
+
     iSplitR "Hl"; cycle 1.
     { pose proof (target_red_tau (η := vir_handler) Ψ).
-      rewrite target_red_eq in H.
-      cbn in Ht.
-      apply allocate_inv in Ht. cbn in *.
-      destruct Ht as (?&?&?). inversion H2.
-      by iApply H. }
-
-    apply allocate_inv in Ht.
-    destruct Ht as (?&?&?); subst.
-    rewrite -!vir_logical_frame_add_to_frame.
+      rewrite target_red_eq in H0.
+      iApply H0. cbn. iApply "Hl". }
+    cbn.
 
     iExists C, S, G; iFrame.
-    cbn -[heap_ctx].
-    destruct p; cbn; unfold frames; cbn.
 
-    inversion H1; subst; cbn. destruct p0; cbn.
-
-    destruct f; cbn -[frame_at]; iFrame; iPureIntro.
+    rewrite -!vir_logical_frame_add_to_frame.
+    cbn in *. unfold frames; cbn.
+    destruct (vmem σ_t); cbn in *.
+    destruct f; cbn -[frame_at]; iFrame.
   Qed.
 
   Lemma sim_alloca τ S_t S_s i_t i_s `{non_void τ}:
@@ -217,11 +214,11 @@ Section proof.
     iDestruct "SI" as (???) "(Hh_s & Hh_t & H_c & Hbij & SI)".
 
     iPoseProof (heap_read_st_1 with "Hh_s Hs") as "%lookup".
-    cbn. destruct σ_s, p.
     cbn in *.
     eapply read_logical_view in lookup.
 
-    iModIntro. iExists _,_,_,_. iFrame.
+    iModIntro.
+    iExists _,_,_,σ_s. iFrame. (* Long processing time *)
     iSpecialize ("Hl" with "Hs").
     iSplitL "".
     { unfold interp_L2. rewrite interp_state_vis.
@@ -234,6 +231,7 @@ Section proof.
       rewrite !bind_tau.
       apply eqit_Tau. cbn. rewrite !bind_ret_l.
       rewrite <- interp_state_tau. cbn.
+      rewrite update_mem_id.
       reflexivity. }
     pose proof (source_red_tau (η := vir_handler) Ψ).
     rewrite source_red_eq in H.
@@ -253,11 +251,10 @@ Section proof.
     iDestruct "SI" as (???) "(Hh_s & Hh_t & H_c & Hbij & SI)".
 
     iPoseProof (heap_read_st_1 with "Hh_t Ht") as "%lookup".
-    cbn. destruct σ_t, p.
     cbn in *.
     eapply read_logical_view in lookup.
 
-    iModIntro. iExists _,_,_,_. iFrame.
+    iModIntro. iExists _,_,_,σ_t. iFrame.
     iSpecialize ("Hl" with "Ht").
     iSplitL "".
     { unfold interp_L2. rewrite interp_state_vis.
@@ -270,6 +267,7 @@ Section proof.
       rewrite !bind_tau.
       apply eqit_Tau. cbn. rewrite !bind_ret_l.
       rewrite <- interp_state_tau. cbn.
+      rewrite update_mem_id.
       reflexivity. }
     pose proof (target_red_tau (η := vir_handler) Ψ).
     rewrite target_red_eq in H.
@@ -313,7 +311,7 @@ Section proof.
     iDestruct "SI" as (???) "(Hh_s & Hh_t & H_c & Hbij & %WF & SI)".
 
     iPoseProof (heap_read with "Hh_s Hs") as "%lookup".
-    cbn. destruct σ_s, p.
+    cbn.
     pose proof (read_uvalue_logical_view _ _ _ _ Hs Hτ lookup) as Hread.
 
     iModIntro. iExists _,_,_,_. iFrame.
@@ -329,6 +327,7 @@ Section proof.
       rewrite !bind_tau.
       apply eqit_Tau. cbn. rewrite !bind_ret_l.
       rewrite <- interp_state_tau. cbn.
+      rewrite update_mem_id.
       reflexivity. }
     pose proof (source_red_tau (η := vir_handler) Ψ).
     rewrite source_red_eq in H.
@@ -350,7 +349,7 @@ Section proof.
     iDestruct "SI" as (???) "(Hh_s & Hh_t & H_c & Hbij & %WF & SI)".
 
     iPoseProof (heap_read with "Hh_t Ht") as "%lookup".
-    cbn. destruct σ_t, p.
+    cbn.
     pose proof (read_uvalue_logical_view _ _ _  _ Hs Hτ lookup) as Hread.
 
     iModIntro. iExists _,_,_,_. iFrame.
@@ -366,6 +365,7 @@ Section proof.
       rewrite !bind_tau.
       apply eqit_Tau. cbn. rewrite !bind_ret_l.
       rewrite <- interp_state_tau. cbn.
+      rewrite update_mem_id.
       reflexivity. }
     pose proof (target_red_tau (η := vir_handler) Ψ).
     rewrite target_red_eq in H.
@@ -413,7 +413,7 @@ Section proof.
 
     iDestruct (heap_read_st_1 with "Hh_s Hs") as %?; auto.
     iPoseProof (heap_write with "Hh_s Hs") as ">(Hh_s & Hs)".
-    cbn. destruct σ_s, p. destruct ptr.
+    cbn. destruct ptr.
     iSpecialize ("Hl" with "Hs").
 
     iModIntro. iExists _,_,_,_.
@@ -438,24 +438,21 @@ Section proof.
     repeat iExists _; iFrame. cbn.
 
     rewrite <- vir_heap_add_logical_block. cbn.
-    rewrite /dvalue_to_block. destruct p; cbn.
-    cbn in *. rewrite /frames; cbn.
-    destruct p0; cbn; eauto.
+    rewrite /dvalue_to_block.
+    cbn in *. rewrite /frames; cbn; eauto.
     destruct_HC "Hh_s".
 
-    assert ({[ z ]} ∪ p.2 = p.2).
+    assert ({[ z ]} ∪ (vmem σ_s).1.2 = (vmem σ_s).1.2).
     { destruct Hbs. cbn in *.
-      destruct p. cbn in *.
-      assert (z ∈ g1).
-      { specialize (H2 z (ltac:(rewrite lookup_insert; eauto))).
-        destruct H2.
-        eapply H1; eauto. }
-      set_solver. }
-    rewrite H1.
+      specialize (H2 z (ltac:(rewrite lookup_insert; eauto))).
+      destruct H2. set_solver. }
 
+    destruct (vmem σ_s); destruct f; cbn in *;
+    rewrite H1;
     iExists _, _; iFrame; done.
   Qed.
 
+  (* TODO: More WIP repair *)
   Lemma source_red_store v v' l Ψ:
     length (serialize_dvalue v) = length (serialize_dvalue v') ->
     l ↦s v -∗
@@ -471,7 +468,7 @@ Section proof.
     iDestruct (heap_read with "Hh_s Hs") as %?; auto.
     rewrite mapsto_dval_eq /mapsto_dval_def.
     iPoseProof (heap_write with "Hh_s Hs") as ">(Hh_s & Hs)".
-    cbn. destruct σ_s, p.
+    cbn.
     iSpecialize ("Hl" with "Hs").
 
     iModIntro. iExists _,_,_,_.
