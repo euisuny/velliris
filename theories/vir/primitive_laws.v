@@ -500,18 +500,15 @@ Section proof.
     apply leibniz_equiv in H1. rewrite H1.
     rewrite !Zlength_correct in Hlen.
     apply Nat2Z.inj in Hlen. rewrite Hlen.
-    rewrite /frames. destruct p; cbn.
-    destruct p0; cbn; eauto.
+    rewrite /frames.
+    destruct (vmem σ_s) ; cbn in *.
 
     destruct_HC "Hh_s".
 
     assert ({[ l ]} ∪ p.2 = p.2).
     { destruct Hbs. cbn in *.
       destruct p. cbn in *.
-      assert (l ∈ g1).
-      { specialize (H3 l (ltac:(rewrite lookup_insert; eauto))).
-        destruct H3.
-        eapply H2; eauto. }
+      specialize (H3 l (ltac:(rewrite lookup_insert; eauto))).
       set_solver. }
     rewrite H2.
 
@@ -531,7 +528,7 @@ Section proof.
 
     iDestruct (heap_read_st_1 with "Hh_t Ht") as %?; auto.
     iPoseProof (heap_write with "Hh_t Ht") as ">(Hh_t & Ht)".
-    cbn. destruct σ_t, p. destruct ptr.
+    cbn. destruct ptr.
     iSpecialize ("Hl" with "Ht").
 
     iModIntro. iExists _,_,_,_.
@@ -556,19 +553,18 @@ Section proof.
     repeat iExists _; iFrame. cbn.
 
     rewrite <- vir_heap_add_logical_block. cbn.
-    rewrite /dvalue_to_block. destruct p; cbn.
-    cbn in *. rewrite /frames; cbn.
-    destruct p0; cbn; eauto.
+    rewrite /dvalue_to_block.
+
+    destruct (vmem σ_t); cbn in *.
+
+    rewrite /frames; cbn.
 
     destruct_HC "Hh_t".
 
     assert ({[ z ]} ∪ p.2 = p.2).
     { destruct Hbs. cbn in *.
       destruct p. cbn in *.
-      assert (z ∈ g1).
-      { specialize (H2 z (ltac:(rewrite lookup_insert; eauto))).
-        destruct H2.
-        eapply H1; eauto. }
+      specialize (H2 z (ltac:(rewrite lookup_insert; eauto))).
       set_solver. }
     rewrite H1.
 
@@ -590,7 +586,7 @@ Section proof.
     iDestruct (heap_read with "Hh_t Ht") as %?; auto.
     rewrite mapsto_dval_eq /mapsto_dval_def.
     iPoseProof (heap_write with "Hh_t Ht") as ">(Hh_t & Ht)".
-    cbn. destruct σ_t, p.
+    cbn.
     iSpecialize ("Hl" with "Ht").
 
     iModIntro. iExists _,_,_,_.
@@ -622,18 +618,15 @@ Section proof.
     apply leibniz_equiv in H1. rewrite H1.
     rewrite !Zlength_correct in Hlen.
     apply Nat2Z.inj in Hlen. rewrite Hlen.
-    rewrite /frames. destruct p; cbn.
-    destruct p0; cbn; eauto.
+    rewrite /frames.
+    destruct (vmem σ_t); cbn in *.
 
     destruct_HC "Hh_t".
 
     assert ({[ l ]} ∪ p.2 = p.2).
     { destruct Hbs. cbn in *.
       destruct p. cbn in *.
-      assert (l ∈ g1).
-      { specialize (H3 l (ltac:(rewrite lookup_insert; eauto))).
-        destruct H3.
-        eapply H2; eauto. }
+      specialize (H3 l (ltac:(rewrite lookup_insert; eauto))).
       set_solver. }
     rewrite H2.
 
@@ -701,35 +694,34 @@ Section proof.
     iIntros "Hl Hf H".
     iLeft.
     iIntros (σ_t σ_s) "SI".
-
-    destruct σ_t as ((?&?)&?&?).
-    destruct p.
     iDestruct "SI" as (???) "(Hh_s & Hh_t & H_c & Hbij & SI)".
-
 
     iDestruct (lheap_lookup with "Hh_t Hf Hl") as %Ht.
     rewrite -alist_find_to_map_Some in Ht.
 
-    iExists _, v, (fun x => Tau(Ret x)), _.
+    iExists _, v, (fun x => Tau(Ret x)), σ_t.
 
+    destruct (vlocal σ_t) eqn : Hσ_t.
     iSplitL "".
     { unfold interp_L2. rewrite interp_state_vis.
-      cbn.
       rewrite
-        /resum /ReSum_inr /cat /Cat_IFun /inr_ /Inr_sum1 /add_tau /case_; cbn.
-      rewrite bind_bind. rewrite Ht.
-      iPureIntro. rewrite !bind_ret_l. rewrite bind_tau.
+        /resum /ReSum_inr /cat /Cat_IFun /inr_ /Inr_sum1
+          /add_tau /case_; cbn.
+      rewrite /add_tau. cbn. rewrite Hσ_t.
+      rewrite bind_bind.
+      iPureIntro. cbn. rewrite Ht. rewrite !bind_ret_l. rewrite bind_tau.
       setoid_rewrite interp_state_ret. rewrite bind_ret_l; cbn.
       rewrite bind_tau.
       rewrite !bind_ret_l; cbn.
       rewrite interp_state_tau interp_state_ret.
+      repeat f_equiv; cbn. rewrite -Hσ_t. rewrite update_local_id.
       reflexivity. }
 
     iSpecialize ("H" with "Hl Hf"); iFrame.
     iSplitR "H"; cycle 1.
     { by iApply target_red_tau. }
 
-    repeat iExists _; by iFrame.
+    repeat iExists _; rewrite Hσ_t. by iFrame.
   Qed.
 
   Lemma source_local_read (x : LLVMAst.raw_id) (v : uvalue) i Ψ:
@@ -745,34 +737,34 @@ Section proof.
     iLeft.
     iIntros (σ_t σ_s) "SI".
 
-    destruct σ_s as ((?&?)&?&?).
-    destruct p.
     iDestruct "SI" as (???) "(Hh_s & Hh_t & H_c & Hbij & SI)".
-
 
     iDestruct (lheap_lookup with "Hh_s Hf Hl") as %Ht.
     rewrite -alist_find_to_map_Some in Ht.
 
     iExists _, v, (fun x => Tau(Ret x)), _.
 
+    destruct (vlocal σ_s) eqn: Hσ_s.
     iSplitL "".
     { unfold interp_L2. rewrite interp_state_vis.
       cbn.
       rewrite
-        /resum /ReSum_inr /cat /Cat_IFun /inr_ /Inr_sum1 /add_tau /case_; cbn.
-      rewrite bind_bind. rewrite Ht.
-      iPureIntro. rewrite !bind_ret_l. rewrite bind_tau.
+        /resum /ReSum_inr /cat /Cat_IFun /inr_ /Inr_sum1
+          /add_tau /case_; cbn.
+      rewrite Hσ_s. rewrite bind_bind.
+      iPureIntro. cbn. rewrite Ht. rewrite !bind_ret_l. rewrite bind_tau.
       setoid_rewrite interp_state_ret. rewrite bind_ret_l; cbn.
       rewrite bind_tau.
       rewrite !bind_ret_l; cbn.
       rewrite interp_state_tau interp_state_ret.
+      rewrite -Hσ_s update_local_id.
       reflexivity. }
 
     iSpecialize ("H" with "Hl Hf"); iFrame.
     iSplitR "H"; cycle 1.
     { by iApply source_red_tau. }
 
-    repeat iExists _; by iFrame.
+    repeat iExists _; rewrite Hσ_s; by iFrame.
   Qed.
 
   Lemma sim_local_read (x_t x_s : LLVMAst.raw_id) (v_t v_s : uvalue) i_t i_s:
@@ -788,7 +780,6 @@ Section proof.
     rewrite sim_expr_unfold.
 
     iIntros "Ht Hs Hf_t Hf_s %σ_t %σ_s SI".
-    destruct σ_t as ((?&?)&?&?); destruct σ_s as ((?&?)&?&?).
     rewrite /interp_L2;
     provide_case: TAU_STEP.
     (iSplitL ""; [ iPureIntro | ]).
@@ -808,14 +799,14 @@ Section proof.
       rewrite bind_bind.
       cbn; reflexivity. }
 
-    destruct p, p1; cbn.
+    (* destruct p, p1; cbn. *)
     iDestruct "SI" as (???) "(Hh_s & Hh_t & H_c & Hbij &  SI)".
     iDestruct (lheap_lookup with "Hh_t Hf_t Ht") as %Ht.
     iDestruct (lheap_lookup with "Hh_s Hf_s Hs") as %Hs.
     rewrite -alist_find_to_map_Some in Ht.
     rewrite -alist_find_to_map_Some in Hs.
-    rewrite Ht Hs.
-    cbn.
+    destruct (vlocal σ_t) eqn: Hσ_t, (vlocal σ_s) eqn: Hσ_s.
+    cbn; rewrite Ht Hs. cbn.
     iApply sim_coindF_tau; cbn; iApply sim_coindF_base.
 
     rewrite /lift_expr_rel.
@@ -823,7 +814,6 @@ Section proof.
     do 2 (iSplitL ""; [ iPureIntro; reflexivity | ]); iFrame.
     iSplitR ""; [ | repeat iExists _; done].
     repeat iExists _; by iFrame.
-    Unshelve. all : exact vir_handler.
   Qed.
 
   Lemma sim_local_read_not_in_domain {R} (x_s : LLVMAst.raw_id) L_s Φ (e_t : _ R) i:
@@ -835,7 +825,6 @@ Section proof.
     rewrite sim_expr_unfold.
 
     iIntros (He) "Hd Hf %σ_t %σ_s SI".
-    destruct σ_t as ((?&?)&(?&?)&?); destruct σ_s as ((?&?)&(?&?)&?).
     rewrite /interp_L2;
     provide_case: STUTTER_R.
     (iSplitL ""; [ iPureIntro | ]).
@@ -848,7 +837,6 @@ Section proof.
     destruct_HC "Hh_s".
     iDestruct (ghost_var_agree with "Hf HCF") as %Hf; subst.
     iDestruct (ghost_var_agree with "Hd HD") as %Hag_s; subst.
-    destruct p0; cbn.
     apply alist_find_dom_None' in He; rewrite He; cbn.
 
     rewrite sim_indF_unfold /sim_expr_inner.
