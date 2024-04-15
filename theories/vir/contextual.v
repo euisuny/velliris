@@ -18,7 +18,9 @@ Set Default Proof Using "Type*".
 (** *Initial state *)
 
 Definition empty_vir_state : vir_state :=
-  (∅, (nil, nil), (∅, ∅, Mem.Singleton nil)).
+  {| vglobal := ∅;
+     vlocal := (nil, nil);
+     vmem := (∅, ∅, Mem.Singleton nil) |}.
 
 (* Returns `true` only if both function are named and have
      the same name. *)

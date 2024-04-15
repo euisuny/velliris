@@ -29,7 +29,7 @@ Import SemNotations.
 (** *Reflexivity theorems for logical relations *)
 Section fundamental.
 
-  Context {Σ : gFunctors} `{!sheapGS Σ, !checkedoutGS Σ, !heapbijGS Σ}.
+  Context {Σ : gFunctors} `{!vellirisGS Σ}.
 
   Ltac step_expr :=
     iApply sim_expr_mono;
@@ -312,7 +312,6 @@ Section fundamental.
     rewrite sim_expr_eq /sim_expr_.
 
     iIntros (σ_t σ_s) "SI".
-    destruct_state σ_t; destruct_state σ_s.
     unfold interp_L2.
     rewrite /subevent /resum /ReSum_inl /cat /Cat_IFun /inl_ /Inl_sum1
       /resum /ReSum_id /id_ /Id_IFun.
@@ -1333,7 +1332,8 @@ Section fundamental.
     rewrite interp_bind.
 
     (* Denote CFG *)
-    iApply sim_expr'_bind. iApply instr_to_L0'.
+    iApply sim_expr'_bind.
+    iApply spec.instr_to_L0'.
 
     iDestruct "Hv" as "#Hv".
     iApply sim_expr'_bupd_mono;
@@ -1558,7 +1558,7 @@ Section fundamental.
     (m : gmap A B) (l : list A) :=
     list_to_set l ⊆ dom m.
 
-  Definition CFG_WF (defs: CFG.mcfg dtyp) (g_t g_s : vir.globals) :=
+  Definition CFG_WF (defs: CFG.mcfg dtyp) (g_t g_s : global_env) :=
     let funs := CFG.m_definitions defs in
     (length (CFG.m_declarations defs) = length (CFG.m_definitions defs)) /\
     NoDup (CFG_names defs) /\
@@ -1963,7 +1963,7 @@ Section fundamental.
   Qed.
 
   Lemma global_names_cons_lookup {T FnBody}
-    f (l : list (definition T FnBody)) (g : globals):
+    f (l : list (definition T FnBody)) (g : global_env):
     contains_keys g (defs_names (f :: l)) ->
     is_Some (g !! dc_name (df_prototype f)).
   Proof.
@@ -1973,7 +1973,7 @@ Section fundamental.
   Qed.
 
   Lemma contains_keys_cons_inv {T FnBody}
-    (l : list (definition T FnBody)) (g : globals) x:
+    (l : list (definition T FnBody)) (g : global_env) x:
     contains_keys g (defs_names (x :: l)) ->
     dc_name (df_prototype x) ∈ dom g /\ contains_keys g (defs_names l).
   Proof.
@@ -1989,7 +1989,7 @@ Section fundamental.
   Lemma mcfg_defs_keys_extend:
     ∀ (f : definition dtyp (CFG.cfg dtyp))
       (l : list (definition dtyp (CFG.cfg dtyp)))
-      (g : globals) (x : dvalue) (r : list dvalue),
+      (g : global_env) (x : dvalue) (r : list dvalue),
       g !! dc_name (df_prototype f) = Some x ->
       dc_name (df_prototype f) ∉ defs_names l ->
       Permutation r (codomain (filter_keys g (defs_names l))) →
@@ -2004,7 +2004,7 @@ Section fundamental.
 
   Lemma NoDup_mcfg_extend:
     ∀ f (l : list (definition dtyp (CFG.cfg dtyp)))
-      (g : globals) (x : dvalue) r,
+      (g : global_env) (x : dvalue) r,
       g !! f = Some x ->
       NoDup_codomain (filter_keys g (f :: defs_names l)) ->
       f ∉ (defs_names l) ->

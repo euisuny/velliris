@@ -371,25 +371,25 @@ End logical_relations_def.
 
 Section logical_relations_properties.
 
-  Context {Σ : gFunctors} `{!sheapGS Σ, !checkedoutGS Σ, !heapbijGS Σ}.
+  Context {Σ : gFunctors} `{!vellirisGS Σ}.
 
   (* Useful properties for preserving [CFG_inv] *)
-  Lemma local_code_inv g l l0 m g0 l1 l2 m0 C i_t i_s A_t A_s:
+  Lemma local_code_inv σ_t σ_s C i_t i_s A_t A_s:
     ⊢ code_inv C i_t i_s A_t A_s -∗
-    state_interp (g, (l, l0), m) (g0, (l1, l2), m0) ==∗
+    state_interp σ_t σ_s ==∗
     ∃ args_t args_s,
       ⌜args_t.*1 = args_s.*1⌝ ∗
-      ⌜(list_to_set args_t.*1 : gset _) = list_to_set l.*1⌝ ∗
-      ⌜(list_to_set args_s.*1 : gset _) = list_to_set l1.*1⌝ ∗
+      ⌜(list_to_set args_t.*1 : gset _) = list_to_set (vlocal σ_t).1.*1⌝ ∗
+      ⌜(list_to_set args_s.*1 : gset _) = list_to_set (vlocal σ_s).1.*1⌝ ∗
       ⌜NoDup A_t⌝ ∗ ⌜NoDup A_s⌝ ∗
       ([∗ list] '(l_t, v_t) ∈ args_t, [ l_t := v_t ]t i_t) ∗
       ([∗ list] '(l_s, v_s) ∈ args_s, [ l_s := v_s ]s i_s) ∗
       ([∗ list] v_t; v_s ∈ args_t.*2;args_s.*2, uval_rel v_t v_s) ∗
       ([∗ list] v_t;v_s ∈ A_t;A_s, (v_t, 0) ↔h (v_s, 0)
          ∗ ⌜C !! (v_t, v_s) = None⌝) ∗
-      state_interp (g, (l, l0), m) (g0, (l1, l2), m0) ∗
-      ldomain_tgt i_t (list_to_set l.*1) ∗
-      ldomain_src i_s (list_to_set l1.*1) ∗
+      state_interp σ_t σ_s ∗
+      ldomain_tgt i_t (list_to_set (vlocal σ_t).1.*1) ∗
+      ldomain_src i_s (list_to_set (vlocal σ_s).1.*1) ∗
       checkout C ∗
       stack_tgt i_t ∗ stack_src i_s ∗
       frame_WF i_t i_s ∗
@@ -426,19 +426,19 @@ Section logical_relations_properties.
     repeat iExists _; iFrame. cbn; done.
   Qed.
 
-  Lemma local_CFG_inv g l l0 m g0 l1 l2 m0 C i_t i_s:
+  Lemma local_CFG_inv σ_t σ_s C i_t i_s:
     ⊢ CFG_inv C i_t i_s -∗
-    state_interp (g, (l, l0), m) (g0, (l1, l2), m0) ==∗
+    state_interp σ_t σ_s ==∗
     ∃ args_t args_s,
       ⌜args_t.*1 = args_s.*1⌝ ∗
-      ⌜(list_to_set args_t.*1 : gset _) = list_to_set l.*1⌝ ∗
-      ⌜(list_to_set args_s.*1 : gset _) = list_to_set l1.*1⌝ ∗
+      ⌜(list_to_set args_t.*1 : gset _) = list_to_set (vlocal σ_t).1.*1⌝ ∗
+      ⌜(list_to_set args_s.*1 : gset _) = list_to_set (vlocal σ_s).1.*1⌝ ∗
       ([∗ list] '(l_t, v_t) ∈ args_t, [ l_t := v_t ]t i_t) ∗
       ([∗ list] '(l_s, v_s) ∈ args_s, [ l_s := v_s ]s i_s) ∗
       ([∗ list] v_t; v_s ∈ args_t.*2;args_s.*2, uval_rel v_t v_s) ∗
-      state_interp (g, (l, l0), m) (g0, (l1, l2), m0) ∗
-      ldomain_tgt i_t (list_to_set l.*1) ∗
-      ldomain_src i_s (list_to_set l1.*1) ∗
+      state_interp σ_t σ_s ∗
+      ldomain_tgt i_t (list_to_set (vlocal σ_t).1.*1) ∗
+      ldomain_src i_s (list_to_set (vlocal σ_s).1.*1) ∗
       checkout C ∗
       stack_tgt i_t ∗ stack_src i_s ∗
       alloca_tgt i_t ∅ ∗ alloca_src i_s ∅.
@@ -475,21 +475,19 @@ Section logical_relations_properties.
   Lemma local_write_refl x v_t v_s i_t i_s A_t A_s:
     ⊢ code_inv ∅ i_t i_s A_t A_s -∗ uval_rel v_t v_s -∗
     trigger (LocalWrite x v_t) ⪯ trigger (LocalWrite x v_s)
-      [{ (v1, v2), code_inv ∅i_t i_s A_t A_s }].
+      [{ (v1, v2), code_inv ∅ i_t i_s A_t A_s }].
   Proof.
     iIntros "CI #Hrel".
     iApply sim_update_si.
 
     iIntros "%σ_t %σ_s SI".
-    destruct σ_t as ((?&(?&?))&?).
-    destruct σ_s as ((?&(?&?))&?).
     iDestruct (local_code_inv with "CI SI") as ">H".
     iDestruct "H" as (?????)
         "(%Hnd_t & %Hnd_s & Hlt & Hls & Hv & #Ha_v & SI & Hd_t & Hd_s
           & HC & Hf_t & Hf_s & #WF & Ha_t & Ha_s)".
     iFrame.
 
-    destruct (decide (x ∈ l.*1)).
+    destruct (decide (x ∈ (vlocal σ_t).1.*1)).
     {
       assert (exists n v, args_t !! n = Some (x, v)).
       { clear -H0 e.
@@ -552,8 +550,8 @@ Section logical_relations_properties.
       iSplitR ""; last by iFrame "Ha_v".
       iApply (big_sepL2_insert args_t.*2 args_s.*2 uval_rel with "Hrel Hv"). }
 
-    { assert (Hn : x ∉ (list_to_set l.*1 : gset _)) by set_solver.
-      assert (Hn1 : x ∉ (list_to_set l1.*1 : gset _)).
+    { assert (Hn : x ∉ (list_to_set (vlocal σ_t).1.*1 : gset _)) by set_solver.
+      assert (Hn1 : x ∉ (list_to_set (vlocal σ_s).1.*1 : gset _)).
       { rewrite -H1 -H H0; set_solver. }
       iApply (sim_expr_bupd_mono with "[HC Ha_t Ha_s Hv Hlt Hls]");
         [ | iApply (sim_local_write_alloc _ _ _ _ _ _ _ _ Hn Hn1 with "Hd_t Hd_s Hf_t Hf_s")].
@@ -578,15 +576,13 @@ Section logical_relations_properties.
     iApply sim_update_si.
 
     iIntros "%σ_t %σ_s SI".
-    destruct σ_t as ((?&(?&?))&?).
-    destruct σ_s as ((?&(?&?))&?).
     iDestruct (local_CFG_inv with "CI SI") as ">H".
     iDestruct "H" as
       (?????)
         "(Hlt & Hls & Hv & SI & Hd_t & Hd_s & HC & Hf_t & Hf_s & Ha_t & Ha_s)".
     iFrame.
 
-    destruct (decide (x ∈ l.*1)).
+    destruct (decide (x ∈ (vlocal σ_t).1.*1)).
     {
       assert (exists n v, args_t !! n = Some (x, v)).
       { clear -H0 e.
@@ -645,8 +641,8 @@ Section logical_relations_properties.
       rewrite !list_insert_snd.
       iApply (big_sepL2_insert args_t.*2 args_s.*2 uval_rel with "Hrel Hv"). }
 
-    { assert (Hn : x ∉ (list_to_set l.*1 : gset _)) by set_solver.
-      assert (Hn1 : x ∉ (list_to_set l1.*1 : gset _)).
+    { assert (Hn : x ∉ (list_to_set (vlocal σ_t).1.*1 : gset _)) by set_solver.
+      assert (Hn1 : x ∉ (list_to_set (vlocal σ_s).1.*1 : gset _)).
       { rewrite -H1 -H H0; set_solver. }
       iApply (sim_expr_bupd_mono with "[HC Ha_t Ha_s Hv Hlt Hls]");
         [ | iApply (sim_local_write_alloc _ _ _ _ _ _ _ _ Hn Hn1 with "Hd_t Hd_s Hf_t Hf_s")].
@@ -668,15 +664,13 @@ Section logical_relations_properties.
     iApply sim_update_si.
 
     iIntros "%σ_t %σ_s SI".
-    destruct σ_t as ((?&(?&?))&?).
-    destruct σ_s as ((?&(?&?))&?).
     iDestruct (local_code_inv with "CI SI") as ">H".
     iDestruct "H" as
       (args_t args_s Hdom Ht Hs Hnd_t Hnd_s)
         "(Hlt & Hls & Hv & #Hav & SI & Hf_t & Hf_s & HC & Hs_t & Hs_s & #HWF& Ha_t & Ha_s)".
     iFrame.
 
-    destruct (decide (x ∈ l.*1)).
+    destruct (decide (x ∈ (vlocal σ_t).1.*1)).
     {
       assert (exists n v, args_t !! n = Some (x, v)).
       { clear -Ht e.
@@ -740,15 +734,13 @@ Section logical_relations_properties.
     iApply sim_update_si.
 
     iIntros "%σ_t %σ_s SI".
-    destruct σ_t as ((?&(?&?))&?).
-    destruct σ_s as ((?&(?&?))&?).
     iDestruct (local_CFG_inv with "CI SI") as ">H".
     iDestruct "H" as
       (args_t args_s Hdom Ht Hs)
         "(Hlt & Hls & Hv & SI & Hf_t & Hf_s & HC & Hs_t & Hs_s & Ha_t & Ha_s)".
     iFrame.
 
-    destruct (decide (x ∈ l.*1)).
+    destruct (decide (x ∈ (vlocal σ_t).1.*1)).
     {
       assert (exists n v, args_t !! n = Some (x, v)).
       { clear -Ht e.
@@ -802,9 +794,6 @@ Section logical_relations_properties.
       rewrite -Hs -Hdom Ht. set_solver. }
   Qed.
 
-  Ltac destruct_state σ :=
-    destruct σ as ((?&?)&(?&?)&?).
-
   Lemma load_must_be_addr_src τ x_t x_s Φ:
     ⊢ (∀ ptr, ⌜x_s = DVALUE_Addr ptr⌝ -∗
       trigger (Load τ x_t) ⪯ trigger (Load τ x_s) [{ Φ}]) -∗
@@ -815,9 +804,8 @@ Section logical_relations_properties.
     destruct x_s; [ by iApply "H" | ..].
     all: rewrite sim_expr_eq /sim_expr_;
       iIntros (??) "SI";
-      destruct_state σ_s;
       rewrite /interp_L2;
-       rewrite (interp_state_vis _ _ _ (g, p, (g0, g1, f))) ; cbn; rewrite /add_tau;
+       rewrite (interp_state_vis _ _ _ σ_s) ; cbn; rewrite /add_tau;
        rewrite !bind_tau; iApply sim_coind_tauR; cbn;
         rewrite !bind_bind bind_vis; iApply sim_coind_exc.
   Qed.
@@ -919,11 +907,10 @@ Section logical_relations_properties.
     iIntros "H".
     destruct p_s eqn: Hs; [ by iApply "H" | ..].
     all: rewrite {2} sim_expr_fixpoint; iIntros (??) "SI";
-      destruct σ_s as (?&(?&?)&?); destruct p;
       rewrite /interp_L2;
       remember
          (State.interp_state
-          (handle_L0_L2 vir_handler) (store x_t p_t) σ_t);
+          (handle_L0_L2 vir_handler) (trigger (Store x_t p_t)) σ_t);
       iApply sim_coind_Proper; [ done |
         rewrite interp_state_vis; cbn;
         rewrite /add_tau; cbn; rewrite bind_tau bind_bind;

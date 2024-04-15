@@ -27,9 +27,9 @@ Import LLVMEvents.
 (** *Top-level Contextual Refinement *)
 Section CR.
 
-  Context {Σ} `{!sheapGS Σ, !checkedoutGS Σ, !heapbijGS Σ}.
+  Context {Σ} `{!vellirisGS Σ}.
 
-  Definition globals_WF (g : vir.globals) : iPropI Σ :=
+  Definition globals_WF (g : global_env) : iPropI Σ :=
     ([∗ map] g0↦v ∈ g, ∃ v' : dvalue, ⌜g !! g0 = Some v'⌝ ∗ dval_rel v' v)%I.
 
   Definition mcfg_fn_disjoint_keys (C : CFG.mcfg dtyp) e :=
@@ -409,7 +409,7 @@ Section CR.
       (a1 a2 : itree (CallE +' language.L0 vir_lang) T)
       (f : ∀ T : Type, CallE T → L0'expr T)
       (g : ∀ T : Type, CallE T → L0'expr T)
-      (σ_t σ_s : global_env * (local_env * lstack) * memory_stack) :
+      (σ_t σ_s : state vir_lang) :
     □ (∀ x y : st_exprO' T, base x y ∗ Ψ x y ∗-∗ Ψ x y) -∗
     context_rel f g -∗
     Ψ (observe (⟦ ⟅ a1 ⟆ ⟧ σ_t)) (observe (⟦ ⟅ a2 ⟆ ⟧ σ_s)) -∗
@@ -431,7 +431,7 @@ Section CR.
       (f : ∀ T : Type, CallE T → L0'expr T)
       (g : ∀ T : Type, CallE T → L0'expr T)
       (a1 a2 : itree (CallE +' language.L0 vir_lang) T)
-      (σ_t σ_s : global_env * (local_env * lstack) * memory_stack)
+      (σ_t σ_s : state vir_lang)
       (t : L2_expr vir_lang T)
       (H0 : observe (⟦ ⟅ a1 ⟆ ⟧ σ_t) = TauF t) :
     □ (∀ x y : st_exprO' T, base x y ∗ Ψ x y ∗-∗ Ψ x y) -∗
@@ -498,7 +498,7 @@ Section CR.
       (f : ∀ T : Type, CallE T → L0'expr T)
       (g : ∀ T : Type, CallE T → L0'expr T)
       (a1 a2 : itree (CallE +' language.L0 vir_lang) T)
-      (σ_t σ_s : global_env * (local_env * lstack) * memory_stack)
+      (σ_t σ_s : state vir_lang)
       (t : L2_expr vir_lang T)
       (H0 : observe (⟦ ⟅ a2 ⟆ ⟧ σ_s) = TauF t):
     □ (∀ x y : st_exprO' T, base x y ∗ Ψ x y ∗-∗ Ψ x y) -∗
@@ -567,7 +567,7 @@ Section CR.
       (f : ∀ T : Type, CallE T → L0'expr T)
       (g : ∀ T : Type, CallE T → L0'expr T)
       (a1 a2 : itree (CallE +' language.L0 vir_lang) T)
-      (σ_t σ_s : global_env * (local_env * lstack) * memory_stack)
+      (σ_t σ_s : state vir_lang)
       (t s : L2_expr vir_lang T)
       (H0 : observe (⟦ ⟅ a1 ⟆ ⟧ σ_t) = TauF t)
       (H1 : observe (⟦ ⟅ a2 ⟆ ⟧ σ_s) = TauF s) :

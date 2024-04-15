@@ -24,12 +24,13 @@ Set Default Proof Using "Type*".
 
 Import ListNotations.
 Import SemNotations.
+Import LLVMAst.
 
 
 (** *Reflexivity theorems for logical relations *)
 Section fundamental_exp.
 
-  Context {Σ : gFunctors} `{!sheapGS Σ, !checkedoutGS Σ, !heapbijGS Σ}.
+  Context {Σ : gFunctors} `{!vellirisGS Σ}.
 
   Ltac exp_logrel_pre d :=
     destruct d; try iApply exp_conv_raise.
