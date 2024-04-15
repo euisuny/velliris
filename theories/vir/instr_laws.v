@@ -103,7 +103,7 @@ Ltac unary_post :=
 
 Section instruction_laws.
 
-  Context {Σ} `{!sheapGS Σ, !checkedoutGS Σ, !heapbijGS Σ}.
+  Context {Σ} `{!vellirisGS Σ}.
 
   Lemma sim_instr_pure1
     (x_t x_s : LLVMAst.raw_id) (v_t v_s v_t' v_s' : uvalue) o_t o_s i_t i_s:
@@ -1461,7 +1461,7 @@ Qed.
 
 Section frame_resources.
 
-  Context {Σ : gFunctors} `{!sheapGS Σ, !checkedoutGS Σ, !heapbijGS Σ}.
+  Context {Σ : gFunctors} `{!vellirisGS Σ}.
 
   Definition frame_res γ i A D :=
     (vir_state.stack γ i
@@ -1538,7 +1538,7 @@ Ltac destruct_frame_resources :=
 
 Section exp_laws.
 
-  Context {Σ : gFunctors} `{!sheapGS Σ, !checkedoutGS Σ, !heapbijGS Σ}.
+  Context {Σ : gFunctors} `{!vellirisGS Σ}.
 
 
   Lemma interp_L2_bind {X R} (e : _ X) (k : _ -> _ R) σ:
@@ -1801,13 +1801,21 @@ Section exp_laws.
     setoid_rewrite bind_ret_l.
     iApply source_red_sim_expr; iApply source_red_bind.
 
-    iApply (source_red_mono with "[]");
-      [ | iApply (source_local_read with "Hl Hf"); auto];
-      first (iIntros (?) "H"; done).
-
-    iIntros "Hl Hst".
-    do 2 iApply source_red_base.
-    rewrite bind_ret_l.
+    iApply (source_red_mono with "[H Hd HC] [Hl Hf]"); cycle 1.
+    { iPoseProof (source_local_read with "Hl Hf") as "H'".
+      match goal with
+        | |- context[ environments.envs_entails _ (source_red ?x _) ] =>
+            replace x with (ITree.trigger (subevent (F := language.L0 vir_lang) _ (LocalRead id)))
+      end.
+      2 : done. iApply "H'".
+      iIntros "Hl Hst".
+      iApply source_red_base. Unshelve.
+      2 : exact (fun x => ⌜x = Ret (UVALUE_Addr l)⌝ ∗ [ id := UVALUE_Addr l ]s i ∗ stack_src i)%I.
+      by iFrame. }
+    cbn.
+    iIntros (?) "(%Hs & Hid & Hs)" ;subst.
+    iApply source_red_base.
+    setoid_rewrite bind_ret_l.
     iApply sim_expr_tauL.
     setoid_rewrite instr_conv_bind. cbn.
     setoid_rewrite instr_conv_ret.
@@ -1823,40 +1831,48 @@ Section exp_laws.
 
     iIntros (??) "SI".
     rewrite interp_L2_bind.
-    rewrite {2}/interp_L2. rewrite StateFacts.interp_state_vis.
-    rewrite /subevent; unfold_cat. simp instrE_conv.
-    rewrite /instr_to_L0 bind_tau; cbn.
+    rewrite bij_laws.interp_L2_load.
+    destruct (vmem σ_s); cbn -[state_interp].
 
-    destruct σ_s as ((?&?)&(?&?)&?) eqn: Hs; cbn.
-
-    destruct (read (g0, g1, f) l dt) eqn : Hread.
+    destruct (read (p, f) l dt) eqn : Hread.
     (* UB case *)
     { rewrite bind_tau. iApply sim_coind_tauR.
       rewrite !bind_bind bind_vis.
       iApply sim_coind_ub. }
-    rewrite !bind_bind !bind_ret_l.
-    setoid_rewrite StateFacts.interp_state_ret.
-    rewrite !bind_tau. rewrite bind_ret_l.
-
-    cbn. rewrite interp_ret bind_tau bind_ret_l.
-    rewrite !bind_bind. rewrite interp_L2_tau.
+    rewrite bind_ret_l. do 2 setoid_rewrite bind_tau.
+    rewrite bind_ret_l.
+    setoid_rewrite StateFacts.interp_state_bind.
     repeat iApply sim_coind_tauR.
-    rewrite bind_vis.
+    setoid_rewrite StateFacts.interp_state_tau.
+    rewrite !bind_tau.
+    repeat iApply sim_coind_tauR.
+    rewrite interp_ret.
+    setoid_rewrite StateFacts.interp_state_ret.
+    rewrite bind_ret_l.
+
+    cbn.
+    rewrite !bind_bind. rewrite interp_state_bind.
 
     iDestruct "SI" as (???) "(Hh_s & Hh_t & H_c & Hbij' & SI)".
 
     unfold interp_L2. rewrite StateFacts.interp_state_vis.
     simp instrE_conv. rewrite /instr_to_L0 bind_tau; cbn; rewrite bind_bind.
+    rewrite bind_tau.
     iApply sim_coind_tauR.
     rewrite /handle_local_stack; cbn. destruct p.
-    rewrite /ITree.map !bind_bind !bind_ret_l.
-    iApply sim_coind_tauR; rewrite bind_tau interp_ret bind_ret_l.
-    rewrite StateFacts.interp_state_tau; iApply sim_coind_tauR.
+    rewrite bind_bind.
+    destruct (vlocal σ_s); cbn.
+    rewrite /ITree.map !bind_bind !bind_ret_l bind_tau.
+    iApply sim_coind_tauR. rewrite interp_state_ret.
+    rewrite bind_ret_l. rewrite interp_state_bind.
+    rewrite StateFacts.interp_state_tau. rewrite bind_tau.
+    iApply sim_coind_tauR. rewrite interp_ret interp_state_ret.
+    rewrite bind_ret_l. cbn.
 
-    iSpecialize ("H" with "Hl").
+    iSpecialize ("H" with "Hid").
 
     iMod ((lheap_domain_alloc _ _ u)
-           with "Hd Hst Hh_s") as "(Hh_s & Hp_s & Hf_s & Hd_s)"; [done | ].
+           with "Hd Hs Hh_s") as "(Hh_s & Hp_s & Hf_s & Hd_s)"; [done | ].
 
     iDestruct (lheap_lookup with "Hh_s Hf_s Hp_s") as %Hl_s; cbn.
 
@@ -1870,7 +1886,7 @@ End exp_laws.
 
 Section more_properties.
 
-  Context {Σ : gFunctors} `{!sheapGS Σ, !checkedoutGS Σ, !heapbijGS Σ}.
+  Context {Σ : gFunctors} `{!vellirisGS Σ}.
 
 
    Lemma target_instr_load_in l dt du b o L i pid id q Ψ u v:
