@@ -18,7 +18,7 @@ Set Default Proof Using "Type*".
 
 Section proof.
 
-  Context {Σ} `{!sheapGS Σ, !checkedoutGS Σ, !heapbijGS Σ}.
+  Context {Σ} `{!vellirisGS Σ}.
 
   (* 4.3.1. Primitive laws using checked-out sets *)
   Lemma sim_bij_return_Some {R1 R2} l_t l_s C (e_t:_ R1) (e_s:_ R2) Φ (q q' qd: Qp) v_t v_s:
@@ -76,7 +76,7 @@ Section proof.
      (q' < 1)%Qp ->
      (q + q' ≤ 1)%Qp ->
      C !! (l_t.1, l_s.1) = Some q' ->
-     (vir_heap (σ_s.2)) !! l_s.1 = Some v_s →
+     (vmem σ_s).1.1 !! l_s.1 = Some v_s →
      l_t ↔h l_s -∗
      checkout C -∗
      state_interp σ_t σ_s -∗
@@ -166,33 +166,44 @@ Section proof.
   From velliris.utils Require Import tactics.
   Import DenoteTactics.
 
+  (* TODO: Move *)
   Lemma interp_L2_load τ l σ:
-    ⟦ load τ (DVALUE_Addr l) ⟧ σ ≅
-      let '(g, p, (g0, g1, f)) := σ in
+    ⟦ trigger (Load τ (DVALUE_Addr l)) ⟧ σ ≅
         Tau
           (r <-
-            match read (g0, g1, f) l τ with
+            match read (vmem σ) l τ with
             | inl s => raiseUB s
-            | inr v => Ret (g0, g1, f, v)
+            | inr v => Ret v
             end;;
-            Tau (Ret (g, p, r.1, r.2))).
+            Tau (Ret (σ, r))).
   Proof.
     rewrite /interp_L2.
     setoid_rewrite interp_state_vis.
     setoid_rewrite interp_state_ret.
     setoid_rewrite bind_tau; cbn.
-    destruct σ as ((?&?)&(?&?)&?) eqn: H; cbn.
     rewrite bind_bind. apply eqit_Tau.
-    eapply eq_itree_clo_bind; first done.
-    intros; subst. destruct u2 as (?&?); eauto.
-    by setoid_rewrite bind_ret_l; cbn.
+    destruct (read (vmem σ) l τ) eqn: H.
+    (* Nothing read ; [raiseUB] *)
+    { etransitivity.
+      - eapply eq_itree_clo_bind with
+        (UU := fun x y => x = y /\ x.1 = vmem σ)
+        (k2 := fun v => Tau (SemNotations.Ret1 σ v.2)).
+        { eapply eq_itree_clo_bind with (UU := eq) (t2 := trigger (ThrowUB s));
+            done. }
+        intros [] [] (Heq & Hu1); cbn in *. inv Heq.
+        by rewrite update_mem_id bind_ret_l.
+      - setoid_rewrite bind_bind.
+        by eapply eq_itree_clo_bind with (UU := eq). }
+    { by rewrite !bind_ret_l update_mem_id. }
+    Unshelve. all: done.
   Qed.
 
   Lemma sim_bij_load_None l_t l_s C τ:
     C !! (l_t.1, l_s.1) = None ->
     l_t ↔h l_s -∗
     checkout C -∗
-    load τ (DVALUE_Addr l_t) ⪯ load τ (DVALUE_Addr l_s)
+    trigger (Load τ (DVALUE_Addr l_t)) ⪯
+    trigger (Load τ (DVALUE_Addr l_s))
     [{ (v_t, v_s), ∃ v_t v_s q,
         l_t.1 ↦{q}t [ v_t ] ∗ l_s.1 ↦{q}s [ v_s ] ∗
           lb_rel v_t v_s ∗ checkout (<[(l_t.1,l_s.1) := q%Qp]> C) }].
@@ -204,10 +215,7 @@ Section proof.
     cbn -[state_interp].
     rewrite !interp_L2_load.
 
-    destruct σ_t as ((?&?)&(?&?)&?) eqn: Ht; cbn.
-    destruct σ_s as ((?&?)&(?&?)&?) eqn: Hs; cbn.
-
-    destruct (read (g3, g4, f0) l_s τ) eqn : Hread.
+    destruct (read (vmem σ_s) l_s τ) eqn : Hread.
     (* UB case *)
     { iApply sim_coind_tau.
       rewrite bind_bind bind_vis.
@@ -269,7 +277,8 @@ Section proof.
     C !! (l_t.1, l_s.1) = None ->
     l_t ↔h l_s -∗
     checkout C -∗
-    load τ (DVALUE_Addr l_t) ⪯ load τ (DVALUE_Addr l_s)
+    trigger (Load τ (DVALUE_Addr l_t)) ⪯
+    trigger (Load τ (DVALUE_Addr l_s))
     [{ (v_t, v_s), uval_rel v_t v_s ∗ checkout C }].
   Proof.
     iIntros (Hsupp Hc) "#Hl HC".
@@ -281,10 +290,7 @@ Section proof.
     cbn -[state_interp].
     rewrite !interp_L2_load.
 
-    destruct σ_t as ((?&?)&(?&?)&?) eqn: Ht; cbn.
-    destruct σ_s as ((?&?)&(?&?)&?) eqn: Hs; cbn.
-
-    destruct (read (g3, g4, f0) l_s τ) eqn : Hread.
+    destruct (read (vmem σ_s) l_s τ) eqn : Hread.
     (* UB case *)
     { iApply sim_coind_tau.
       rewrite bind_bind bind_vis.
@@ -355,7 +361,8 @@ Section proof.
     C !! (l_t.1, l_s.1) = Some q ->
     l_t ↔h l_s -∗
     checkout C -∗
-    load τ (DVALUE_Addr l_t) ⪯ load τ (DVALUE_Addr l_s)
+    trigger (Load τ (DVALUE_Addr l_t)) ⪯
+    trigger (Load τ (DVALUE_Addr l_s))
     [{ (v_t, v_s), uval_rel v_t v_s ∗ checkout C }].
   Proof.
     iIntros (Hsupp Hq Hc) "#Hl HC".
@@ -367,17 +374,15 @@ Section proof.
 
     rewrite sim_expr_eq /sim_expr_. clear σ_t σ_s.
     iModIntro. iIntros (σ_t σ_s) "SI".
-    rewrite /interp_L2.
-    rewrite !interp_state_vis.
-    destruct_state σ_s; destruct_state σ_t.
-    cbn -[state_interp]. rewrite /add_tau.
-    cbn -[state_interp]. rewrite {2}/read.
-    destruct (get_logical_block (p, f) l_s.1)
+    rewrite !interp_L2_load.
+    rewrite {2}/read.
+    destruct (get_logical_block (vmem σ_s) l_s.1)
       eqn: Hread; rewrite Hread; cycle 1.
-    { cbn. rewrite !bind_tau !bind_bind !bind_vis.
+    { cbn. rewrite /raiseUB.
+      rewrite bind_bind ?bind_tau ?bind_bind !bind_vis.
       iApply sim_coind_tau. iApply sim_coind_ub. }
 
-    destruct l3; cbn -[state_interp].
+    destruct l; cbn -[state_interp].
     assert (Hql := Hq).
     rewrite Qp.lt_sum in Hq. destruct Hq.
 
@@ -402,9 +407,6 @@ Section proof.
     rewrite Ht. cbn.
 
     repeat rewrite !bind_ret_l.
-    rewrite !bind_tau. iApply sim_coind_tau.
-    rewrite !bind_ret_l. iApply sim_coind_tau.
-    rewrite !interp_state_ret.
 
     iDestruct "Hl" as "(Hbij & %H1)"; cbn in *; subst.
     iDestruct (heapbij_access with "Hinv Hbij") as "(%Hin & Halloc & Hclose)".
@@ -422,7 +424,9 @@ Section proof.
 
     iDestruct (ghost_var_update_halves with "HC HC'") as ">[HC HC']".
     iModIntro.
-    iApply sim_coind_base. iFrame.
+    do 2 iApply sim_coind_tau.
+    iApply sim_coind_base.
+    iFrame.
     iSplitR ""; cycle 1.
     { iExists _, _; do 2 (iSplitL ""; [ done | ]). cbn.
       rewrite /lb_rel.
@@ -462,21 +466,21 @@ Section proof.
     iPureIntro; set_solver.
   Qed.
 
+  (* TODO: Move *)
   Lemma interp_L2_store l v σ:
-    (⟦ store (DVALUE_Addr l) v ⟧ σ) ≅
-      let '(g, p, (g0, g1, f)) := σ in
-      Tau
-        (r <-
-        match write (g0, g1, f) l v with
-        | inl x => raise x
-        | inr x => Monad.ret x
-        end;; Tau (Ret (g, p, r, ()))).
+    (⟦ trigger (Store (DVALUE_Addr l) v) ⟧ σ) ≅
+    Tau
+      (r <-
+         match write (vmem σ) l v with
+          | inl x => raise x
+          | inr x => Monad.ret x
+          end;; Tau (SemNotations.Ret1 (vir.update_mem r σ) ())).
   Proof.
     rewrite /interp_L2.
     setoid_rewrite interp_state_vis.
     setoid_rewrite interp_state_ret.
     setoid_rewrite bind_tau; cbn.
-    destruct σ as ((?&?)&(?&?)&?) eqn: H; cbn.
+    destruct (vmem σ) eqn: H; cbn.
     rewrite !bind_bind.
     do 2 setoid_rewrite bind_ret_l; cbn.
     rewrite /lift_pure_err /lift_err.
@@ -491,7 +495,8 @@ Section proof.
     dval_rel v_t v_s -∗
     l_t ↔h l_s -∗
     checkout C -∗
-    store (DVALUE_Addr l_t) v_t ⪯ store (DVALUE_Addr l_s) v_s
+    trigger (Store (DVALUE_Addr l_t) v_t) ⪯
+    trigger (Store (DVALUE_Addr l_s) v_s)
     [{ (x_t, x_s), ∃ n_t m_t i_t n_s m_s i_s,
         l_t.1 ↦t [ LBlock n_t (add_all_index (serialize_dvalue v_t) l_t.2 m_t) i_t ] ∗
         l_s.1 ↦s [ LBlock n_s (add_all_index (serialize_dvalue v_s) l_s.2 m_s) i_s ] ∗
@@ -504,10 +509,7 @@ Section proof.
     cbn -[state_interp].
     rewrite !interp_L2_store.
 
-    destruct σ_t as ((?&?)&(?&?)&?) eqn: Ht; cbn.
-    destruct σ_s as ((?&?)&(?&?)&?) eqn: Hs; cbn.
-
-    destruct (write (g3, g4, f0) l_s v_s) eqn: Hwrite.
+    destruct (write (vmem σ_s) l_s v_s) eqn: Hwrite.
     (* ETC case *)
     { iApply sim_coind_tau.
       rewrite bind_bind bind_vis.
@@ -573,14 +575,17 @@ Section proof.
     { iExists _, _; do 2 (iSplitL ""; [ done | ]); iFrame.
       repeat iExists _; by iFrame. }
 
-    cbn; destruct p0, p; cbn.
+
+    destruct (vmem σ_s) as ((?&?)&?); cbn in *.
+    destruct (vmem σ_t) as ((?&?)&?); cbn in *.
     rewrite /write in Hwrite_u. cbn in Hwrite_u.
     setoid_rewrite Hs in Hwrite_u; inversion Hwrite_u; subst.
     rewrite /add_logical_block /add_logical_block_mem; cbn.
     repeat iExists _; iFrame.
 
     iSplitR "".
-    { iApply "Hclose"; try done.
+    {
+      iApply "Hclose"; try done.
       { iPureIntro. intros.
         rewrite lookup_insert_ne; auto. } }
     iPureIntro. set_solver.
@@ -595,7 +600,8 @@ Section proof.
     dval_rel v_t v_s -∗
     l_t ↔h l_s -∗
     checkout C -∗
-    store (DVALUE_Addr l_t) v_t ⪯ store (DVALUE_Addr l_s) v_s
+    trigger (Store (DVALUE_Addr l_t) v_t) ⪯
+    trigger (Store (DVALUE_Addr l_s) v_s)
     [{ (x_t, x_s), checkout C }].
   Proof.
     iIntros (Hsupp Htyp Hlen Hc) "#Hval #Hl HC".
@@ -605,10 +611,7 @@ Section proof.
     cbn -[state_interp].
     rewrite !interp_L2_store.
 
-    destruct σ_t as ((?&?)&(?&?)&?) eqn: Ht; cbn.
-    destruct σ_s as ((?&?)&(?&?)&?) eqn: Hs; cbn.
-
-    destruct (write (g3, g4, f0) l_s v_s) eqn: Hwrite.
+    destruct (write (vmem σ_s) l_s v_s) eqn: Hwrite.
     (* ETC case *)
     { iApply sim_coind_tau.
       rewrite bind_bind bind_vis.
@@ -680,7 +683,8 @@ Section proof.
     iSplitR ""; cycle 1.
     { cbn. iExists _, _; eauto. }
 
-    cbn; destruct p0, p; cbn.
+    destruct (vmem σ_s) as ((?&?)&?); cbn in *.
+    destruct (vmem σ_t) as ((?&?)&?); cbn in *.
     rewrite /write in Hwrite_u. cbn in Hwrite_u.
     setoid_rewrite Hs in Hwrite_u; inversion Hwrite_u; subst.
     rewrite /add_logical_block /add_logical_block_mem; cbn.
@@ -718,7 +722,8 @@ Section proof.
   Lemma stack_count_WF_src σ_t σ_s F:
     state_interp σ_t σ_s -∗
     stack_src F -∗
-    ⌜frame_count σ_s.2.2 = (length F) /\ length (vir_local_stack σ_s) = length (tail F)⌝.
+    ⌜frame_count (vmem σ_s).2 = (length F) /\
+      length (vlocal σ_s).2 = length (tail F)⌝.
   Proof.
     iIntros "SI Hs".
     iDestruct "SI" as (???) "(Hh_s & _)".
@@ -734,7 +739,8 @@ Section proof.
   Lemma stack_count_WF_tgt σ_t σ_s F:
     state_interp σ_t σ_s -∗
     stack_tgt F -∗
-    ⌜frame_count σ_t.2.2 = (length F) /\ length (vir_local_stack σ_t) = length (tail F)⌝.
+    ⌜frame_count (vmem σ_t).2 = (length F) /\
+      length (vlocal σ_t).2 = length (tail F)⌝.
   Proof.
     iIntros "SI Ht".
     iDestruct "SI" as (???) "(_ & Hh_t & _)".
@@ -753,8 +759,9 @@ Section proof.
     stack_src i_s -∗
     alloca_tgt i_t A_t -∗
     alloca_src i_s A_s -∗
-    state_interp (g_t, l_t, (h_t, mf_t))
-                 (g_s, l_s, (h_s, mf_s)) -∗
+    state_interp
+      {| vglobal := g_t; vlocal := l_t; vmem := (h_t, mf_t) |}
+      {| vglobal := g_s; vlocal := l_s; vmem := (h_s, mf_s) |} -∗
     ⌜list_to_set (peek_frame mf_t) = A_t /\
       list_to_set (peek_frame mf_s) = A_s⌝.
   Proof.
@@ -766,9 +773,10 @@ Section proof.
     done.
   Qed.
 
-  Lemma state_interp_free i_t i_s g_t g_s l_t l_s
-    (h_t h_s : heap * gset Z) f_t f_s C
-    (mf_t' mf_s' : list Z) (l_t0 l_s0 : Z):
+  Lemma state_interp_free i_t i_s (h_t h_s : heap * gset Z) f_t f_s C
+    (mf_t' mf_s' : list Z) (l_t0 l_s0 : Z) σ_t σ_s:
+    vmem σ_t = (h_t, Snoc f_t mf_t') ->
+    vmem σ_s = (h_s, Snoc f_s mf_s') ->
     l_t0 ∈ (list_to_set mf_t' : gset _) ->
     l_s0 ∈ (list_to_set mf_s' : gset _) ->
     is_Some (h_s.1 !! l_s0) ->
@@ -779,21 +787,23 @@ Section proof.
     stack_src i_s -∗
     alloca_tgt i_t (list_to_set mf_t') -∗
     alloca_src i_s (list_to_set mf_s') -∗
-    state_interp
-      (g_t, l_t, (h_t, Snoc f_t mf_t'))
-      (g_s, l_s, (h_s, Snoc f_s mf_s')) ==∗
+    state_interp σ_t σ_s ==∗
     checkout C ∗
     stack_tgt i_t ∗
     stack_src i_s ∗
     alloca_tgt i_t (list_to_set mf_t' ∖ {[ l_t0 ]}) ∗
     alloca_src i_s (list_to_set mf_s' ∖ {[ l_s0 ]}) ∗
     state_interp
-      (g_t, l_t,
-        ((delete l_t0 h_t.1, h_t.2), Snoc f_t (remove Z.eq_dec l_t0 mf_t')))
-      (g_s, l_s,
-        ((delete l_s0 h_s.1, h_s.2), Snoc f_s (remove Z.eq_dec l_s0 mf_s'))).
+      {| vglobal := vglobal σ_t;
+         vlocal  := vlocal σ_t;
+         vmem    :=
+          ((delete l_t0 h_t.1, h_t.2), Snoc f_t (remove Z.eq_dec l_t0 mf_t')) |}
+      {| vglobal := vglobal σ_s;
+         vlocal  := vlocal σ_s;
+         vmem    :=
+          ((delete l_s0 h_s.1, h_s.2), Snoc f_s (remove Z.eq_dec l_s0 mf_s')) |}.
   Proof.
-    iIntros (Hin_t Hin_s Hsome Hc)
+    iIntros (Hmem_t Hmem_s Hin_t Hin_s Hsome Hc)
       "#Hbij HC Hs_t Hs_s Ha_t Ha_s SI".
     iDestruct "SI" as (???) "(Hh_s & Hh_t & HC' & Hinv & %WF & SI)".
     iDestruct (ghost_var_agree with "HC HC'") as "%H". subst.
@@ -805,8 +815,9 @@ Section proof.
       (alloc_rel_free with "Hs_t Hs_s Ha_t Ha_s Halloc Hh_t Hh_s") as
       ">(Halloc & Hs_t & Hs_s & Ha_t & Ha_s & Hh_t & Hh_s)";
       eauto.
-    iFrame.
-    destruct l_s, l_t; cbn.
+    { rewrite Hmem_s; eauto. }
+    iFrame. rewrite Hmem_t Hmem_s; iFrame.
+    destruct (vlocal σ_s), (vlocal σ_t); cbn.
 
     repeat iExists _; iFrame.
     iSplitR "".
@@ -851,8 +862,13 @@ Section proof.
 
   Lemma state_interp_WF
       g_t l_t h_t f_t g_s l_s h_s f_s lenv_t lenv_s:
-    state_interp (g_t, (l_t, lenv_t), (h_t, f_t))
-                 (g_s, (l_s, lenv_s), (h_s, f_s)) -∗
+    state_interp
+      {| vglobal := g_t;
+         vlocal  := (l_t, lenv_t);
+         vmem    := (h_t, f_t) |}
+      {| vglobal := g_s;
+         vlocal  := (l_s, lenv_s);
+         vmem    := (h_s, f_s) |} -∗
     ⌜NoDup l_t.*1 /\ NoDup (flatten_frame_stack f_t) /\
       NoDup l_s.*1 /\ NoDup (flatten_frame_stack f_s) /\
       list_to_set (flatten_frame_stack f_t) = dom h_t.1 /\
@@ -893,19 +909,30 @@ Section proof.
     stack_src i_s -∗
     alloca_tgt i_t A_t -∗
     alloca_src i_s A_s -∗
-    state_interp (g_t, l_t, (h_t, Snoc f_t mf_t'))
-                 (g_s, l_s, (h_s, Snoc f_s mf_s')) ==∗
+    state_interp
+      {| vglobal := g_t;
+         vlocal  := l_t;
+         vmem    := (h_t, Snoc f_t mf_t') |}
+      {| vglobal := g_s;
+         vlocal  := l_s;
+         vmem    := (h_s, Snoc f_s mf_s') |} ==∗
     checkout C ∗
     stack_tgt i_t ∗
     stack_src i_s ∗
     alloca_tgt i_t (A_t ∖ list_to_set mf_t) ∗
     alloca_src i_s (A_s ∖ list_to_set mf_s) ∗
     state_interp
-      (g_t, l_t, (free_frame_memory mf_t h_t, Snoc f_t
-                  (free_locations_from_frame mf_t' mf_t)))
-      (g_s, l_s, (free_frame_memory mf_s h_s,
+      {| vglobal := g_t;
+         vlocal  := l_t;
+         vmem    :=
+          (free_frame_memory mf_t h_t, Snoc f_t
+                  (free_locations_from_frame mf_t' mf_t)) |}
+      {| vglobal := g_s;
+         vlocal  := l_s;
+         vmem    :=
+          (free_frame_memory mf_s h_s,
                    Snoc f_s
-                  (free_locations_from_frame mf_s' mf_s))).
+                  (free_locations_from_frame mf_s' mf_s)) |}.
   Proof.
     iIntros (Hlen_t Hlen_s Hf_t Hf_s Hnodup_t Hnodup_s) "HC #Hl Hs_t Hs_s Ha_t Ha_s SI".
     iDestruct (state_interp_alloca_agree with "Hs_t Hs_s Ha_t Ha_s SI") as %HA.
@@ -1008,16 +1035,27 @@ Section proof.
     stack_src i_s -∗
     alloca_tgt i_t A_t -∗
     alloca_src i_s A_s -∗
-    state_interp (g_t, l_t, (h_t, Snoc f_t mf_t'))
-                 (g_s, l_s, (h_s, Snoc f_s mf_s')) ==∗
+    state_interp
+      {| vglobal := g_t;
+         vlocal  := l_t;
+         vmem    := (h_t, Snoc f_t mf_t') |}
+      {| vglobal := g_s;
+         vlocal  := l_s;
+         vmem    := (h_s, Snoc f_s mf_s') |} ==∗
     checkout C ∗
     stack_tgt i_t ∗
     stack_src i_s ∗
     alloca_tgt i_t ∅ ∗
     alloca_src i_s ∅ ∗
     state_interp
-      (g_t, l_t, (free_frame_memory mf_t' h_t, Snoc f_t nil))
-      (g_s, l_s, (free_frame_memory mf_s' h_s, Snoc f_s nil)).
+      {| vglobal := g_t;
+         vlocal  := l_t;
+         vmem    :=
+          (free_frame_memory mf_t' h_t, Snoc f_t nil) |}
+      {| vglobal := g_s;
+         vlocal  := l_s;
+         vmem    :=
+          (free_frame_memory mf_s' h_s, Snoc f_s nil) |}.
   Proof.
     iIntros (Hlen_t Hlen_s Hf_t Hf_s Hnodup_t Hnodup_s) "HC #Hl Hs_t Hs_s Ha_t Ha_s SI".
     iPoseProof (state_interp_WF with "SI") as "%HWF".

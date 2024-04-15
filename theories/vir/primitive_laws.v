@@ -837,7 +837,9 @@ Section proof.
     destruct_HC "Hh_s".
     iDestruct (ghost_var_agree with "Hf HCF") as %Hf; subst.
     iDestruct (ghost_var_agree with "Hd HD") as %Hag_s; subst.
-    apply alist_find_dom_None' in He; rewrite He; cbn.
+    apply alist_find_dom_None' in He.
+    destruct (vlocal σ_s) in *; cbn.
+    rewrite He; cbn.
 
     rewrite sim_indF_unfold /sim_expr_inner.
     provide_case: SOURCE_EXC.
@@ -861,17 +863,17 @@ Section proof.
     rewrite sim_expr_unfold.
 
     iIntros "Hf_t Hf_s Ht Hs %σ_t %σ_s SI".
-    destruct σ_t as ((?&?)&(?&?)&?); destruct σ_s as ((?&?)&(?&?)&?).
     rewrite /interp_L2;
     provide_case: TAU_STEP.
     (iSplitL ""; [ iPureIntro | ]).
     { apply Eq.EqAxiom.bisimulation_is_eq. cbn; reflexivity. }
     (iSplitL ""; [ iPureIntro | ]).
     { apply Eq.EqAxiom.bisimulation_is_eq. cbn; reflexivity. }
-    destruct p, p0. cbn.
 
+    destruct (vlocal σ_t) eqn: Hlocal_t; destruct (vlocal σ_s) eqn: Hlocal_s.
     rewrite sim_coindF_unfold sim_indF_unfold /sim_expr_inner.
 
+    cbn.
     provide_case: TAU_STEP. cbn.
     iDestruct "SI" as (???) "(Hh_s&Hh_t&HC&Hbij&Hg)".
     rewrite sim_coindF_unfold sim_indF_unfold /sim_expr_inner.
@@ -881,9 +883,9 @@ Section proof.
     provide_case:BASE.
 
     rewrite /lift_expr_rel; cbn; iFrame.
-    iSplitR "".
-    { repeat iExists _; iFrame. }
-    repeat iExists _; by iFrame.
+    iSplitR ""; cycle 1.
+    { repeat iExists _; done. }
+    iExists C, S, G; iFrame. rewrite Hlocal_t Hlocal_s; iFrame.
   Qed.
 
   Lemma target_local_write_alloc
@@ -902,12 +904,11 @@ Section proof.
     iLeft.
     iIntros (σ_t σ_s) "SI".
 
-    destruct σ_t as ((?&?)&(?&?)&?).
-    destruct p.
     iDestruct "SI" as (???) "(Hh_s & Hh_t & H_c & Hbij & SI)".
+    destruct (vlocal σ_t) eqn: Hlocal_t.
 
     iExists _,
-      (g, (FMapAList.alist_add AstLib.eq_dec_raw_id x v l, l0), (g0, f), ()),
+      (update_local (FMapAList.alist_add AstLib.eq_dec_raw_id x v l, l0) σ_t),
       (fun x => Tau (Ret tt)),_.
 
     iSplitL "".
@@ -915,6 +916,7 @@ Section proof.
       cbn.
       rewrite
         /resum /ReSum_inr /cat /Cat_IFun /inr_ /Inr_sum1 /add_tau /case_; cbn.
+      rewrite Hlocal_t.
       rewrite bind_bind. rewrite !bind_ret_l.
       iPureIntro.
       setoid_rewrite interp_state_ret. rewrite !bind_tau.
@@ -953,12 +955,11 @@ Section proof.
     iLeft.
     iIntros (σ_t σ_s) "SI".
 
-    destruct σ_s as ((?&?)&(?&?)&?).
-    destruct p.
     iDestruct "SI" as (???) "(Hh_s & Hh_t & H_c & Hbij & SI)".
+    destruct (vlocal σ_s) eqn: Hlocal_s.
 
     iExists _,
-      (g, (FMapAList.alist_add AstLib.eq_dec_raw_id x v l, l0), (g0, f), ()),
+      (update_local (FMapAList.alist_add AstLib.eq_dec_raw_id x v l, l0) σ_s),
       (fun x => Tau (Ret tt)),_.
 
     iSplitL "".
@@ -966,6 +967,7 @@ Section proof.
       cbn.
       rewrite
         /resum /ReSum_inr /cat /Cat_IFun /inr_ /Inr_sum1 /add_tau /case_; cbn.
+      rewrite Hlocal_s.
       rewrite bind_bind. rewrite !bind_ret_l.
       iPureIntro.
       setoid_rewrite interp_state_ret. rewrite !bind_tau.
@@ -1002,16 +1004,10 @@ Section proof.
     rewrite sim_expr_unfold.
 
     iIntros (Ht Hs) "Ht Hs Hf_t Hf_s %σ_t %σ_s SI".
-    destruct σ_t as ((?&?)&(?&?)&?); destruct σ_s as ((?&?)&(?&?)&?).
-
-    destruct p, p0.
+    cbn. destruct (vlocal σ_t), (vlocal σ_s).
 
     rewrite /interp_L2;
     provide_case: TAU_STEP.
-    (iSplitL ""; [ iPureIntro | ]).
-    { apply Eq.EqAxiom.bisimulation_is_eq. cbn; reflexivity. }
-    (iSplitL ""; [ iPureIntro | ]).
-    { apply Eq.EqAxiom.bisimulation_is_eq. cbn; reflexivity. }
 
     rewrite sim_coindF_unfold sim_indF_unfold /sim_expr_inner.
 
@@ -1047,15 +1043,13 @@ Section proof.
   Proof.
     setoid_rewrite target_red_unfold at 2.
     iIntros "Hx Hd Hf Hl".
-    iLeft.
-    iIntros (σ_t σ_s) "SI".
+    iLeft; iIntros (σ_t σ_s) "SI".
 
-    destruct σ_t as ((?&?)&(?&?)&?).
-    destruct p.
     iDestruct "SI" as (???) "(Hh_s & Hh_t & H_c & Hbij & SI)".
+    destruct (vlocal σ_t) eqn: Hlocal_t.
 
     iExists _,
-      (g, (FMapAList.alist_add AstLib.eq_dec_raw_id x v l, l0), (g0, f), ()),
+      (update_local (FMapAList.alist_add AstLib.eq_dec_raw_id x v l, l0) σ_t),
       (fun x => Tau (Ret tt)),_.
 
     iSplitL "".
@@ -1063,6 +1057,7 @@ Section proof.
       cbn.
       rewrite
         /resum /ReSum_inr /cat /Cat_IFun /inr_ /Inr_sum1 /add_tau /case_; cbn.
+      rewrite Hlocal_t.
       rewrite bind_bind. rewrite !bind_ret_l.
       iPureIntro.
       setoid_rewrite interp_state_ret. rewrite !bind_tau.
@@ -1099,12 +1094,11 @@ Section proof.
     iLeft.
     iIntros (σ_t σ_s) "SI".
 
-    destruct σ_s as ((?&?)&(?&?)&?).
-    destruct p.
     iDestruct "SI" as (???) "(Hh_s & Hh_t & H_c & Hbij & SI)".
+    destruct (vlocal σ_s) eqn: Hlocal_s.
 
     iExists _,
-      (g, (FMapAList.alist_add AstLib.eq_dec_raw_id x v l, l0), (g0, f), ()),
+      (update_local (FMapAList.alist_add AstLib.eq_dec_raw_id x v l, l0) σ_s),
       (fun x => Tau (Ret tt)),_.
 
     iSplitL "".
@@ -1112,6 +1106,7 @@ Section proof.
       cbn.
       rewrite
         /resum /ReSum_inr /cat /Cat_IFun /inr_ /Inr_sum1 /add_tau /case_; cbn.
+      rewrite Hlocal_s.
       rewrite bind_bind. rewrite !bind_ret_l.
       iPureIntro.
       setoid_rewrite interp_state_ret. rewrite !bind_tau.

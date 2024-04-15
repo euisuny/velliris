@@ -15,19 +15,20 @@ Import LLVMEvents.
 
 Section local_properties.
 
-  Context {Σ : gFunctors} `{!sheapGS Σ, !checkedoutGS Σ, !heapbijGS Σ}.
+  Context {Σ : gFunctors} `{!vellirisGS Σ}.
 
+  (* TODO: Move *)
   (* Difference between this and [free_frame]? *)
   Definition remove_frame
     : language.state vir_lang -> Z -> language.state vir_lang :=
-    fun '(p, (m, f)) x => (p, (delete x m.1, m.2, delete_from_frame_stack f x)).
+    (fun σ x =>
+       apply_mem
+         (fun '(m, f) => (delete x m.1, m.2, delete_from_frame_stack f x)) σ).
 
-  Definition update_memory (f: memory_stack -> memory_stack)
-    : vir_state -> vir_state :=
-    fun '(g, l, m) => (g, l, f m).
-
-  Definition update_frame (f: frame_stack -> frame_stack) L : vir_state -> vir_state :=
-    fun '(g, (l, ls), (m, s)) => (g, (L, l::ls), (m, f s)).
+  (* TODO ? *)
+  Definition add_frame (f: frame_stack -> frame_stack) L : vir_state -> vir_state :=
+    fun σ =>
+      apply_local (fun '(l, ls) => (L, l::ls)) (apply_mem (fun '(m, s) => (m, f s)) σ).
 
   Lemma alloca_remove_tgt:
     ∀ σ_t σ_s C x v i n,
@@ -45,8 +46,8 @@ Section local_properties.
     iDestruct "SI" as (???) "(Hh_s & Hh_t & H_c & Hbij & SI)".
     iCombine "Hh_t Hx Ha Hf Hbs" as "HA".
     iDestruct (heap_free with "HA") as ">(Hh_t & Ha & Hcf)"; eauto; iFrame.
-    iModIntro; repeat iExists _; iFrame.
-    destruct σ_t, p0; cbn -[delete]. iFrame.
+    iModIntro; repeat iExists _; iFrame. cbn.
+    destruct (vmem σ_t); iFrame.
   Qed.
 
   Lemma alloca_remove_src:
@@ -66,24 +67,23 @@ Section local_properties.
     iCombine "Hh_s Hx Ha Hf Hbs" as "HA".
     iDestruct (heap_free with "HA") as ">(Hh_s & Ha & Hcf)"; eauto; iFrame.
     iModIntro; repeat iExists _; iFrame.
-    destruct σ_s as ((?&?)&(?&?)&?); cbn -[delete].
-    iFrame.
+    cbn ;destruct (vmem σ_s); iFrame.
   Qed.
 
-  Definition vir_free_frame (σ: vir_state) (m : memory_stack): vir_state :=
-    (σ.1.1, (List.hd σ.1.2.1 σ.1.2.2, List.tl σ.1.2.2), m).
+  Definition vir_free_frame m : vir_state -> vir_state :=
+    fun σ => update_mem m (apply_local (fun '(l, ls) => (List.hd l ls, List.tl ls)) σ).
 
   Lemma alloca_free_frame_source:
     forall (σ_t σ_s : vir_state) A i m' (FA : gmap loc val),
     1 < length i ->
-    free_frame σ_s.2 = inr m' ->
+    free_frame (vmem σ_s) = inr m' ->
     state_interp σ_t σ_s
       ∗ alloca_src i A ∗
         ⌜dom FA ≡ A⌝
       ∗ ([∗ map] l ↦ v ∈ FA,
           l ↦s [ v ] ∗ source_block_size l (Some (logical_block_size v)))
       ∗ stack_src i ==∗
-    state_interp σ_t (vir_free_frame σ_s m')
+    state_interp σ_t (vir_free_frame m' σ_s)
       ∗ stack_src (tl i).
   Proof.
     iIntros (?????? Hlen Hfree) "(SI & HA & Hd & Hp & HS)".
@@ -91,25 +91,29 @@ Section local_properties.
       "(Hh_s & Hh_t & H_c & Hbij & Hg)".
 
     iCombine "HS Hh_s HA Hd Hp" as "H".
-    destruct m'. destruct σ_s, m, p, p; cbn in Hfree; destruct p0.
+    destruct m'. cbn.
+    destruct (vmem σ_s).
     cbn -[state_interp].
     iDestruct
       (vir_state.free_frame _ _ _ _ _ _ _ _ _ _ _ Hlen Hfree with "H") as
       ">(Hh & H)".
-    iFrame. cbn. iExists C, S, G; by iFrame.
+    iFrame. cbn.
+    cbn in Hfree. destruct f0; inv Hfree.
+    destruct (vlocal σ_s); cbn; destruct p; cbn;
+    iExists C, S, G; by iFrame.
   Qed.
 
   Lemma alloca_free_frame_target:
     forall (σ_t σ_s : vir_state) A i m' (FA : gmap loc val),
     1 < length i ->
-    free_frame σ_t.2 = inr m' ->
+    free_frame (vmem σ_t) = inr m' ->
     state_interp σ_t σ_s
       ∗ alloca_tgt i A ∗
         ⌜dom FA ≡ A⌝
       ∗ ([∗ map] l ↦ v ∈ FA,
           l ↦t [ v ] ∗ target_block_size l (Some (logical_block_size v)))
       ∗ stack_tgt i ==∗
-    state_interp (vir_free_frame σ_t m') σ_s
+    state_interp (vir_free_frame m' σ_t) σ_s
       ∗ stack_tgt (tl i).
   Proof.
     iIntros (?????? Hlen Hfree) "(SI & HA & Hd & Hp & HS)".
@@ -117,19 +121,23 @@ Section local_properties.
       "(Hh_s & Hh_t & H_c & Hbij & Hg)".
 
     iCombine "HS Hh_t HA Hd Hp" as "H".
-    destruct m'. destruct σ_t, m, p, p; cbn in Hfree; destruct p0.
+    destruct m'. cbn.
+    destruct (vmem σ_t).
+    cbn -[state_interp].
     iDestruct
       (vir_state.free_frame _ _ _ _ _ _ _ _ _ _ _ Hlen Hfree with "H") as
       ">(Hh_t & H)".
-    iFrame. repeat iExists _; by iFrame.
+    iFrame. destruct f0; inv Hfree.
+    destruct (vlocal σ_t); cbn; destruct p; cbn;
+      repeat iExists _; by iFrame.
   Qed.
 
   Lemma alloca_free_frame
     (σ_t σ_s : vir_state) C_t C_s i_t i_s m_t' m_s' (FA_t FA_s : gmap loc val):
     1 < length i_t ->
     1 < length i_s ->
-    free_frame σ_t.2 = inr m_t' ->
-    free_frame σ_s.2 = inr m_s' ->
+    free_frame (vmem σ_t) = inr m_t' ->
+    free_frame (vmem σ_s) = inr m_s' ->
     state_interp σ_t σ_s
       ∗ alloca_tgt i_t C_t
       ∗ alloca_src i_s C_s
@@ -141,7 +149,7 @@ Section local_properties.
           l ↦s [ v ] ∗ source_block_size l (Some (logical_block_size v)))
       ∗ stack_tgt i_t
       ∗ stack_src i_s ==∗
-    state_interp (vir_free_frame σ_t m_t') (vir_free_frame σ_s m_s')
+    state_interp (vir_free_frame m_t' σ_t) (vir_free_frame m_s' σ_s)
       ∗ stack_tgt (tl i_t)
       ∗ stack_src (tl i_s).
   Proof.
@@ -156,23 +164,23 @@ Section local_properties.
     by iFrame.
   Qed.
 
-  Lemma frames_add_to_frame_stack g p l v m f:
-    frames (g, p, add_to_frame (add_logical_block l v (m, f)) l) = add_to_frame_stack f l.
+  Lemma frames_add_to_frame_stack l v m f:
+    frames (add_to_frame (add_logical_block l v (m, f)) l) = add_to_frame_stack f l.
   Proof.
     rewrite /frames /add_to_frame /add_to_frame_stack; cbn.
     destruct f; eauto.
   Qed.
 
   Lemma alloca_push_target:
-    ∀ σ_t σ_s C i l v,
-      (⊙ σ_t.2) !! l = None ->
-      l ∉ vir_dyn σ_t.2 ->
+    ∀ (σ_t σ_s : vir_state) C i l v,
+      (⊙ vmem σ_t) !! l = None ->
+      l ∉ vir_dyn (vmem σ_t) ->
       state_interp σ_t σ_s
         ∗ alloca_tgt i C
         ∗ stack_tgt i ==∗
       state_interp
-        (update_memory
-          (fun m => add_to_frame (add_logical_block l v m) l) σ_t)
+        (apply_mem
+          (fun m => add_to_frame (add_logical_block l v (vmem σ_t)) l) σ_t)
         σ_s
       ∗ l ↦t [ v ]
       ∗ alloca_tgt i ({[ l ]} ∪ C)
@@ -185,25 +193,22 @@ Section local_properties.
     iCombine "Hh_t HA" as "H".
     iDestruct (allocaS_push with "H") as ">(H_t & Hl & HA & Hs & Hbs)";
       eauto.
-    iFrame; repeat iExists _; iFrame.
-    destruct σ_t as ((?&?)&(?&?)&?);
-      destruct p; cbn -[add_logical_block]; iFrame.
-    rewrite -vir_heap_insert. rewrite frames_add_to_frame_stack; auto.
-    rewrite /vir_dyn; cbn.
+    iFrame; repeat iExists _; iFrame; cbn.
+    destruct (vmem σ_t), (vlocal σ_t). rewrite !frames_add_to_frame_stack; auto; cbn.
     destruct f; eauto.
   Qed.
 
   Lemma alloca_push_source:
     ∀ σ_t σ_s C i l v,
-      (⊙ σ_s.2) !! l = None ->
-      l ∉ vir_dyn σ_s.2 ->
+      (⊙ vmem σ_s) !! l = None ->
+      l ∉ vir_dyn (vmem σ_s) ->
       state_interp σ_t σ_s
         ∗ alloca_src i C
         ∗ stack_src i
       ==∗
       state_interp
         σ_t
-        (update_memory
+        (apply_mem
           (fun m => add_to_frame (add_logical_block l v m) l) σ_s)
       ∗ l ↦s [ v ]
       ∗ alloca_src i ({[ l ]} ∪ C)
@@ -216,28 +221,27 @@ Section local_properties.
     iCombine "Hh_s HA" as "H".
     iDestruct (allocaS_push with "H") as ">(H_s & Hl & HA & Hs & Hbs)";
       eauto.
-    iFrame; repeat iExists _; iFrame.
-    destruct σ_s as (?&?&?); destruct p; cbn -[add_logical_block]; iFrame.
-    rewrite -vir_heap_insert. rewrite frames_add_to_frame_stack; auto.
+    iFrame; repeat iExists _; iFrame; cbn.
+    destruct (vmem σ_s), (vlocal σ_s); rewrite !frames_add_to_frame_stack; auto; cbn.
     rewrite /vir_dyn; cbn.
     destruct f; eauto.
   Qed.
 
   Lemma allocaS_push:
     ∀ σ_t σ_s C_t C_s i l_t l_s v_t v_s,
-      (⊙ σ_t.2) !! l_t = None ->
-      (⊙ σ_s.2) !! l_s = None ->
-      l_t ∉ vir_dyn σ_t.2 ->
-      l_s ∉ vir_dyn σ_s.2 ->
+      (⊙ vmem σ_t) !! l_t = None ->
+      (⊙ vmem σ_s) !! l_s = None ->
+      l_t ∉ vir_dyn (vmem σ_t) ->
+      l_s ∉ vir_dyn (vmem σ_s) ->
       state_interp σ_t σ_s
         ∗ alloca_tgt i C_t
         ∗ alloca_src i C_s
         ∗ stack_tgt i
         ∗ stack_src i ==∗
       state_interp
-        (update_memory
+        (apply_mem
           (fun m => add_to_frame (add_logical_block l_t v_t m) l_t) σ_t)
-        (update_memory
+        (apply_mem
           (fun m => add_to_frame (add_logical_block l_s v_s m) l_s) σ_s)
       ∗ l_t ↦t [ v_t ]
       ∗ l_s ↦s [ v_s ]
@@ -260,7 +264,7 @@ Section local_properties.
     1 < length F ->
     stack_tgt F -∗
     state_interp σ_t σ_s -∗
-    ∃ m', ⌜free_frame σ_t.2 = inr m'⌝.
+    ∃ m', ⌜free_frame (vmem σ_t) = inr m'⌝.
   Proof.
     iIntros (Hsize) "Hf SI".
 
@@ -271,7 +275,7 @@ Section local_properties.
     destruct H. iPureIntro.
 
     rewrite /free_frame in H. rewrite /frames in H.
-    destruct σ_t as (?&?&?); cbn in *.
+    destruct (vmem σ_t).
     destruct f; inversion H; subst. eexists _; done.
   Qed.
 
@@ -279,7 +283,7 @@ Section local_properties.
     1 < length F ->
     stack_src F -∗
     state_interp σ_t σ_s -∗
-    ∃ m', ⌜free_frame σ_s.2 = inr m'⌝.
+    ∃ m', ⌜free_frame (vmem σ_s) = inr m'⌝.
   Proof.
     iIntros (Hsize) "Hf SI".
 
@@ -290,7 +294,7 @@ Section local_properties.
     destruct H. iPureIntro.
 
     rewrite /free_frame in H. rewrite /frames in H.
-    destruct σ_s as (?&?&?); cbn in *.
+    destruct (vmem σ_s).
     destruct f; inversion H; subst. eexists _; done.
   Qed.
 
@@ -485,16 +489,23 @@ Section local_properties.
     stack_src i_s -∗
     alloca_tgt i_t A_t -∗
     alloca_src i_s A_s -∗
-    state_interp (g_t, l_t, (h_t, Snoc f_t mf_t'))
-                 (g_s, l_s, (h_s, Snoc f_s mf_s')) ==∗
+    state_interp
+      {| vglobal := g_t;
+         vlocal := l_t;
+         vmem := (h_t, Snoc f_t mf_t') |}
+      {| vglobal := g_s;
+         vlocal := l_s;
+         vmem := (h_s, Snoc f_s mf_s') |} ==∗
     checkout C ∗
     stack_tgt (tail i_t) ∗
     stack_src (tail i_s) ∗
     state_interp
-      (g_t, (hd l_t.1 l_t.2, tail l_t.2),
-        (free_frame_memory mf_t' h_t, f_t))
-      (g_s, (hd l_s.1 l_s.2, tail l_s.2),
-        (free_frame_memory mf_s' h_s, f_s)).
+      {| vglobal := g_t;
+         vlocal := (hd l_t.1 l_t.2, tail l_t.2);
+         vmem := (free_frame_memory mf_t' h_t, f_t) |}
+      {| vglobal := g_s;
+         vlocal := (hd l_s.1 l_s.2, tail l_s.2);
+         vmem := (free_frame_memory mf_s' h_s, f_s) |}.
   Proof.
     iIntros (Hlen_t Hlen_s Hf_t Hf_s Hnodup_t Hnodup_s)
       "HC #Hl Ht Hs Hs_t Hs_s Ha_t Ha_s SI".
@@ -537,13 +548,16 @@ Section local_properties.
     { destruct WF as (?&?&?&Hsf&?).
         apply NoDup_app in Hsf; destruct Hsf; auto. }
 
-    rewrite !difference_distr_free_frame; eauto; by iFrame.
+    rewrite !difference_distr_free_frame; eauto. cbn.
+      destruct l_s, l_t; cbn. by iFrame.
   Qed.
 
   Lemma frame_stack_and_mem_pop (mf_t mf_s : mem_frame) A_t A_s mf_t' mf_s'
-    i_t i_s g_t g_s l_t l_s h_t h_s f_t f_s C:
+    i_t i_s h_t h_s f_t f_s C σ_t σ_s:
     1 < length i_t ->
     1 < length i_s ->
+    vmem σ_t = (h_t, Snoc f_t mf_t') ->
+    vmem σ_s = (h_s, Snoc f_s mf_s') ->
     list_to_set mf_t = A_t ->
     list_to_set mf_s = A_s ->
     NoDup mf_t ->
@@ -555,24 +569,29 @@ Section local_properties.
     stack_src i_s -∗
     alloca_tgt i_t A_t -∗
     alloca_src i_s A_s -∗
-    state_interp (g_t, l_t, (h_t, Snoc f_t mf_t'))
-                 (g_s, l_s, (h_s, Snoc f_s mf_s')) ==∗
+    state_interp σ_t σ_s ==∗
     checkout C ∗
     stack_tgt (tail i_t) ∗
     stack_src (tail i_s) ∗
     state_interp
-      (g_t, (hd l_t.1 l_t.2, tail l_t.2), (free_frame_memory mf_t h_t, f_t))
-      (g_s, (hd l_s.1 l_s.2, tail l_s.2), (free_frame_memory mf_s h_s, f_s)).
+      {| vglobal := vglobal σ_t;
+         vlocal := (hd (vlocal σ_t).1 (vlocal σ_t).2, tail (vlocal σ_t).2);
+         vmem := (free_frame_memory mf_t h_t, f_t) |}
+      {| vglobal := vglobal σ_s;
+         vlocal := (hd (vlocal σ_s).1 (vlocal σ_s).2, tail (vlocal σ_s).2);
+         vmem := (free_frame_memory mf_s h_s, f_s) |}.
   Proof.
-    iIntros (Hlen_t Hlen_s Hf_t Hf_s Hnodup_t Hnodup_s) "HC #Hl Hs_t Hs_s Ha_t Ha_s SI".
+    iIntros (Hlen_t Hlen_s Hmem_t Hmem_s Hf_t Hf_s Hnodup_t Hnodup_s)
+      "HC #Hl Hs_t Hs_s Ha_t Ha_s SI".
     iDestruct (state_interp_alloca_agree with "Hs_t Hs_s Ha_t Ha_s SI") as %HA.
     destruct HA as (HA_t&HA_s); cbn in HA_t, HA_s.
     rewrite /free_frame_memory.
 
-    iInduction mf_s as [ | ] "IH" forall (mf_t mf_t' mf_s' f_t f_s h_t h_s A_s A_t HA_t HA_s Hf_s
-                                       Hf_t Hnodup_t);
+    iInduction mf_s as [ | ] "IH" forall
+      (σ_t σ_s mf_t mf_t' mf_s' f_t f_s h_t h_s A_s A_t HA_t HA_s Hf_s Hf_t Hnodup_t
+      Hmem_t Hmem_s);
                                     cbn -[state_interp] in *.
-    { destruct mf_s'; [ | set_solver].
+    { rewrite Hmem_t Hmem_s in HA_t HA_s.
       iDestruct (big_sepL2_nil_inv_r with "Hl") as %Hl; subst.
       cbn.
 
@@ -580,8 +599,9 @@ Section local_properties.
       destruct mf_t'; last set_solver.
 
       iDestruct (ghost_var_agree with "HC H_c") as "%HC". subst.
-      destruct l_s, l_t.
+      cbn in *.
       iCombine "Hs_t Hh_t Ha_t" as "Hs_t".
+      destruct mf_s'; [ | set_solver ]. rewrite Hmem_t Hmem_s; cbn.
       iPoseProof (free_frame_empty1 with "Hs_t") as
         ">(Hh_t & Hs_t & Ha_t)"; eauto.
       iFrame.
@@ -598,6 +618,8 @@ Section local_properties.
 
     { iDestruct (big_sepL2_cons_inv_r with "Hl") as (???) "(Hla & Hl_tl)";
         iClear "Hl"; subst; cbn -[state_interp].
+      rewrite Hmem_t Hmem_s; cbn -[state_interp].
+      rewrite Hmem_t in Hf_t; rewrite Hmem_s in Hf_s.
       assert (Ha: a ∈ (list_to_set mf_s' : gset _)).
       { set_solver. }
       assert (Hf_s': list_to_set mf_s' = {[a]} ∪ (list_to_set mf_s' ∖ {[ a ]}: gset _)).
@@ -615,6 +637,7 @@ Section local_properties.
       apply NoDup_cons in Hnodup_t, Hnodup_s.
       destruct Hnodup_t as (Hnx1 & Hnodup_l1').
       destruct Hnodup_s as (Ha_fs & Hnd_fs).
+      rewrite Hmem_t Hmem_s in Hdt, Hds, Hnd_s', Hnd_t'. cbn in *.
       apply NoDup_app in Hnd_s'; destruct Hnd_s' as (Hnd_s' & _).
       apply NoDup_app in Hnd_t'; destruct Hnd_t' as (Hnd_t' & _).
 
@@ -624,7 +647,7 @@ Section local_properties.
       rewrite Heq.
 
       symmetry in Heq.
-      iSpecialize ("IH" $! Hnd_fs _ _ _ _ _ _ _ _ _ _ _ Heq _ Hnodup_l1'
+      iSpecialize ("IH" $! Hnd_fs _ _ _ _ _ _ _ _ _ _ _ _ _  Heq _ Hnodup_l1' _ _
                     with "Hl_tl").
 
       assert (Ha_free: list_to_set (a :: delete_from_frame mf_s' a) =
@@ -646,15 +669,22 @@ Section local_properties.
       assert (list_to_set mf_s' ∖ {[a]} = (list_to_set mf_s : gset _)).
       { set_solver. }
       rewrite H; clear H.
-      Unshelve.
-      8-10: try set_solver.
-     2 : exact (remove Z.eq_dec x1 mf_t').
-      6 : by apply list_to_set_remove.
-      2-5: shelve.
 
-      iSpecialize ("IH" with "Ha_s SI").
+      iSpecialize ("IH" with "Ha_s SI"); cbn.
       iMod "IH".
-      iDestruct "IH" as "(HC & SI)"; iFrame. by cbn -[state_interp]. }
+      iDestruct "IH" as "(HC & Hs_t & Hs_s & SI)".
+      iFrame "HC Hs_t Hs_s".
+      Unshelve. (* TODO Cleanup *)
+      2 : exact (remove Z.eq_dec x1 mf_t').
+      2 : exact (remove Z.eq_dec a mf_s').
+      2 : exact f_t.
+      2 : exact f_s.
+      2 : exact (delete x1 h_t.1, h_t.2).
+      2 : exact (delete a h_s.1, h_s.2).
+      all : eauto.
+      2 : set_solver.
+      cbn.
+      by apply list_to_set_remove. }
   Qed.
 
   Open Scope nat_scope.
@@ -673,12 +703,21 @@ Section local_properties.
     stack_src i_s -∗
     alloca_tgt i_t A_t -∗
     alloca_src i_s A_s -∗
-    state_interp (g_t, l_t, (h_t, Snoc f_t mf_t'))
-                 (g_s, l_s, (h_s, Snoc f_s mf_s')) ==∗
+    state_interp
+      {| vglobal := g_t;
+         vlocal := l_t;
+         vmem := (h_t, Snoc f_t mf_t') |}
+      {| vglobal := g_s;
+         vlocal := l_s;
+         vmem := (h_s, Snoc f_s mf_s') |} ==∗
     checkout C ∗
     state_interp
-      (g_t, l_t, (free_frame_memory mf_t h_t, Snoc f_t nil))
-      (g_s, l_s, (free_frame_memory mf_s h_s, Snoc f_s nil)).
+      {| vglobal := g_t;
+         vlocal := l_t;
+         vmem := (free_frame_memory mf_t h_t, Snoc f_t nil) |}
+      {| vglobal := g_s;
+         vlocal := l_s;
+         vmem := (free_frame_memory mf_s h_s, Snoc f_s nil) |}.
   Proof.
     iIntros (Hlen_t Hlen_s Hf_t Hf_s Hnodup_t Hnodup_s) "HC #Hl Hs_t Hs_s Ha_t Ha_s SI".
     iDestruct (state_interp_alloca_agree with "Hs_t Hs_s Ha_t Ha_s SI") as %HA.
@@ -848,8 +887,6 @@ Section local_properties.
     rewrite sim_expr_eq /sim_expr_.
 
     iIntros (σ_t σ_s) "SI".
-    destruct σ_t as ((?&?)&(?&?)&?).
-    destruct σ_s as ((?&?)&(?&?)&?). destruct p, p0.
     iDestruct (state_interp_WF with "SI") as %Hwf.
 
     iDestruct (stack_count_WF_src with "SI HF_s") as "%Hwf_s".
@@ -872,7 +909,8 @@ Section local_properties.
       reflexivity. }
     iApply sim_coind_tau.
 
-    destruct l2 eqn: Hl2_s.
+    destruct (vlocal σ_s) eqn: Hleq_s. cbn -[state_interp].
+    destruct l0 eqn: Hl2_s.
     { iApply sim_coind_Proper; [ reflexivity | .. ].
       { do 2 setoid_rewrite bind_vis.
         reflexivity. }
@@ -884,21 +922,29 @@ Section local_properties.
     destruct l0.
     { cbn in *.
       destruct i_s; cbn in *; try lia.
-      subst.
-      destruct i_t; cbn in *; try lia. }
+      subst. inv Hl2_s. }
+
+    inv Hl2_s. cbn -[state_interp] in *.
+
+    specialize (Hlen Hsize_s).
+    destruct (vlocal σ_t) eqn: Hleq_t; cbn -[state_interp].
+
+    destruct l3.
+    { cbn in *; destruct i_t; cbn in *; try lia. }
 
     rewrite !bind_ret_l; iApply sim_coind_tau.
-    specialize (Hlen Hsize_s).
-     (* MemPop *)
+    (* MemPop *)
+    destruct (vmem σ_t) eqn: Hmσ_t; destruct (vmem σ_s) eqn: Hmσ_s.
+    cbn -[state_interp] in *.
     destruct f.
     { cbn in Hwf_t. lia. }
     destruct f0.
     { cbn in Hwf_s. lia. }
 
     iPoseProof (frame_stack_and_mem_pop
-                  _ _ _ _ _ _ i_t i_s _ _ _ _ _ _ _ _ _
-                               (ltac:(lia)) (ltac:(lia))
-                               Hs_t Hs_s Hnd_t Hnd_s
+                  _ _ _ _ _ _ i_t i_s _ _ _ _ _ _ _
+                               (ltac:(lia)) (ltac:(lia)) _ _ _ _ Hnd_t Hnd_s
+                               (* Hs_t Hs_s Hnd_t Hnd_s *)
                                with "HC Hbij HF_t HF_s HA_t HA_s") as "Ha".
     iDestruct ("Ha" with "SI") as ">(CI & Hst & Hss & SI)".
 
@@ -906,19 +952,29 @@ Section local_properties.
     rewrite !interp_state_tau.
     iApply sim_coind_tau.
     rewrite !interp_state_vis !bind_tau !bind_bind.
+    cbn -[state_interp]. rewrite /free_frame. rewrite Hmσ_t Hmσ_s;
+      cbn -[state_interp].
     rewrite !bind_ret_l.
     do 2 iApply sim_coind_tau.
     rewrite !interp_state_ret.
 
     iApply sim_coind_base.
     cbn -[state_interp].
-    iFrame. cbn in H, H0.
-    rewrite -H in Hs_t; rewrite -H0 in Hs_s.
-    cbn in Hwf. destruct Hwf as (?&?&?&?&?).
-    apply NoDup_app in H2, H4; destruct H2, H4.
-
-    rewrite (free_frame_memory_proper f1 mf_t); eauto.
-    rewrite (free_frame_memory_proper f2 mf_s); eauto.
+    iSplitL "SI".
+    { iModIntro. Unshelve.
+      2 : exact f1.
+      2 : exact f2.
+      2 : exact p.
+      2 : exact p0.
+      2: exact f.
+      2: exact f0.
+      all : eauto.
+      rewrite Hleq_s Hleq_t.
+      cbn in Hwf. destruct Hwf as (?&?&?&?&?).
+      apply NoDup_app in H2, H4. destruct H2, H4.
+      rewrite (free_frame_memory_proper f1 mf_t); eauto.
+      rewrite (free_frame_memory_proper f2 mf_s); eauto. }
+    iFrame. iExists _, _; done.
   Qed.
 
   Lemma sim_pop_frame_bij_and_own i_t i_s A_t A_s mf_t mf_s C L_t L_s:
@@ -951,8 +1007,6 @@ Section local_properties.
     rewrite sim_expr_eq /sim_expr_.
 
     iIntros (σ_t σ_s) "SI".
-    destruct σ_t as ((?&?)&(?&?)&?).
-    destruct σ_s as ((?&?)&(?&?)&?). destruct p, p0.
     iDestruct (state_interp_WF with "SI") as %Hwf.
 
     iDestruct (stack_count_WF_src with "SI HF_s") as "%Hwf_s".
@@ -975,9 +1029,10 @@ Section local_properties.
       reflexivity. }
     iApply sim_coind_tau.
 
-    destruct l2 eqn: Hl2_s.
+    destruct (vlocal σ_s) eqn: Hσ_s; cbn -[state_interp].
+    destruct l0 eqn: Hl2_s.
     { iApply sim_coind_Proper; [ reflexivity | .. ].
-      { do 2 setoid_rewrite bind_vis.
+      { cbn. do 2 setoid_rewrite bind_vis.
         reflexivity. }
       iApply sim_coind_exc. }
 
@@ -987,12 +1042,18 @@ Section local_properties.
     destruct l0.
     { cbn in *.
       destruct i_s; cbn in *; try lia.
-      subst.
-      destruct i_t; cbn in *; try lia. }
+      subst. inv Hl2_s. }
 
+    inv Hl2_s. cbn -[state_interp] in *.
+    destruct (vlocal σ_t) eqn: Hσ_t; cbn -[state_interp] in *.
+    destruct l3.
+    { destruct i_t; cbn in *; try lia. }
     rewrite !bind_ret_l; iApply sim_coind_tau.
     specialize (Hlen Hsize_s).
-     (* MemPop *)
+    cbn.
+    (* MemPop *)
+    destruct (vmem σ_t) eqn: Hmσ_t; destruct (vmem σ_s) eqn: Hmσ_s.
+    cbn -[state_interp] in *.
     destruct f.
     { cbn in Hwf_t. lia. }
     destruct f0.
@@ -1000,8 +1061,8 @@ Section local_properties.
 
     iPoseProof (frame_remove_bij_and_own
                   _ _ _ _ _ _ _ _ i_t i_s _ _ _ _ _ _ _ _ _
-                  (ltac:(lia)) (ltac:(lia))
-                  Hs_t Hs_s Hnd_t Hnd_s
+                  (ltac:(lia)) (ltac:(lia)) _ _ 
+                  Hnd_t Hnd_s
                   with "HC Hl Ht Hs HF_t HF_s HA_t HA_s") as "Ha".
     iDestruct ("Ha" with "SI") as ">(CI & Hst & Hss & SI)".
 
@@ -1009,6 +1070,7 @@ Section local_properties.
     rewrite !interp_state_tau.
     iApply sim_coind_tau.
     rewrite !interp_state_vis !bind_tau !bind_bind.
+    cbn. rewrite Hmσ_t Hmσ_s; cbn.
     rewrite !bind_ret_l.
     do 2 iApply sim_coind_tau.
     rewrite !interp_state_ret.
@@ -1016,7 +1078,10 @@ Section local_properties.
     iApply sim_coind_base.
     cbn -[state_interp].
     iFrame.
+    iSplitL "SI".
+    { cbn. rewrite Hσ_t Hσ_s; by iFrame. }
     iExists _, _; by iFrame.
+    Unshelve. all : set_solver.
   Qed.
 
   Lemma alloca_new_frame_target σ_t σ_s i LN:
@@ -1024,7 +1089,7 @@ Section local_properties.
     state_interp σ_t σ_s ∗ stack_tgt i ==∗
     ∃ j,
       state_interp
-        (update_frame (fun f => Snoc f []) LN σ_t)
+        (add_frame (fun f => Snoc f []) LN σ_t)
         σ_s
       ∗ stack_tgt (j :: i)
       ∗ alloca_tgt (j :: i) ∅
@@ -1044,8 +1109,9 @@ Section local_properties.
 
     iFrame.
 
-    destruct σ_t as (?&?&?); destruct p; cbn.
-    rewrite /update_frame. destruct p.
+    rewrite /add_frame;cbn.
+    destruct (vmem σ_t).
+    destruct (vlocal σ_t).
     repeat iExists _. iFrame.
     cbn; by iFrame.
   Qed.
@@ -1056,7 +1122,7 @@ Section local_properties.
     ∃ j,
       state_interp
         σ_t
-        (update_frame (fun f => Snoc f []) LN σ_s)
+        (add_frame (fun f => Snoc f []) LN σ_s)
       ∗ stack_src (j :: i)
       ∗ alloca_src (j :: i) ∅
       ∗ ldomain_src (j :: i) (list_to_set LN.*1)
@@ -1075,10 +1141,11 @@ Section local_properties.
 
     iFrame.
 
-    destruct σ_s as (?&?&?); destruct p; cbn.
-    rewrite /update_frame.
-    repeat iExists _; iFrame.
-    destruct p; cbn; by iFrame.
+    rewrite /add_frame;cbn.
+    destruct (vmem σ_s).
+    destruct (vlocal σ_s).
+    repeat iExists _. iFrame.
+    cbn; by iFrame.
   Qed.
 
   Lemma alloca_new_frame σ_t σ_s i_t i_s LN_t LN_s:
@@ -1091,8 +1158,8 @@ Section local_properties.
       let i_t' := j_t :: i_t in
       let i_s' := j_s :: i_s in
       state_interp
-        (update_frame (fun f => Snoc f []) LN_t σ_t)
-        (update_frame (fun f => Snoc f []) LN_s σ_s)
+        (add_frame (fun f => Snoc f []) LN_t σ_t)
+        (add_frame (fun f => Snoc f []) LN_s σ_s)
       ∗ stack_tgt i_t'
       ∗ stack_src i_s'
       ∗ alloca_tgt i_t' ∅
@@ -1148,9 +1215,6 @@ Section local_properties.
     rewrite /interp_L2.
     iIntros (??) "SI".
 
-    destruct σ_t as ((?&?)&(?&?)&?); destruct p; cbn -[state_interp].
-    destruct σ_s as ((?&?)&(?&?)&?); destruct p; cbn -[state_interp].
-
     iApply sim_coind_Proper.
     { rewrite bind_trigger.
       rewrite interp_state_vis; cbn. rewrite /add_tau. cbn.
@@ -1175,14 +1239,18 @@ Section local_properties.
       reflexivity. }
     do 3 iApply sim_coind_tau.
 
+    destruct (vlocal σ_t) eqn: Hσ_t.
+    destruct (vlocal σ_s) eqn: Hσ_s.
     iApply sim_coind_Proper.
     { cbn. rewrite /add_tau.
       rewrite bind_tau. cbn.
-      rewrite !bind_bind. rewrite !bind_ret_l. cbn.
+      rewrite !bind_bind. rewrite Hσ_t.
+      rewrite !bind_ret_l. cbn.
       reflexivity. }
     { cbn. rewrite /add_tau.
       rewrite bind_tau; cbn.
-      rewrite !bind_bind. rewrite !bind_ret_l. cbn.
+      rewrite !bind_bind. rewrite Hσ_s.
+      rewrite !bind_ret_l. cbn.
       reflexivity. }
 
     do 2 (iApply sim_coind_tau).
@@ -1192,10 +1260,13 @@ Section local_properties.
     iDestruct (alloca_new_frame with "H") as
       ">(%j_t & %j_s & SI & Hf_t & Hf_s & Ha_t & Ha_s & Hd_t & Hd_s & Hl_t & Hl_s)";
       [apply Hnodup_t | apply Hnodup_s | ]; iFrame.
-    rewrite /update_frame. cbn -[state_interp].
+    rewrite /add_frame. cbn -[state_interp].
 
     rewrite !foldr_local_env; eauto.
     iModIntro; iFrame.
+    iSplitL "SI".
+    { cbn. rewrite Hσ_t Hσ_s; cbn.
+      destruct (vmem σ_t), (vmem σ_s); cbn. iFrame. }
     iExists _,_; repeat (iSplit; try done).
     iExists _,_; repeat (iSplit; try done); iFrame.
   Qed.
@@ -1229,9 +1300,8 @@ Section local_properties.
     rewrite /interp_L2.
     iIntros (??) "SI".
 
-    destruct σ_t as ((?&?)&(?&?)&?); destruct p; cbn -[state_interp].
-    destruct σ_s as ((?&?)&(?&?)&?); destruct p; cbn -[state_interp].
-
+    destruct (vlocal σ_t) eqn: Hσ_t.
+    destruct (vlocal σ_s) eqn: Hσ_s.
     iApply sim_coind_Proper.
     { rewrite bind_trigger.
       rewrite interp_state_vis; cbn. rewrite /add_tau. cbn.
@@ -1246,11 +1316,13 @@ Section local_properties.
     iApply sim_coind_Proper.
     { rewrite interp_state_vis; cbn. rewrite /add_tau.
       rewrite bind_tau; setoid_rewrite interp_state_ret; cbn.
-      rewrite !bind_bind. rewrite !bind_ret_l. cbn.
+      rewrite !bind_bind. rewrite Hσ_t.
+      rewrite !bind_ret_l. cbn.
       reflexivity. }
     { rewrite interp_state_vis; cbn. rewrite /add_tau.
       rewrite bind_tau; setoid_rewrite interp_state_ret; cbn.
-      rewrite !bind_bind. rewrite !bind_ret_l. cbn.
+      rewrite !bind_bind. rewrite Hσ_s.
+      rewrite !bind_ret_l. cbn.
       reflexivity. }
 
     do 2 (iApply sim_coind_tau).
@@ -1260,9 +1332,10 @@ Section local_properties.
     iDestruct (alloca_new_frame with "H") as
       ">(%j_t & %j_s & SI & Hf_t & Hf_s & Ha_t & Ha_s & Hd_t & Hd_s & Hl_t & Hl_s)";
       [apply Hnodup_t | apply Hnodup_s | ]; iFrame.
-    rewrite /update_frame.  cbn -[state_interp].
+    rewrite /add_frame.  cbn -[state_interp].
 
     rewrite !foldr_local_env; eauto. iFrame.
+    cbn; rewrite Hσ_t Hσ_s; iFrame.
     iModIntro; iExists _,_; repeat (iSplit; try done).
     iExists _,_; repeat (iSplit; try done); iFrame.
   Qed.
