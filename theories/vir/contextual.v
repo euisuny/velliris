@@ -37,13 +37,9 @@ Definition allocate_declaration_prog (d:declaration dtyp) (σ : vir_state) : vir
           IntrinsicsDefinitions.defined_intrinsics_decls with
   | Some _ => σ
   | None =>
-      let '(g, l, (m, v)) :=
-        fmap_mem (vir.allocate_non_void DTYPE_Pointer) σ
-      in
-      let g :=
-        global_write (dc_name d) (DVALUE_Addr v) g
-      in
-      (g, l, m)
+      let '(mem, v) := vir_util.allocate_non_void DTYPE_Pointer (vmem σ) in
+      let σ := update_mem mem σ in
+      apply_global (fun g => <[ dc_name d := DVALUE_Addr v]> g) σ
   end.
 
 Definition allocate_declarations_prog
@@ -206,7 +202,7 @@ End CR_definition.
 (* End CR_properties. *)
 
 (* Well-formedness on globals: all global values are self-related *)
-Definition globals_WF `{heapbijGS Σ} (g : vir.globals) : iPropI Σ :=
+Definition globals_WF `{heapbijGS Σ} (g : global_env) : iPropI Σ :=
   ([∗ map] g0↦v ∈ g, ∃ v' : dvalue, ⌜g !! g0 = Some v'⌝ ∗ dval_rel v' v)%I.
 
 Definition init_keys (main : Addr.addr) : list global_id :=
@@ -222,8 +218,8 @@ Lemma initialize_state_interp ds `{sheapGpreS Σ} `{heapbijGpreS Σ} `{checkedou
         <pers> fun_logrel e_t e_s ∅) ==∗
     ∃ (H_sh : sheapGS Σ) (H_bij : heapbijGS Σ) (H_c : checkedoutGS Σ),
       state_interp (init_state ds) (init_state ds) ∗
-      target_globals (init_state ds).1 ∗
-      source_globals (init_state ds).1 ∗
+      target_globals (vglobal (init_state ds)) ∗
+      source_globals (vglobal (init_state ds)) ∗
     ∃ γ_t γ_s,
         checkout ∅ ∗ stack_tgt [γ_t] ∗ stack_src [γ_s].
 Proof.
@@ -340,15 +336,15 @@ Proof.
 Admitted.
 
 (* The contextual refinement statement, with ghost state instantiated *)
-Lemma contextual_ref `(sheapGS Σ, checkedoutGS Σ, heapbijGS Σ):
+Lemma contextual_ref `(vellirisGS Σ):
   ∀ e_t e_s γ_t γ_s C decl main,
   (* Well-formedness conditions *)
   ctx_wf C ->
   (* The names of the declarations are the same *)
   dc_name (df_prototype e_t) = dc_name (df_prototype e_s) ->
   (* The ghost resources for globals is set up *)
-  target_globals (init_global (CFG_names C)) -∗
-  source_globals (init_global (CFG_names C)) -∗
+  (* target_globals (init_global (CFG_names C)) -∗ *)
+  (* source_globals (init_global (CFG_names C)) -∗ *)
   (* Hole is logically related *)
   □ (fun_logrel e_t e_s ∅) -∗
   (* Frame resources are set up *)
@@ -358,8 +354,8 @@ Lemma contextual_ref `(sheapGS Σ, checkedoutGS Σ, heapbijGS Σ):
   fill_ctx DTYPE_Void main [] C (decl, e_s)
   [[ (λ x y : uvalue, ⌜obs_val x y⌝) ⤉ ]].
 Proof.
-  rename H into H_shp, H0 into H_bijp, H1 into H_cp.
-  iIntros (??????? H_wf WF_name) "#Hg_t #Hg_s #Hfun Hstack".
+  rename H into H_vgs.
+  iIntros (??????? H_wf WF_name) "#Hfun Hstack".
 
   (* Access stack resources *)
   iDestruct "Hstack" as "(Hc & Hs_t & Hs_s)".
@@ -385,8 +381,7 @@ Proof.
   (* The mcfg is the same, so the resulting definitions are the same *)
   iApply (sim_expr'_bupd_mono with "[Hc Hfun Hs_t Hs_s]");
     [ | iApply mcfg_definitions_refl' ]; eauto.
-  2 : admit.
-  (* 2 : apply ctx_wf_implies_CFG_WF; eauto. *)
+  2-4 : admit.
 
   iIntros (??) "H".
   iDestruct "H" as (????????)
@@ -398,7 +393,7 @@ Proof.
   rewrite /mcfg_definitions in Hl1; iClear "Hrel Hlr".
 
   (* IY: This is the difficult part; WIP version is in [mcfg_contextual.v] *)
-   (* iApply (contextual_denote_mcfg with "Hfun Hc Hs_t Hs_s"). *)
+   iApply (contextual_denote_mcfg with "Hfun Hc Hs_t Hs_s").
 Admitted.
 
 

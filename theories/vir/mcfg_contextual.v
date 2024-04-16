@@ -41,7 +41,7 @@ Ltac simpobs_eqit :=
 
 Section mcfg_contextual.
 
-  Context `(sheapGS Σ, checkedoutGS Σ, heapbijGS Σ).
+  Context `(vellirisGS Σ).
 
   Definition args_rel :=
     fun args_t args_s => ([∗ list] x;y ∈ args_t ;args_s, uval_rel x y)%I.
