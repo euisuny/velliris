@@ -123,11 +123,10 @@ Section mcfg_contextual.
     dval_rel dv dv -∗
     args_rel args args -∗
     vir_call_ev Σ
-    (ExternalCall t dv args []) (ExternalCall t dv args []) (∅, i_t, i_s).
+    (ExternalCall t dv args []) (ExternalCall t dv args []) (i_t, i_s).
   Proof.
     iIntros "(?&?&?&?&?) Hv Huv".
-    simp vir_call_ev; iFrame; eauto. iPureIntro; do 2 (split; eauto).
-    simp attribute_interp. cbn. exists OTHER. tauto.
+    simp vir_call_ev; iFrame; eauto.
   Qed.
 
   (* Access [frame_WF] predicate out of [frame_inv] *)
@@ -178,7 +177,7 @@ Section mcfg_contextual.
     rewrite /mrec.
     do 2 (iSplitL ""; first done); iFrame "Hrel".
     rewrite /call_ev; cbn -[state_interp].
-    iSpecialize ("Hrel" $! dv dv t t args args (∅, i_t, i_s)).
+    iSpecialize ("Hrel" $! dv dv t t args args (i_t, i_s)).
     iPoseProof (frame_inv_frame_WF with "Hinv") as "%Hframe_WF".
     iPoseProof (vir_call_ev_nil with "Hinv Hdv Hargs") as "Hev".
     iSpecialize ("Hrel" with "Hev SI").
@@ -193,9 +192,9 @@ Section mcfg_contextual.
         { rewrite /base. subst.
           iExists (σ_t0, v_t), (σ_s0, v_s). iPureIntro; split.
           { apply EqAxiom.bisimulation_is_eq.
-            rewrite H4. by rewrite -itree_eta. }
+            rewrite H2. by rewrite -itree_eta. }
           { apply EqAxiom.bisimulation_is_eq.
-            rewrite H5. by rewrite -itree_eta. } }
+            rewrite H3. by rewrite -itree_eta. } }
         subst.
         iExists σ_t0, σ_s0, e_t, e_s; iFrame.
         do 2 (iSplitL ""; [ done | ]).
@@ -313,16 +312,16 @@ Section mcfg_contextual.
     simp call_conv in Hv. cbn in Hv.
     rewrite bind_vis in Hv.
     apply eqit_inv in Hv; cbn in Hv.
-    destruct Hv as (?&?&?); subst. red in H2, H3.
-    dependent destruction H2.
+    destruct Hv as (?&?&?); subst. red in H0, H1.
+    dependent destruction H0.
     do 2 (split; eauto).
     intros.
-    specialize (H3 x).
-    rewrite bind_ret_l in H3. rewrite interp_state_ret in H3.
-    rewrite bind_tau bind_ret_l in H3.
-    rewrite interp_state_tau in H3. cbn in *.
-    apply EqAxiom.bisimulation_is_eq in H3. rewrite H3.
-    dependent destruction H2. reflexivity.
+    specialize (H1 x).
+    rewrite bind_ret_l in H1. rewrite interp_state_ret in H1.
+    rewrite bind_tau bind_ret_l in H1.
+    rewrite interp_state_tau in H1. cbn in *.
+    apply EqAxiom.bisimulation_is_eq in H1. rewrite H1.
+    dependent destruction H0. reflexivity.
   Qed.
 
   Lemma Proper_mrec_vis {X Y} {f g : mrec_body}
@@ -338,44 +337,44 @@ Section mcfg_contextual.
       (o⟦ mrec g (Call t dv args attr) ⟧ σ_s).
   Proof.
     iIntros (??) "#Hargs #Hbase #Hcrel Hev"; repeat simpobs_eqit.
-    rename H2 into Hf, H3 into Hg.
-    pose proof (Hf' := Hf); pose proof (Hg' := Hg).
+    (* rename H2 into Hf, H3 into Hg. *)
+    (* pose proof (Hf' := Hf); pose proof (Hg' := Hg). *)
 
-    apply interp_L2_conv_vis_inv in Hf, Hg.
+    (* apply interp_L2_conv_vis_inv in Hf, Hg. *)
 
-    destruct Hf as [ (τ_t&a_t&args_t&attr_t&k_t&Hf) | (X'&ev_t&k_t&Hf) ];
-      destruct Hg as [ (τ_s&a_s&args_s&attr_s&k_s&Hg) | (Y'&ev_s&k_s&Hg) ].
+    (* destruct Hf as [ (τ_t&a_t&args_t&attr_t&k_t&Hf) | (X'&ev_t&k_t&Hf) ]; *)
+    (*   destruct Hg as [ (τ_s&a_s&args_s&attr_s&k_s&Hg) | (Y'&ev_s&k_s&Hg) ]. *)
 
-    2,3 : admit. (* ABSURD *)
+    (* 2,3 : admit. (* ABSURD *) *)
 
-    { (* Internal *)
+    (* { (* Internal *) *)
 
-      (* Prep *)
-      rewrite Hf in Hf'; rewrite Hg in Hg'.
+    (*   (* Prep *) *)
+    (*   rewrite Hf in Hf'; rewrite Hg in Hg'. *)
 
-      cbn in *.
+    (*   cbn in *. *)
 
-      rewrite /resum /ReSum_id /id_ /Id_IFun.
-      simp handle_call_events.
+    (*   rewrite /resum /ReSum_id /id_ /Id_IFun. *)
+    (*   simp handle_call_events. *)
 
-      (* force unfold mrec *)
-      with_strategy transparent [mrec] unfold mrec.
-      apply EqAxiom.bisimulation_is_eq in Hf, Hg.
-      rewrite Hf Hg !interp_mrec_call.
+    (*   (* force unfold mrec *) *)
+    (*   with_strategy transparent [mrec] unfold mrec. *)
+    (*   apply EqAxiom.bisimulation_is_eq in Hf, Hg. *)
+    (*   rewrite Hf Hg !interp_mrec_call. *)
 
-      (* Invert information out of shape of call *)
-      apply interp_L2_conv_vis_call in Hf', Hg'.
-      destruct Hf' as (->&Het&Hkt); destruct Hg' as (->&Hes&Hks).
-      dependent destruction Het; dependent destruction Hes.
+    (*   (* Invert information out of shape of call *) *)
+    (*   apply interp_L2_conv_vis_call in Hf', Hg'. *)
+    (*   destruct Hf' as (->&Het&Hkt); destruct Hg' as (->&Hes&Hks). *)
+    (*   dependent destruction Het; dependent destruction Hes. *)
 
-      rewrite /handle_event; simp handle_call_events.
+    (*   rewrite /handle_event; simp handle_call_events. *)
 
-      iDestruct "Hev" as "[ Hev | Hev ]"; cycle 1.
+    (*   iDestruct "Hev" as "[ Hev | Hev ]"; cycle 1. *)
 
-      (* Internal call was "external" and now meets the spec *)
-      { iDestruct "Hev" as (?) "(SI & Hev & Hinner)".
-        provide_case: TAU_STEP.
-        iLeft. iExists f, g, _, _.
+    (*   (* Internal call was "external" and now meets the spec *) *)
+    (*   { iDestruct "Hev" as (?) "(SI & Hev & Hinner)". *)
+    (*     provide_case: TAU_STEP. *)
+    (*     iLeft. iExists f, g, _, _. *)
   Admitted.
 
   (* -------------------------------------------------------------------------- *)
@@ -469,49 +468,50 @@ Section mcfg_contextual.
     { admit. }
 
     (* [VIS] case *)
-    { rename H4 into Hg. do 2 simpobs_eqit.
+    {
+      (* rename H4 into Hg. do 2 simpobs_eqit. *)
 
-      pose proof (Hf' := Hf); pose proof (Hg' := Hg).
+      (* pose proof (Hf' := Hf); pose proof (Hg' := Hg). *)
 
-      apply interp_L2_conv_vis_inv in Hf, Hg.
+      (* apply interp_L2_conv_vis_inv in Hf, Hg. *)
 
-      destruct Hf as [ (τ_t&addr_t&args_t&attr_t&k_t&Hf) | (X'&ev_t&k_t&Hf) ];
-        destruct Hg as [ (τ_s&addr_s&args_s&attr_s&k_s&Hg) | (Y'&ev_s&k_s&Hg) ].
-      2,3: admit. (* absurd *)
+      (* destruct Hf as [ (τ_t&addr_t&args_t&attr_t&k_t&Hf) | (X'&ev_t&k_t&Hf) ]; *)
+      (*   destruct Hg as [ (τ_s&addr_s&args_s&attr_s&k_s&Hg) | (Y'&ev_s&k_s&Hg) ]. *)
+      (* 2,3: admit. (* absurd *) *)
 
-      { (* Internal *)
+      (* { (* Internal *) *)
 
-        cbn in *.
+      (*   cbn in *. *)
 
-        rewrite /resum /ReSum_id /id_ /Id_IFun.
-        simp handle_call_events.
+      (*   rewrite /resum /ReSum_id /id_ /Id_IFun. *)
+      (*   simp handle_call_events. *)
 
-        (* force unfold mrec *)
-        apply EqAxiom.bisimulation_is_eq in Hf, Hg.
-        rewrite Hf Hg !interp_mrec_call.
+      (*   (* force unfold mrec *) *)
+      (*   apply EqAxiom.bisimulation_is_eq in Hf, Hg. *)
+      (*   rewrite Hf Hg !interp_mrec_call. *)
 
-        rewrite Hf in Hf'; rewrite Hg in Hg'.
-        (* Invert information out of shape of call *)
-        apply interp_L2_conv_vis_call in Hf', Hg'.
-        destruct Hf' as (->&Het&Hkt); destruct Hg' as (->&Hes&Hks).
-        dependent destruction Het; dependent destruction Hes.
+      (*   rewrite Hf in Hf'; rewrite Hg in Hg'. *)
+      (*   (* Invert information out of shape of call *) *)
+      (*   apply interp_L2_conv_vis_call in Hf', Hg'. *)
+      (*   destruct Hf' as (->&Het&Hkt); destruct Hg' as (->&Hes&Hks). *)
+      (*   dependent destruction Het; dependent destruction Hes. *)
 
-        provide_case: TAU_STEP.
+      (*   provide_case: TAU_STEP. *)
 
 
-        rewrite /handle_event. simp handle_call_events.
+      (*   rewrite /handle_event. simp handle_call_events. *)
 
-        iDestruct "Hinner" as "[ Hinner | Hinner ]"; cycle 1.
+      (*   iDestruct "Hinner" as "[ Hinner | Hinner ]"; cycle 1. *)
 
-        (* Internal call was "external" and now meets the spec *)
-        { iLeft. iExists f, g, _, _, σ_t, σ_s.
-          repeat (iSplitL ""; first done); iFrame.
-          iDestruct "Hinner" as (?) "(SI & Hev & Hinner)".
+      (*   (* Internal call was "external" and now meets the spec *) *)
+      (*   { iLeft. iExists f, g, _, _, σ_t, σ_s. *)
+      (*     repeat (iSplitL ""; first done); iFrame. *)
+      (*     iDestruct "Hinner" as (?) "(SI & Hev & Hinner)". *)
 
-          (* Cut on internal call *)
-          rewrite !interp_L2_conv_bind; iApply sim_coindF_coind_bind.
-          rewrite /context_rel.
-          admit. }
+      (*     (* Cut on internal call *) *)
+      (*     rewrite !interp_L2_conv_bind; iApply sim_coindF_coind_bind. *)
+      (*     rewrite /context_rel. *)
+      (*     admit. } *)
         (*   iSpecialize ("Hcrel" with "Hev"). *)
         (*   match goal with *)
         (*   | |- environments.envs_entails _ (sim_coindF ?Φ _ _) => remember Φ *)
@@ -532,13 +532,13 @@ Section mcfg_contextual.
      function definitions with [dvalue] keys. *)
   Definition fundefs : Type := list (dvalue * definition dtyp (CFG.cfg dtyp)).
 
-  Definition fundef_no_attr (def : definition dtyp (CFG.cfg dtyp)) :=
-    RelDec.rel_dec (dc_attrs (df_prototype def)) nil.
+  (* Definition fundef_no_attr (def : definition dtyp (CFG.cfg dtyp)) := *)
+  (*   RelDec.rel_dec (dc_attrs (df_prototype def)) nil. *)
 
   (* The function definition map [fd] does not have any attributes at its
     definition site. *)
-  Definition fundefs_no_attr (fd : fundefs) :=
-    forallb (fun '(_, def) => fundef_no_attr def) fd.
+  (* Definition fundefs_no_attr (fd : fundefs) := *)
+  (*   forallb (fun '(_, def) => fundef_no_attr def) fd. *)
 
 (* -------------------------------------------------------------------------- *)
 
@@ -604,21 +604,16 @@ Section mcfg_contextual.
         specialize (Hft Hf_t).
         iRight; iPureIntro; eauto. } }
   Qed.
-
-  Lemma fundef_no_attr_eq def :
-    fundef_no_attr def ->
-    (dc_attrs (df_prototype def)) = nil.
-  Proof. Admitted.
-
+  
   (* The contextual refinement on [denote_mcfg]. *)
   Lemma contextual_denote_mcfg :
-    ∀ γ_t γ_s addr_t addr_s e_t e_s main F,
+    ∀ γ_t γ_s addr_t addr_s e_t e_s main F decl,
       fun_WF e_t ->
       fun_WF e_s ->
-      fundefs_WF F nil ->
-      fundefs_no_attr F ->
-      fundef_no_attr e_t ->
-      fundef_no_attr e_s ->
+      fundefs_WF F decl ->
+      (* fundefs_no_attr F -> *)
+      (* fundef_no_attr e_t -> *)
+      (* fundef_no_attr e_s -> *)
       □ fun_logrel e_t e_s ∅ -∗
         checkout ∅ -∗
         stack_tgt [γ_t] -∗
@@ -630,58 +625,58 @@ Section mcfg_contextual.
         denote_mcfg ((addr_s, e_s) :: F) DTYPE_Void (DVALUE_Addr main) []
         [[ (λ x y : uvalue, ⌜obs_val x y⌝) ⤉ ]].
   Proof.
-    iIntros (???????? WF_t WF_s WF_F HC H_t H_s) "#Hfun Hc Hs_t Hs_s #Hdv #Hfun_keys".
+    iIntros (????????? WF_t WF_s WF_F) "#Hfun Hc Hs_t Hs_s #Hdv #Hfun_keys".
 
     (* The frame invariant holds. *)
     iAssert (frame_inv [γ_t] [γ_s])%I with "[Hc Hs_t Hs_s]" as "Hinv".
     { by iFrame. }
 
-    rewrite mrec
-    rewrite sim_expr'.
+    (* rewrite mrec *)
+    (* rewrite sim_expr'. *)
 
 
-    iApply sim_coindF_strong_coind; cycle 1.
-    rewrite /fun_logrel.
+    (* iApply sim_coindF_strong_coind; cycle 1. *)
+    (* rewrite /fun_logrel. *)
 
-    rewrite /denote_mcfg.
+    (* rewrite /denote_mcfg. *)
 
-    (* Try to prove this directly on coinduction? *)
+    (* (* Try to prove this directly on coinduction? *) *)
 
-    iPoseProof
-      (Proper_mrec _ _ (λ x y : uvalue, ⌜obs_val x y⌝)%I [γ_t] [γ_s]
-        with "Hinv") as "Hrec"; eauto.
-    iApply (sim_expr'_bupd_mono with "[] [Hrec]"); last iApply "Hrec".
+    (* iPoseProof *)
+    (*   (Proper_mrec _ _ (λ x y : uvalue, ⌜obs_val x y⌝)%I [γ_t] [γ_s] *)
+    (*     with "Hinv") as "Hrec"; eauto. *)
+    (* iApply (sim_expr'_bupd_mono with "[] [Hrec]"); last iApply "Hrec". *)
 
-    (* Establish postcondition; trivial  *)
-    { iIntros (??) "HΨ"; iDestruct "HΨ" as (????) "(%HΨ & HI)".
-      iExists _, _; iFrame. done. }
+    (* (* Establish postcondition; trivial  *) *)
+    (* { iIntros (??) "HΨ"; iDestruct "HΨ" as (????) "(%HΨ & HI)". *)
+    (*   iExists _, _; iFrame. done. } *)
 
-    rewrite /context_rel; iModIntro.
+    (* rewrite /context_rel; iModIntro. *)
 
-    (* Preparing proof state *)
-    iIntros (fn_t fn_s dτ_t dτ_s args_t args_s C) "Hev";
-      destruct C as ((?&i_t)&i_s);
-    rewrite /call_ev; cbn -[denote_function lookup_defn]; simp vir_call_ev;
-    iDestruct "Hev" as
-      "(#Hfn &%Hdt & %Hattr& #Hargs & HC & #HWF & Hst & Hss & %Hinterp)"; subst.
+    (* (* Preparing proof state *) *)
+    (* iIntros (fn_t fn_s dτ_t dτ_s args_t args_s C) "Hev"; *)
+    (*   destruct C as ((?&i_t)&i_s); *)
+    (* rewrite /call_ev; cbn -[denote_function lookup_defn]; simp vir_call_ev; *)
+    (* iDestruct "Hev" as *)
+    (*   "(#Hfn &%Hdt & %Hattr& #Hargs & HC & #HWF & Hst & Hss & %Hinterp)"; subst. *)
 
-    (* Do a case analysis on whether the function is in the list of fundefs.
+    (* (* Do a case analysis on whether the function is in the list of fundefs. *)
 
-      Because the context applied to the expression results in a closed term,
-      the function is always found in the context. *)
+    (*   Because the context applied to the expression results in a closed term, *)
+    (*   the function is always found in the context. *) *)
 
-    iDestruct (dval_rel_lookup_defn_cons e_t e_s F with "Hfn Hdv Hfun_keys") as %Hlu.
-    destruct Hlu as [ (->&->) | [ Hlu | Hlu ] ]; last admit. (* last case is absurd *)
+    (* iDestruct (dval_rel_lookup_defn_cons e_t e_s F with "Hfn Hdv Hfun_keys") as %Hlu. *)
+    (* destruct Hlu as [ (->&->) | [ Hlu | Hlu ] ]; last admit. (* last case is absurd *) *)
 
-    (* It is the hole *)
-    { apply fundef_no_attr_eq in H_t, H_s; rewrite H_t H_s.
-      assert (Heq : RelDec.rel_dec (T := list fn_attr) nil nil = true) by admit;
-        rewrite Heq.
-      admit. }
+    (* (* It is the hole *) *)
+    (* { apply fundef_no_attr_eq in H_t, H_s; rewrite H_t H_s. *)
+    (*   assert (Heq : RelDec.rel_dec (T := list fn_attr) nil nil = true) by admit; *)
+    (*     rewrite Heq. *)
+    (*   admit. } *)
 
-    (* It is a function in the context *)
-    { destruct Hlu as (f_t & f_s & Hlu_t & Hlu_s & -> & ->).
-      admit. } (* Should follow trivially. *)
+    (* (* It is a function in the context *) *)
+    (* { destruct Hlu as (f_t & f_s & Hlu_t & Hlu_s & -> & ->). *)
+    (*   admit. } (* Should follow trivially. *) *)
 
   Admitted.
 

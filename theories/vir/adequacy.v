@@ -38,7 +38,7 @@ Section Adequacy.
     forall σ_t σ_s ie_t ie_s,
       well_formed (R := uvalue) (⟦ ie_t ⟧ σ_t) (⟦ie_s⟧ σ_s) ->
       sat (|==>
-      ∃ `{sheapGS Σ} `{heapbijGS Σ} `{checkedoutGS Σ},
+      ∃ `{vellirisGS Σ},
           state_interp σ_t σ_s ∗ ie_t ⪯ ie_s
                [[ lift_post (fun x y => ⌜obs_val x y ⌝) ]]) ->
       eutt obs_val_res (⟦ie_t⟧ σ_t) (⟦ie_s⟧ σ_s).
@@ -46,16 +46,16 @@ Section Adequacy.
     intros * H_wf Hsim.
 
     assert (sat (|==>
-      ∃ `{sheapGS Σ} `{heapbijGS Σ} `{checkedoutGS Σ},
+      ∃ `{vellirisGS Σ},
                    sim_coindF
                    (lift_expr_rel (lift_post (fun x y => ⌜obs_val x y ⌝)))
                    (observe (⟦ vir_handler ⟨ ie_t ⟩ ⟧ σ_t))
                    (observe (⟦ vir_handler ⟨ ie_s ⟩ ⟧ σ_s)))).
     { eapply sat_mono; [ |apply Hsim].
       iIntros "H"; iMod "H".
-      iDestruct "H" as (Hb Hh Hc) "[SI Hsim]".
+      iDestruct "H" as (Hb) "[SI Hsim]".
       iSpecialize ("Hsim" with "SI"). iMod "Hsim".
-      iModIntro. iExists Hb, Hh, Hc.
+      iModIntro. iExists Hb.
       iApply sim_coindF_bupd_mono; [ | iApply "Hsim"].
       iIntros (??); rewrite /lift_rel /lift_expr_rel.
        iIntros "H".
@@ -102,9 +102,9 @@ Section Adequacy.
       right. eapply CIH;
         destruct PR as (?&?&?&?&?&?); auto.
       rewrite <- H4, <- H5.
-      eapply (sat_forall _ x10) in H1.
-      eapply (sat_forall _ x11) in H1.
-      eapply (sat_wand (⌜JMeq.JMeq x10 x11⌝%I)) in H1.
+      eapply (sat_forall _ x6) in H1.
+      eapply (sat_forall _ x7) in H1.
+      eapply (sat_wand (⌜JMeq.JMeq x6 x7⌝%I)) in H1.
       2 : by iPureIntro.
       sat_crunch.
       eapply sat_mono.

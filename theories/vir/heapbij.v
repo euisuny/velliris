@@ -33,39 +33,40 @@ Definition sheapΣ := #[heapΣ].
   subG sheapΣ Σ -> sheapGpreS Σ.
 Proof. solve_inG. Qed.
 
+Definition sheap_bij `{sheapGS Σ} gs_t gs_s :=
+  (heap_ctx sheapG_heap_target (gmap_empty, gset_empty)
+    (Handlers.MemTheory.Mem.Singleton []) gs_t [] [] ∗
+  heap_ctx sheapG_heap_source (gmap_empty, gset_empty)
+    (Handlers.MemTheory.Mem.Singleton []) gs_s [] [] ∗
+  own (sheapG_heap_target.(heap_name))
+    (◯ (to_heap (gmap_empty : heap))) ∗
+  ([∗ map] k↦v ∈ (gmap_empty : gmap loc (option nat)),
+    k ↪[heap_block_size_name sheapG_heap_target] v) ∗
+  own (globals_name sheapG_heap_target)
+    (to_agree (gs_t) : agreeR (leibnizO global_env)) ∗
+  own (sheapG_heap_source.(heap_name))
+    (◯ (to_heap (gmap_empty : heap))) ∗
+  ([∗ map] k↦v ∈ (gmap_empty : gmap loc (option nat)),
+    k ↪[heap_block_size_name sheapG_heap_source] v) ∗
+  own (globals_name sheapG_heap_source)
+    (to_agree (gs_s) : agreeR (leibnizO global_env)) ∗
+  (∃ γf : frame_names,
+      ghost_var (stack_name sheapG_heap_target) (1 / 2) [γf] ∗
+      ([∗ map] k↦v ∈ gmap_empty, k ↪[local_name γf] v) ∗
+      ghost_var (ldomain_name γf) (1 / 2)
+        (gset_empty : gset local_loc) ∗
+      ghost_var (allocaS_name γf) (1 / 2)
+        (gset_empty : gset Z)) ∗
+  (∃ γf : frame_names,
+      ghost_var (stack_name sheapG_heap_source) (1 / 2) [γf] ∗
+      ([∗ map] k↦v ∈ gmap_empty, k ↪[local_name γf] v) ∗
+      ghost_var (ldomain_name γf) (1 / 2)
+        (gset_empty : gset local_loc) ∗
+      ghost_var (allocaS_name γf) (1 / 2)
+        (gset_empty : gset Z)))%I.
+
 Lemma sheap_init `{sheapGpreS Σ} gs_t gs_s:
-  ⊢@{iPropI Σ} |==>
-    ∃ (_: sheapGS Σ),
-      heap_ctx sheapG_heap_target (gmap_empty, gset_empty)
-        (Handlers.MemTheory.Mem.Singleton []) gs_t [] [] ∗
-      heap_ctx sheapG_heap_source (gmap_empty, gset_empty)
-        (Handlers.MemTheory.Mem.Singleton []) gs_s [] [] ∗
-      own (sheapG_heap_target.(heap_name))
-        (◯ (to_heap (gmap_empty : heap))) ∗
-      ([∗ map] k↦v ∈ (gmap_empty : gmap loc (option nat)),
-        k ↪[heap_block_size_name sheapG_heap_target] v) ∗
-      own (globals_name sheapG_heap_target)
-        (to_agree (gs_t) : agreeR (leibnizO global_env)) ∗
-      own (sheapG_heap_source.(heap_name))
-        (◯ (to_heap (gmap_empty : heap))) ∗
-      ([∗ map] k↦v ∈ (gmap_empty : gmap loc (option nat)),
-        k ↪[heap_block_size_name sheapG_heap_source] v) ∗
-      own (globals_name sheapG_heap_source)
-        (to_agree (gs_s) : agreeR (leibnizO global_env)) ∗
-      (∃ γf : frame_names,
-          ghost_var (stack_name sheapG_heap_target) (1 / 2) [γf] ∗
-          ([∗ map] k↦v ∈ gmap_empty, k ↪[local_name γf] v) ∗
-          ghost_var (ldomain_name γf) (1 / 2)
-            (gset_empty : gset local_loc) ∗
-          ghost_var (allocaS_name γf) (1 / 2)
-            (gset_empty : gset Z)) ∗
-      (∃ γf : frame_names,
-          ghost_var (stack_name sheapG_heap_source) (1 / 2) [γf] ∗
-          ([∗ map] k↦v ∈ gmap_empty, k ↪[local_name γf] v) ∗
-          ghost_var (ldomain_name γf) (1 / 2)
-            (gset_empty : gset local_loc) ∗
-          ghost_var (allocaS_name γf) (1 / 2)
-            (gset_empty : gset Z)).
+  ⊢@{iPropI Σ} |==> ∃ (_: sheapGS Σ), sheap_bij gs_t gs_s.
 Proof.
   iMod (heap_init gs_t) as (??) "(?&?&H&?&H1)".
   iMod (heap_init gs_s) as (??) "(?&?&H'&?&H2)".
@@ -909,3 +910,20 @@ Section laws.
   Qed.
 
 End laws.
+
+(* Instantiate all the velliris resources. *)
+Lemma velliris_init `{!vellirisGpreS Σ} C gs_t gs_s P:
+  ⊢@{iPropI Σ} |==>
+    ∃ (_:vellirisGS Σ),
+      checkout C ∗ checkout C ∗
+      sheap_bij gs_t gs_s ∗
+      heapbij_interp ∅ P.
+Proof.
+  iPoseProof (checkedout_init C) as ">(%Hco & (Hc1 & Hc2))".
+  iPoseProof (sheap_init gs_t gs_s) as ">(%Hsheap & Hsheap)".
+  iPoseProof (heapbij_init P) as ">(%Hbij & Hbij)".
+  iExists
+    {| velliris_heapbijGS    := Hbij;
+       velliris_sheapGS      := Hsheap;
+       velliris_checkedoutGS := Hco |}; iModIntro; iFrame.
+Qed.

@@ -4,7 +4,7 @@ From velliris.logic Require Import satisfiable.
 From velliris.program_logic Require Import program_logic.
 From velliris.vir Require Import vir val_rel
   heapbij adequacy spec globalbij logical_relations fundamental
-  contextual_mcfg.
+  contextual_mcfg mcfg_contextual.
 
 From Vellvm Require Import Syntax.DynamicTypes Handlers Syntax.LLVMAst
   Semantics.InterpretationStack.
@@ -117,8 +117,10 @@ Section CR_definition.
   (* Contextual refinement. *)
   Definition ctx_ref e_t e_s: Prop :=
     forall (C : CFG.mcfg dtyp),
-      (* The context needs to be well-formed *)
+      (* The context and function needs to be well-formed *)
       ctx_wf C ->
+      fun_WF e_t.2 ->
+      fun_WF e_s.2 ->
       (* The names of the declarations are the same *)
       dc_name (df_prototype e_t.2) = dc_name (df_prototype e_s.2) ->
       (* Implies whole-program refinement *)
@@ -150,32 +152,35 @@ End CR_definition.
 (*     main.1 <> Addr.null.1 /\ (* Do we say something about the rest of the state? *) *)
 (*     init_state main C σ_t /\ init_state main C σ_s. *)
 
-(* Section CR_properties. *)
+Section CR_properties.
 
-(*   Context {Σ} `{!sheapGS Σ, !checkedoutGS Σ, !heapbijGS Σ}. *)
+  Context {Σ} `{!vellirisGS Σ}.
 (*   Context (ret_typ : dtyp) (main : Addr.addr) (args : list uvalue). *)
 
-(*   (* (* TODO *) *) *)
-(*   (* Lemma contains_keys_init_global names : *) *)
-(*   (*   contains_keys (init_global names) names. *) *)
-(*   (* Proof. *) *)
-(*   (*   induction names; cbn; eauto; first set_solver. *) *)
-(*   (*   rewrite /contains_keys. cbn. rewrite /init_global; cbn. *) *)
-(*   (* Admitted. *) *)
+  (* TODO *)
+  Lemma contains_keys_init_global C :
+    contains_keys (vglobal (init_state (m_declarations C))) (CFG_names C).
+  Proof.
+    (* induction names; cbn; eauto; first set_solver. *)
+    (* rewrite /contains_keys. cbn. rewrite /init_global; cbn. *)
+  Admitted.
 
-(*   (* (* TODO *) *) *)
-(*   (* Lemma nodup_codomain_init_global names : *) *)
-(*   (*   NoDup_codomain (filter_keys (init_global names) names). *) *)
-(*   (* Proof. Admitted. *) *)
+  (* TODO *)
+  Lemma nodup_codomain_init_global C :
+    NoDup_codomain
+      (filter_keys (vglobal (init_state (m_declarations C))) (CFG_names C)).
+  Proof. Admitted.
 
-(*   Lemma ctx_wf_implies_CFG_WF C : *)
-(*    ctx_wf C -> *)
-(*    CFG_WF C (init_global (CFG_names C)) (init_global (CFG_names C)). *)
-(*   Proof. *)
-(*     intros (?&?&?&?). *)
-(*     repeat (split; eauto); *)
-(*       eauto using contains_keys_init_global, nodup_codomain_init_global. *)
-(*   Qed. *)
+  Lemma ctx_wf_implies_CFG_WF C :
+   ctx_wf C ->
+   CFG_WF C
+    (vglobal (init_state (m_declarations C)))
+    (vglobal (init_state (m_declarations C))).
+  Proof.
+    intros (?&?&?&?).
+    repeat (split; eauto);
+      eauto using contains_keys_init_global, nodup_codomain_init_global.
+  Qed.
 
 (*   Lemma ctx_wf_fill_mcfg_defs C decl e_t: *)
 (*     ctx_wf (fill_mcfg_defs C (decl, e_t)) -> *)
@@ -199,7 +204,7 @@ End CR_definition.
 (*     apply Forall_cons in H2; by destructb. *)
 (*   Qed. *)
 
-(* End CR_properties. *)
+End CR_properties.
 
 (* Well-formedness on globals: all global values are self-related *)
 Definition globals_WF `{heapbijGS Σ} (g : global_env) : iPropI Σ :=
@@ -211,128 +216,126 @@ Definition init_keys (main : Addr.addr) : list global_id :=
 (* We can instantiate a state interpretation with corresponding ghost resources
   on states that satisfy the initializaition relation [I] *)
 (* IY : Is there a cleaner way to state this lemma? *)
-Lemma initialize_state_interp ds `{sheapGpreS Σ} `{heapbijGpreS Σ} `{checkedoutGpreS Σ} :
+Lemma initialize_state_interp ds (main : Addr.addr) Σ `{vellirisGpreS Σ} :
   forall e_t e_s,
     (* let init_keys := init_keys main in *)
-    (∀ `(sheapGS Σ, checkedoutGS Σ, heapbijGS Σ),
-        <pers> fun_logrel e_t e_s ∅) ==∗
-    ∃ (H_sh : sheapGS Σ) (H_bij : heapbijGS Σ) (H_c : checkedoutGS Σ),
+    (∀ `(vellirisGS Σ), <pers> fun_logrel e_t e_s ∅) ==∗
+    ∃ (H_sh : vellirisGS Σ),
       state_interp (init_state ds) (init_state ds) ∗
       target_globals (vglobal (init_state ds)) ∗
       source_globals (vglobal (init_state ds)) ∗
     ∃ γ_t γ_s,
         checkout ∅ ∗ stack_tgt [γ_t] ∗ stack_src [γ_s].
 Proof.
-  rename H into H_shp, H0 into H_bijp, H1 into H_cp.
-(*   intros * HI. *)
+  (* rename H into H_vs. *)
+  intros *.
 
-(*   iMod (@sheap_init Σ _ g g) as (Hsh) "(Hh_t & Hh_s & H)". *)
-(*   iMod (@heapbij_init Σ _ _ ∅) as (Hhb) "Hbij". *)
-(*   iMod (@checkedout_init Σ _ ∅) as (Hc) "[Hc1 Hc2]". *)
+  iMod (velliris_init ∅ (vglobal (init_state ds)) (vglobal (init_state ds)) ∅)
+    as (Hvg) "(Hc1 & Hc2 & (Hh_t & Hh_s & H) & Hbij)".
 
-(*   rewrite /state_interp. *)
+  rewrite /state_interp.
 
-(*   iDestruct "H" as "(Hh_tf & Hb_t & Hg_t & Hh_sf & Hb_s & Hg_s & H)". *)
+  iDestruct "H" as "(Hh_tf & Hb_t & Hg_t & Hh_sf & Hb_s & Hg_s & H)".
 
-(*   iDestruct "H" as "(Ht & Hs)". *)
-(*   iDestruct "Ht" as (?) "(Hst_t & Hl_t & Hld_t & Ha_t)". *)
-(*   iDestruct "Hs" as (?) "(Hst_s & Hl_s & Hld_s & Ha_s)". *)
+  iDestruct "H" as "(Ht & Hs)".
+  iDestruct "Ht" as (?) "(Hst_t & Hl_t & Hld_t & Ha_t)".
+  iDestruct "Hs" as (?) "(Hst_s & Hl_s & Hld_s & Ha_s)".
 
-(*   (* Allocate null bij *) *)
-(*   destruct σ_t as ((?&?&?)&(?&?)&?). *)
-(*   destruct σ_s as ((?&?&?)&(?&?)&?). *)
+  (* Allocate null bij *)
+  (* destruct σ_t as ((?&?&?)&(?&?)&?). *)
+  (* destruct σ_s as ((?&?&?)&(?&?)&?). *)
 
-(*   destruct HI as (Hun & ?&?&?&?&?&?); subst; inv H3. *)
-(*   destruct H as (?&?&?&?&?); subst; inv H2. *)
+  (* destruct HI as (Hun & ?&?&?&?&?&?); subst; inv H3. *)
+  (* destruct H as (?&?&?&?&?); subst; inv H2. *)
 
-(*   (** *Allocate null address *) *)
-(*   (* Allocate at [Addr.null] on target side *) *)
-(*   iCombine ("Ha_t Hst_t Hh_t") as "H". *)
-(*   iPoseProof *)
-(*     (heap_ctx_alloc _ Addr.null.1 *)
-(*        DVALUE_None ((∅, ∅), Singleton ∅) [γf] _ _ _ _ _ DTYPE_Void) as "Halloc_t"; *)
-(*     [ set_solver | cbn; set_solver | constructor | ]. *)
-(*   rewrite allocaS_eq /allocaS_def. rewrite /stack. *)
-(*   iSpecialize ("Halloc_t" with "H"). iMod "Halloc_t". *)
+  (** *Allocate null address *)
+  (* Allocate at [Addr.null] on target side *)
+  iCombine ("Ha_t Hst_t Hh_t") as "H".
+  iPoseProof
+    (heap_ctx_alloc _ Addr.null.1
+       DVALUE_None ((∅, ∅), Singleton ∅) [γf] _ _ _ _ _ DTYPE_Void) as "Halloc_t";
+    [ set_solver | cbn; set_solver | constructor | ].
+  rewrite allocaS_eq /allocaS_def. rewrite /stack.
+  iSpecialize ("Halloc_t" with "H"). iMod "Halloc_t".
 
-(*   (* Allocate at [Addr.null] on source side *) *)
-(*   iCombine ("Ha_s Hst_s Hh_s") as "H". *)
-(*   iPoseProof *)
-(*     (heap_ctx_alloc _ Addr.null.1 *)
-(*        DVALUE_None ((∅, ∅), Singleton ∅) [γf0] _ _ _ _ _ DTYPE_Void) as "Halloc_s"; *)
-(*     [ set_solver | cbn; set_solver | constructor | ]. *)
-(*   rewrite allocaS_eq /allocaS_def. rewrite /stack. *)
-(*   iSpecialize ("Halloc_s" with "H"). iMod "Halloc_s". *)
+  (* Allocate at [Addr.null] on source side *)
+  iCombine ("Ha_s Hst_s Hh_s") as "H".
+  iPoseProof
+    (heap_ctx_alloc _ Addr.null.1
+       DVALUE_None ((∅, ∅), Singleton ∅) [γf0] _ _ _ _ _ DTYPE_Void) as "Halloc_s";
+    [ set_solver | cbn; set_solver | constructor | ].
+  rewrite allocaS_eq /allocaS_def. rewrite /stack.
+  iSpecialize ("Halloc_s" with "H"). iMod "Halloc_s".
 
-(*   iDestruct "Halloc_t" as "(Hh_t & %Hin_t & Ha_t & Hst_t & Hv_t & hb_t)". *)
-(*   iDestruct "Halloc_s" as "(Hh_s & %Hin_s & Ha_s & Hst_s & Hv_s & hb_s)". *)
+  iDestruct "Halloc_t" as "(Hh_t & %Hin_t & Ha_t & Hst_t & Hv_t & hb_t)".
+  iDestruct "Halloc_s" as "(Hh_s & %Hin_s & Ha_s & Hst_s & Hv_s & hb_s)".
 
-(*   (* Extend global bij *) *)
-(*   rewrite !mapsto_dval_eq /mapsto_dval_def. *)
-(*   iAssert (lb_rel (dvalue_to_block DVALUE_None) (dvalue_to_block DVALUE_None))%I as "Hb". *)
-(*   { rewrite /lb_rel. cbn. *)
-(*     rewrite /mem_byte_rel. rewrite /init_block; cbn. *)
-(*     simpl. iSplit. *)
-(*     { iIntros (???). inversion H. } *)
-(*     { done. } } *)
-(*   iDestruct (heapbij_insert with "Hbij Hv_t Hv_s Hb hb_t hb_s") as ">(Hbij & #Haddr_null)". *)
+  (* Extend global bij *)
+  rewrite !mapsto_dval_eq /mapsto_dval_def.
+  iAssert (lb_rel (dvalue_to_block DVALUE_None) (dvalue_to_block DVALUE_None))%I as "Hb".
+  { rewrite /lb_rel. cbn.
+    rewrite /mem_byte_rel. rewrite /init_block; cbn.
+    simpl. iSplit.
+    { iIntros (???). inversion H0. }
+    { done. } }
 
-(*   (** *Allocate main address *) *)
-(*   (* Allocate at [Addr.main] on target side *) *)
-(*   iCombine ("Ha_t Hst_t Hh_t") as "H". *)
-(*   iPoseProof *)
-(*     (heap_ctx_alloc _ main.1 *)
-(*        DVALUE_None (({[Addr.null.1:=dvalue_to_block DVALUE_None]}, {[Addr.null.1]}) *)
-(*          , Mem.Singleton [Addr.null.1]) [γf] _ _ _ _ _ DTYPE_Void) as "Halloc_t". *)
-(*   { cbn; rewrite lookup_singleton_ne; auto. } *)
-(*   { cbn; set_solver. } *)
-(*   { constructor. } *)
+  iIntros "Hf".
+  iDestruct (heapbij_insert with "Hbij Hv_t Hv_s Hb hb_t hb_s") as ">(Hbij & #Haddr_null)".
 
-(*   rewrite allocaS_eq /allocaS_def. rewrite /stack. *)
-(*   cbn. rewrite !insert_empty !union_empty_r_L. *)
-(*   iSpecialize ("Halloc_t" with "H"). iMod "Halloc_t". *)
+  (** *Allocate main address *)
+  (* Allocate at [Addr.main] on target side *)
+  iCombine ("Ha_t Hst_t Hh_t") as "H".
+  iPoseProof
+    (heap_ctx_alloc _ main.1
+       DVALUE_None (({[Addr.null.1:=dvalue_to_block DVALUE_None]}, {[Addr.null.1]})
+         , Mem.Singleton [Addr.null.1]) [γf] _ _ _ _ _ DTYPE_Void) as "Halloc_t".
+  { cbn; rewrite lookup_singleton_ne; auto. admit. }
+  (* { cbn; set_solver. } *)
+  (* { constructor. } *)
 
-(*   (* Allocate at [Addr.main] on source side *) *)
-(*   iCombine ("Ha_s Hst_s Hh_s") as "H". *)
-(*   iPoseProof *)
-(*     (heap_ctx_alloc _ main.1 *)
-(*        DVALUE_None (({[Addr.null.1:=dvalue_to_block DVALUE_None]}, {[Addr.null.1]}) *)
-(*          , Mem.Singleton [Addr.null.1]) [γf0] _ _ _ _ _ DTYPE_Void) as "Halloc_s". *)
-(*   { cbn; rewrite lookup_singleton_ne; auto. } *)
-(*   { cbn; set_solver. } *)
-(*   { constructor. } *)
+  (* rewrite allocaS_eq /allocaS_def. rewrite /stack. *)
+  (* cbn. rewrite !insert_empty !union_empty_r_L. *)
+  (* iSpecialize ("Halloc_t" with "H"). iMod "Halloc_t". *)
 
-(*   rewrite allocaS_eq /allocaS_def. rewrite /stack. *)
-(*   iSpecialize ("Halloc_s" with "H"). iMod "Halloc_s". *)
+  (* (* Allocate at [Addr.main] on source side *) *)
+  (* iCombine ("Ha_s Hst_s Hh_s") as "H". *)
+  (* iPoseProof *)
+  (*   (heap_ctx_alloc _ main.1 *)
+  (*      DVALUE_None (({[Addr.null.1:=dvalue_to_block DVALUE_None]}, {[Addr.null.1]}) *)
+  (*        , Mem.Singleton [Addr.null.1]) [γf0] _ _ _ _ _ DTYPE_Void) as "Halloc_s". *)
+  (* { cbn; rewrite lookup_singleton_ne; auto. } *)
+  (* { cbn; set_solver. } *)
+  (* { constructor. } *)
 
-(*   iDestruct "Halloc_t" as "(Hh_t & %Hin_t' & Ha_t & Hs_t & Hv_t & hb_t)". *)
-(*   iDestruct "Halloc_s" as "(Hh_s & %Hin_s' & Ha_s & Hs_s & Hv_s & hb_s)". *)
+  (* rewrite allocaS_eq /allocaS_def. rewrite /stack. *)
+  (* iSpecialize ("Halloc_s" with "H"). iMod "Halloc_s". *)
 
-(*   (* Extend global bij *) *)
-(*   rewrite !mapsto_dval_eq /mapsto_dval_def. *)
-(*   iDestruct (heapbij_insert with "Hbij Hv_t Hv_s Hb hb_t hb_s") as ">(H & #Haddr_main)". *)
-(*   iDestruct "Hg_t" as "#Hg_t"; iDestruct "Hg_s" as "#Hg_s". *)
+  (* iDestruct "Halloc_t" as "(Hh_t & %Hin_t' & Ha_t & Hs_t & Hv_t & hb_t)". *)
+  (* iDestruct "Halloc_s" as "(Hh_s & %Hin_s' & Ha_s & Hs_s & Hv_s & hb_s)". *)
 
-(*   iIntros "#Hf". *)
-(*   iDestruct ("Hf" $! Hsh Hc Hhb) as "[Hg _]". *)
+  (* (* Extend global bij *) *)
+  (* rewrite !mapsto_dval_eq /mapsto_dval_def. *)
+  (* iDestruct (heapbij_insert with "Hbij Hv_t Hv_s Hb hb_t hb_s") as ">(H & #Haddr_main)". *)
+  (* iDestruct "Hg_t" as "#Hg_t"; iDestruct "Hg_s" as "#Hg_s". *)
 
-(*   iModIntro. *)
-(*   iExists Hsh, Hhb, Hc. *)
+  (* iSpecialize ("Hf" $! Hvg). *)
+  (* iDestruct  "Hf" as "#Hf". *)
+  (* iModIntro. *)
+  (* iExists Hvg. *)
 
-(*   iSplitR "Hc2 Hs_t Hs_s". *)
-(*   { iExists ∅, {[(main.1, main.1); (Addr.null.1, Addr.null.1)]}, g; iFrame. *)
+  (* iSplitR "Hc2 Hs_t Hs_s". *)
+  (* { iExists ∅, {[(main.1, main.1); (Addr.null.1, Addr.null.1)]}, (vglobal (init_state ds)); iFrame. *)
 
-(*     (* Global init *) *)
-(*     rewrite /spec.globalbij_interp; cbn. *)
-(*     rewrite !globals_eq /globals_def; cbn. iFrame. *)
-(*     iDestruct "Haddr_null" as "(Haddr' & %H')". *)
-(*     iSplitL "". { iPureIntro; set_solver. } *)
-(*     iSplitL "". { iSplitL ""; done. } *)
-(*     iSplitL "". { iPureIntro; set_solver. } *)
-(*     iFrame "Hg_t Hg_s". done. } *)
-(*   rewrite !globals_eq /globals_def. iFrame "Hg_t Hg_s". *)
-(*   iExists γf, γf0; iFrame. *)
-(* Qed. *)
+  (*   (* Global init *) *)
+  (*   rewrite /spec.globalbij_interp; cbn. *)
+  (*   rewrite !globals_eq /globals_def; cbn. iFrame. *)
+  (*   iDestruct "Haddr_null" as "(Haddr' & %H')". *)
+  (*   iSplitL "H". { iPureIntro; set_solver. } *)
+  (*   iSplitL "". { iSplitL ""; done. } *)
+  (*   iSplitL "". { iPureIntro; set_solver. } *)
+  (*   iFrame "Hg_t Hg_s". done. } *)
+  (* rewrite !globals_eq /globals_def. iFrame "Hg_t Hg_s". *)
+  (* iExists γf, γf0; iFrame. *)
 Admitted.
 
 (* The contextual refinement statement, with ghost state instantiated *)
@@ -340,11 +343,13 @@ Lemma contextual_ref `(vellirisGS Σ):
   ∀ e_t e_s γ_t γ_s C decl main,
   (* Well-formedness conditions *)
   ctx_wf C ->
+  fun_WF e_t ->
+  fun_WF e_s ->
   (* The names of the declarations are the same *)
   dc_name (df_prototype e_t) = dc_name (df_prototype e_s) ->
   (* The ghost resources for globals is set up *)
-  (* target_globals (init_global (CFG_names C)) -∗ *)
-  (* source_globals (init_global (CFG_names C)) -∗ *)
+  target_globals (vglobal (init_state (m_declarations C))) -∗
+  source_globals (vglobal (init_state (m_declarations C))) -∗
   (* Hole is logically related *)
   □ (fun_logrel e_t e_s ∅) -∗
   (* Frame resources are set up *)
@@ -355,7 +360,7 @@ Lemma contextual_ref `(vellirisGS Σ):
   [[ (λ x y : uvalue, ⌜obs_val x y⌝) ⤉ ]].
 Proof.
   rename H into H_vgs.
-  iIntros (??????? H_wf WF_name) "#Hfun Hstack".
+  iIntros (??????? H_wf H_wf_t Hwf_s WF_name) "#Hg_t #Hg_s #Hfun Hstack".
 
   (* Access stack resources *)
   iDestruct "Hstack" as "(Hc & Hs_t & Hs_s)".
@@ -381,7 +386,7 @@ Proof.
   (* The mcfg is the same, so the resulting definitions are the same *)
   iApply (sim_expr'_bupd_mono with "[Hc Hfun Hs_t Hs_s]");
     [ | iApply mcfg_definitions_refl' ]; eauto.
-  2-4 : admit.
+  2 : eauto using ctx_wf_implies_CFG_WF.
 
   iIntros (??) "H".
   iDestruct "H" as (????????)
@@ -392,19 +397,17 @@ Proof.
   pose proof (mcfg_definitions_leaf _ _ _ _ _ _ Hl1 Hl2) as Hsame. subst.
   rewrite /mcfg_definitions in Hl1; iClear "Hrel Hlr".
 
-  (* IY: This is the difficult part; WIP version is in [mcfg_contextual.v] *)
-   iApply (contextual_denote_mcfg with "Hfun Hc Hs_t Hs_s").
-Admitted.
-
+  destruct H_wf.
+   iApply (contextual_denote_mcfg with "Hfun Hc Hs_t Hs_s"); eauto.
+Qed.
 
 (** *Top-level soundness theorem *)
-Theorem soundness `{sheapGpreS Σ} `{heapbijGpreS Σ} `{checkedoutGpreS Σ}
+Theorem soundness `{vellirisGpreS Σ}
   e_t e_s main decl:
-  isat (∀ `(sheapGS Σ, checkedoutGS Σ, heapbijGS Σ),
-        <pers> fun_logrel e_t e_s ∅) ->
+  isat (∀ `(vellirisGS Σ), <pers> fun_logrel e_t e_s ∅) ->
   ctx_ref DTYPE_Void main [] (decl, e_t) (decl, e_s).
 Proof.
-  intros Hf C WF WF_name WF_pr.
+  intros Hf C WF WF_t WF_s WF_name WF_pr.
 
   (* Use adequacy to move into the Iris logic *)
   eapply (@adequacy Σ isat); eauto; try typeclasses eauto; eapply sat_mono, Hf. clear Hf.
@@ -412,11 +415,11 @@ Proof.
   iStartProof; iIntros "#Hf".
 
   (* Initialize state interpretation and resources *)
-  iPoseProof (initialize_state_interp with "Hf") as ">SI".
-  iDestruct "SI" as (???) "[SI [#Hg_t [#Hg_s [%γ_t [%γ_s Hc]]]]]".
-  iExists H_sh, H_bij, H_c; iFrame.
-  iSpecialize ("Hf" $! _ _ _).
+  iPoseProof (initialize_state_interp with "Hf") as ">SI"; eauto.
+  iDestruct "SI" as (?) "[SI [#Hg_t [#Hg_s [%γ_t [%γ_s Hc]]]]]".
+  iExists H_sh; iFrame.
+  iSpecialize ("Hf" $! H_sh).
 
   (* Follows by contextual refinement. *)
-  iApply (contextual_ref with "Hg_t Hg_s He Hc"); eauto.
-Admitted.
+  by iApply (contextual_ref with "Hg_t Hg_s Hf Hc").
+Qed.
