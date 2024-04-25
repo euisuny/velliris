@@ -203,26 +203,34 @@ Section logical_relations_def.
       [ l := v_t ]t i_t ∗ [ l := v_s ]s i_s ∗
       uval_rel v_t v_s)).
 
-   Definition expr_logrel C (e_t e_s : itree exp_E uvalue) A_t A_s : iPropI Σ :=
-    (∀ i_t i_s,
-        let m := local_ids e_t ∩ local_ids e_s in
-        let m := filter (fun x y => y ∈ L_s) m in
-        ldomain_tgt i_t L_t ∗
-        ldomain_src i_s L_s ∗
-        expr_inv i_t i_s m ∗ checkout ∅ -∗
-        exp_conv e_t ⪯ exp_conv e_s
+  Definition dummy : raw_id * (local_val * local_val). Admitted.
+
+  Definition expr_logrel_relaxed e_t e_s : iPropI Σ :=
+     (∀ τ i_t i_s,
+        ∃ (L_t L_s : list (raw_id * local_val)),
+        let m : list raw_id :=
+          list_intersection (local_ids e_t) (local_ids e_s) in
+        let m : list (raw_id * (local_val * local_val)) :=
+          List.map
+            (fun (x : raw_id) =>
+               match
+                 FMapAList.alist_find AstLib.eq_dec_raw_id x L_t,
+                 FMapAList.alist_find AstLib.eq_dec_raw_id x L_s with
+                | Some v_t, Some v_s =>
+                    ((x, (v_t, v_s)) : raw_id * (local_val * local_val))
+                | _, _ => dummy
+                end) m
+        in
+        ldomain_tgt i_t (list_to_set L_t.*1) -∗
+        ldomain_src i_s (list_to_set L_s.*1) -∗
+        expr_inv i_t i_s m -∗
+        checkout ∅ -∗
+        exp_conv (denote_exp τ e_t) ⪯ exp_conv (denote_exp τ e_s)
         [{ (v_t, v_s),
             uval_rel v_t v_s ∗
             expr_inv i_t i_s m ∗
             checkout ∅ }])%I.
 
-
-  Definition expr_inv i_t i_s m : iProp Σ :=
-    ∃ (L_t L_s : ,
-     ldomain_tgt i_t (dom L_t) ∗
-     ldomain_src i_s (dom L_s) ∗
-     expr_inv_aux i_t i_s (L_t ∩ L_s)
-     
    Definition code_inv C i_t i_s A_t A_s : iPropI Σ :=
     (∃ (args_t args_s : local_env),
         ldomain_tgt i_t (list_to_set args_t.*1) ∗
