@@ -12,7 +12,7 @@ Set Default Proof Using "Type*".
 
 Section globalbij.
 
-  Context {Σ : gFunctors} `{!sheapGS Σ, !checkedoutGS Σ, !heapbijGS Σ}.
+  Context {Σ : gFunctors} `{!vellirisGS Σ}.
 
   Lemma sim_global_read (f: LLVMAst.global_id) Φ:
     (∀ (v_t v_s : dvalue),

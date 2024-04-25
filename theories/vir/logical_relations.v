@@ -193,8 +193,36 @@ End WF.
 
 Section logical_relations_def.
 
-  Context {Σ} `{!sheapGS Σ, !checkedoutGS Σ, !heapbijGS Σ}.
+  Context {Σ} `{!vellirisGS Σ}.
 
+  Definition local_ids {T} (e : exp T) : list raw_id. Admitted.
+
+  Definition expr_inv i_t i_s m : iProp Σ :=
+     stack_tgt i_t ∗ stack_src i_s ∗ frame_WF i_t i_s ∗
+    (([∗ list] '(l, (v_t, v_s)) ∈ m,
+      [ l := v_t ]t i_t ∗ [ l := v_s ]s i_s ∗
+      uval_rel v_t v_s)).
+
+   Definition expr_logrel C (e_t e_s : itree exp_E uvalue) A_t A_s : iPropI Σ :=
+    (∀ i_t i_s,
+        let m := local_ids e_t ∩ local_ids e_s in
+        let m := filter (fun x y => y ∈ L_s) m in
+        ldomain_tgt i_t L_t ∗
+        ldomain_src i_s L_s ∗
+        expr_inv i_t i_s m ∗ checkout ∅ -∗
+        exp_conv e_t ⪯ exp_conv e_s
+        [{ (v_t, v_s),
+            uval_rel v_t v_s ∗
+            expr_inv i_t i_s m ∗
+            checkout ∅ }])%I.
+
+
+  Definition expr_inv i_t i_s m : iProp Σ :=
+    ∃ (L_t L_s : ,
+     ldomain_tgt i_t (dom L_t) ∗
+     ldomain_src i_s (dom L_s) ∗
+     expr_inv_aux i_t i_s (L_t ∩ L_s)
+     
    Definition code_inv C i_t i_s A_t A_s : iPropI Σ :=
     (∃ (args_t args_s : local_env),
         ldomain_tgt i_t (list_to_set args_t.*1) ∗
@@ -670,6 +698,7 @@ Section logical_relations_properties.
         "(Hlt & Hls & Hv & #Hav & SI & Hf_t & Hf_s & HC & Hs_t & Hs_s & #HWF& Ha_t & Ha_s)".
     iFrame.
 
+    (* TODO: Refactor *)
     destruct (decide (x ∈ (vlocal σ_t).1.*1)).
     {
       assert (exists n v, args_t !! n = Some (x, v)).

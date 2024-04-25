@@ -1122,7 +1122,7 @@ Section CR.
             iDestruct "Hargs" as "(Hargs & %Ha)".
             inversion Ha.
           + iDestruct "Hinner" as (?) "(SI & Hargs & Hinner)".
-            rewrite /call_ev. iExFalso. cbn. destruct C as (?&?).
+            rewrite /call_ev. iExFalso. cbn. destruct C as ((?&?)&?).
             simp vir_call_ev.
             iDestruct "Hargs" as "(#Hdv & Hargs)".
             iDestruct "Hargs" as (??) "H".
@@ -1178,7 +1178,7 @@ Section CR.
             inversion Ha.
           + iDestruct "Hinner" as (?) "(SI & Hargs & Hinner)".
             rewrite /call_ev. iExFalso. cbn.
-            destruct C as (?&?).
+            destruct C as ((?&?)&?).
             simp vir_call_ev.
             iDestruct "Hargs" as "(#Hdv & Hargs)".
             iDestruct "Hargs" as (??) "H".
@@ -1263,12 +1263,12 @@ Section CR.
           iRight. iFrame.
           rewrite /call_ev.
           cbn -[state_interp].
-          destruct C as (?&?).
+          destruct C as ((?&?)&?).
           simp vir_call_ev.
           iDestruct "Hargs" as "(#Hdv & Hargs)".
           iDestruct "Hargs" as (??) "(#Hv & HC & #HWF & Hst & Hss)".
           subst; iFrame.
-          iExists (l, l0).
+          iExists (g0, l, l0).
           iSplitL "Hst Hss HC".
           { simp vir_call_ev. iFrame. inversion H4; subst; eauto. }
 
@@ -1424,11 +1424,11 @@ Section CR.
       by iSpecialize ("IH" with "Hl H_t' H_s'"). }
   Qed.
 
-  Lemma sim_external_call dτ addr_t addr_s args_t args_s l i_t i_s:
+  Lemma sim_external_call dτ addr_t addr_s args_t args_s l i_t i_s C:
     frame_WF i_t i_s -∗
     stack_tgt i_t -∗
     stack_src i_s -∗
-    checkout ∅ -∗
+    checkout C -∗
     dval_rel addr_t addr_s -∗
     ([∗ list] x;y ∈ args_t;args_s, uval_rel x y) -∗
     ⟅ dargs <- map_monad (λ uv : uvalue, pickUnique uv) args_t;;
@@ -1438,7 +1438,7 @@ Section CR.
       trigger (ExternalCall dτ addr_s (map dvalue_to_uvalue dargs) l) ⟆
     [[ (fun x y =>
           uval_rel x y ∗ stack_tgt i_t ∗ stack_src i_s ∗
-          checkout ∅) ⤉ ]].
+          checkout C) ⤉ ]].
   Proof.
     iIntros "#WF Hs_t Hs_s HC #Haddr #Hargs".
     setoid_rewrite interp_bind.
@@ -1463,7 +1463,7 @@ Section CR.
     provide_case: VIS_STEP.
     rewrite /handle_event; cbn -[state_interp]; unfold_cat.
     simp handle_call_events; cbn -[state_interp]. iFrame.
-    iLeft; iExists (i_t, i_s).
+    iLeft; iExists (C,i_t, i_s).
     Transparent arg_val_rel.
     rewrite /call_args_eq; rewrite /arg_val_rel; cbn. iFrame. iSplitL "Haddr".
     { rewrite /call_args_eq; cbn; iFrame.

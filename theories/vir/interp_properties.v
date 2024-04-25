@@ -1282,7 +1282,7 @@ From velliris Require Import vir.spec.
 
 Section vir_sim_expr_util.
 
-  Context {Σ} `{!sheapGS Σ, !checkedoutGS Σ, !heapbijGS Σ}.
+  Context {Σ} `{!vellirisGS Σ}.
 
   Local Open Scope nat_scope.
 

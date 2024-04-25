@@ -86,6 +86,7 @@ Section fundamental_exp.
       iExists _, _; by iFrame. }
    Qed.
 
+  (* TODO: Factor out the [code_inv] into an arbitrary invariant *)
    Lemma expr_logrel_ind_case :
     forall (elts : list (dtyp * exp dtyp)) C i_t i_s A_t A_s Exp,
     □ (uval_rel (Exp []) (Exp [])) -∗

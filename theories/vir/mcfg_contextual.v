@@ -123,10 +123,13 @@ Section mcfg_contextual.
     dval_rel dv dv -∗
     args_rel args args -∗
     vir_call_ev Σ
-    (ExternalCall t dv args []) (ExternalCall t dv args []) (i_t, i_s).
+    (ExternalCall t dv args []) (ExternalCall t dv args []) (∅, i_t, i_s).
   Proof.
     iIntros "(?&?&?&?&?) Hv Huv".
     simp vir_call_ev; iFrame; eauto.
+    simp attribute_interp; cbn.
+    iPureIntro; do 2 (split; eauto).
+    exists OTHER. repeat (split; eauto).
   Qed.
 
   (* Access [frame_WF] predicate out of [frame_inv] *)
@@ -177,7 +180,7 @@ Section mcfg_contextual.
     rewrite /mrec.
     do 2 (iSplitL ""; first done); iFrame "Hrel".
     rewrite /call_ev; cbn -[state_interp].
-    iSpecialize ("Hrel" $! dv dv t t args args (i_t, i_s)).
+    iSpecialize ("Hrel" $! dv dv t t args args (∅, i_t, i_s)).
     iPoseProof (frame_inv_frame_WF with "Hinv") as "%Hframe_WF".
     iPoseProof (vir_call_ev_nil with "Hinv Hdv Hargs") as "Hev".
     iSpecialize ("Hrel" with "Hev SI").
@@ -604,7 +607,7 @@ Section mcfg_contextual.
         specialize (Hft Hf_t).
         iRight; iPureIntro; eauto. } }
   Qed.
-  
+
   (* The contextual refinement on [denote_mcfg]. *)
   Lemma contextual_denote_mcfg :
     ∀ γ_t γ_s addr_t addr_s e_t e_s main F decl,

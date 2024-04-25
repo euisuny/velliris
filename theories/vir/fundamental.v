@@ -122,8 +122,103 @@ Section fundamental.
     iSplitL ""; done.
   Qed.
 
-  Theorem phis_logrel_refl bid (Φ : list (local_id * phi dtyp)) A_t A_s:
-    (⊢ phis_logrel (denote_phis bid Φ) (denote_phis bid Φ) ∅ A_t A_s)%I.
+  Lemma local_write_refl C x v_t v_s i_t i_s A_t A_s:
+    ⊢ code_inv C i_t i_s A_t A_s -∗ uval_rel v_t v_s -∗
+    trigger (LocalWrite x v_t) ⪯ trigger (LocalWrite x v_s)
+      [{ (v1, v2), code_inv C i_t i_s A_t A_s }].
+  Proof.
+    iIntros "CI #Hrel".
+    iApply sim_update_si.
+
+    iIntros "%σ_t %σ_s SI".
+    iDestruct (local_code_inv with "CI SI") as ">H".
+    iDestruct "H" as (?????)
+        "(%Hnd_t & %Hnd_s & Hlt & Hls & Hv & #Ha_v & SI & Hd_t & Hd_s
+          & HC & Hf_t & Hf_s & #WF & Ha_t & Ha_s)".
+    iFrame.
+
+    destruct (decide (x ∈ (vlocal σ_t).1.*1)).
+    {
+      assert (exists n v, args_t !! n = Some (x, v)).
+      { clear -H0 e.
+        eapply (@elem_of_list_to_set raw_id
+                  (@gset raw_id _ _)) in e; last typeclasses eauto.
+        Unshelve. all : try typeclasses eauto.
+        setoid_rewrite <-H0 in e. clear -e.
+        rewrite elem_of_list_to_set in e.
+        by apply elem_of_fst_list_some. }
+
+      assert (exists n v, args_s !! n = Some (x, v)).
+      { rewrite H in H0. clear -H0 e.
+        eapply (@elem_of_list_to_set raw_id
+                  (@gset raw_id _ _)) in e; last typeclasses eauto.
+        Unshelve. all : try typeclasses eauto.
+        setoid_rewrite <-H0 in e. clear -e.
+        rewrite elem_of_list_to_set in e.
+        by apply elem_of_fst_list_some. }
+      destruct H2 as (?&?&?).
+      destruct H3 as (?&?&?).
+
+      iDestruct (lmapsto_no_dup with "Hlt") as "%Hdup_t".
+      iDestruct (lmapsto_no_dup with "Hls") as "%Hdup_s".
+
+      iDestruct (big_sepL_delete with "Hlt") as "(Helemt & Hl_t)"; eauto; cbn.
+      iDestruct (big_sepL_delete with "Hls") as "(Helems & Hl_s)"; eauto; cbn.
+
+      iApply (sim_expr_bupd_mono with "[Hl_t Hl_s Hd_t Hd_s HC Hv Ha_t Ha_s]");
+        [ | iApply (sim_local_write with "Hf_t Hf_s Helemt Helems")].
+      iIntros (??) "Hp".
+      iDestruct "Hp" as (????) "(Ht & Hs & Hf_t & Hf_s)".
+
+      iModIntro. iExists _,_.
+      do 2 (iSplitL ""; [ done | ]); rewrite /CFG_inv.
+
+      pose proof (no_dup_fst_list_some _ _ _ _ _ _ _ Hdup_t Hdup_s H H2 H3); subst.
+      iExists (<[x2 := (x, v_t)]> args_t),
+              (<[x2 := (x, v_s)]> args_s). iFrame.
+
+      setoid_rewrite (big_sepL_delete (fun i '(l_t, v_t1)=> [ l_t := v_t1 ]t i_t) _ x2 (x, v_t))%I; cycle 1.
+      { rewrite list_lookup_insert; eauto.
+        by apply lookup_lt_is_Some. }
+      setoid_rewrite (big_sepL_delete (fun i '(l_t, v_t1)=> [ l_t := v_t1 ]s i_s) _ x2 (x, v_s))%I; cycle 1.
+      { rewrite list_lookup_insert; eauto.
+        by apply lookup_lt_is_Some. }
+      iFrame.
+
+      do 2 (erewrite list_lookup_insert_list_to_set; eauto);
+      rewrite H0 H1; iFrame.
+      iFrame "WF".
+      cbn; rewrite !list_insert_fst.
+      iSplitL ""; first ( iPureIntro; by f_equiv ).
+
+      iSplitL "Hl_t".
+      { by iApply big_sepL_delete_insert. }
+      iSplitL "Hl_s".
+      { by iApply big_sepL_delete_insert. }
+
+      rewrite !list_insert_snd.
+      iSplitR ""; last by iFrame "Ha_v".
+      iApply (big_sepL2_insert args_t.*2 args_s.*2 uval_rel with "Hrel Hv"). }
+
+    { assert (Hn : x ∉ (list_to_set (vlocal σ_t).1.*1 : gset _)) by set_solver.
+      assert (Hn1 : x ∉ (list_to_set (vlocal σ_s).1.*1 : gset _)).
+      { rewrite -H1 -H H0; set_solver. }
+      iApply (sim_expr_bupd_mono with "[HC Ha_t Ha_s Hv Hlt Hls]");
+        [ | iApply (sim_local_write_alloc _ _ _ _ _ _ _ _ Hn Hn1 with "Hd_t Hd_s Hf_t Hf_s")].
+      iIntros (??) "Hp".
+      iDestruct "Hp" as (????) "(Ht & Hs & Hd_t & Hd_s & Hf_t & Hf_s)".
+      iModIntro. iExists _,_.
+      do 2 (iSplitL ""; [ done | ]). rewrite /CFG_inv.
+      iExists ((x, v_t) :: args_t), ((x, v_s) :: args_s); iFrame.
+      cbn. rewrite H0 H1; iFrame.
+      iFrame "WF".
+      iSplitL "".
+      { rewrite H; done. }
+      by iFrame "Hrel Ha_v". }
+  Qed.
+
+  Theorem phis_logrel_refl C bid (Φ : list (local_id * phi dtyp)) A_t A_s:
+    (⊢ phis_logrel (denote_phis bid Φ) (denote_phis bid Φ) C A_t A_s)%I.
   Proof.
     iIntros (? ?) "HI".
     rewrite /instr_conv; cbn.
@@ -295,15 +390,15 @@ Section fundamental.
       rewrite big_sepL2_cons; iFrame. }
   Qed.
 
-  Lemma call_refl v_t v_s e_t e_s d i_t i_s l A_t A_s:
-    code_inv ∅ i_t i_s A_t A_s -∗
+  Lemma call_refl v_t v_s e_t e_s d i_t i_s l A_t A_s C:
+    code_inv C i_t i_s A_t A_s -∗
     dval_rel v_t v_s -∗
     ([∗ list] x_t; x_s ∈ e_t;e_s, uval_rel x_t x_s) -∗
     (trigger (ExternalCall d v_t e_t l))
     ⪯
     (trigger (ExternalCall d v_s e_s l))
     [{ (v_t, v_s), uval_rel v_t v_s ∗
-                     code_inv ∅ i_t i_s A_t A_s }].
+                     code_inv C i_t i_s A_t A_s }].
   Proof.
     iIntros "CI #Hv #He".
 
@@ -341,7 +436,7 @@ Section fundamental.
     simp handle_call_events. iLeft.
     iFrame.
     iDestruct "CI" as (??) "(?&?&Hs_t&Hs_s&#HWF&?&?&?&?&HC&?)".
-    iExists (i_t, i_s).
+    iExists (C, i_t, i_s).
     iSplitL "Hs_t Hs_s HC".
     { rewrite /call_args_eq / arg_val_rel; cbn; iFrame.
       iFrame "HWF".
@@ -358,14 +453,14 @@ Section fundamental.
     iExists _,_; iFrame. done.
   Qed.
 
-  Lemma instr_call_refl fn attrs args id  i_t i_s A_t A_s:
-    ⊢ (code_inv ∅ i_t i_s A_t A_s -∗
+  Lemma instr_call_refl C fn attrs args id  i_t i_s A_t A_s:
+    ⊢ (code_inv C i_t i_s A_t A_s -∗
       instr_conv
        (denote_instr (IId id, INSTR_Call fn args attrs)) ⪯
        instr_conv
        (denote_instr (IId id, INSTR_Call fn args attrs))
        [{ (r_t, r_s),
-           code_inv ∅ i_t i_s A_t A_s }])%I.
+           code_inv C i_t i_s A_t A_s }])%I.
   Proof.
     iIntros "CI".
     cbn; destruct fn.
@@ -425,13 +520,13 @@ Section fundamental.
     iExists _, _; by iFrame.
   Qed.
 
-  Lemma instr_call_void_refl fn args attrs n i_t i_s A_t A_s:
-    ⊢ (code_inv ∅ i_t i_s A_t A_s -∗
+  Lemma instr_call_void_refl C fn args attrs n i_t i_s A_t A_s:
+    ⊢ (code_inv C i_t i_s A_t A_s -∗
       instr_conv
        (denote_instr (IVoid n, INSTR_Call fn args attrs)) ⪯
        instr_conv
        (denote_instr (IVoid n, INSTR_Call fn args attrs))
-       [{ (r_t, r_s), code_inv ∅ i_t i_s A_t A_s }])%I.
+       [{ (r_t, r_s), code_inv C i_t i_s A_t A_s }])%I.
   Proof.
     iIntros "CI".
     cbn; destruct fn.
@@ -484,14 +579,14 @@ Section fundamental.
     iExists _, _; by iFrame.
   Qed.
 
-  Lemma instr_alloca_refl id t nb align i_t i_s A_t A_s :
+  Lemma instr_alloca_refl C id t nb align i_t i_s A_t A_s :
     instr_WF (INSTR_Alloca t nb align) ->
-    code_inv ∅ i_t i_s A_t A_s -∗
+    code_inv C i_t i_s A_t A_s -∗
     instr_conv (denote_instr (IId id, INSTR_Alloca t nb align))
     ⪯
     instr_conv (denote_instr (IId id, INSTR_Alloca t nb align))
     [{ (r_t, r_s),
-        ∃ l_t l_s, code_inv ∅ i_t i_s (l_t:: A_t) (l_s:: A_s)}].
+        ∃ l_t l_s, code_inv C i_t i_s (l_t:: A_t) (l_s:: A_s)}].
   Proof.
     iIntros (WF) "CI".
     rewrite /instr_conv interp_bind.

@@ -29,6 +29,7 @@ Section proof.
         alloca_src i ({[ z ]} ∪ S_s) -∗
         stack_src i -∗
         source_block_size z (Some (N.to_nat (sizeof_dtyp τ))) -∗
+        (* TODO: Change - Ψ (DVALUE_Addr (z, 0%Z))*)
         source_red (η := vir_handler) (Ret (DVALUE_Addr (z, 0%Z))) Ψ) -∗
     source_red (η := vir_handler) (trigger (Alloca τ)) Ψ.
   Proof.
@@ -452,7 +453,6 @@ Section proof.
     iExists _, _; iFrame; done.
   Qed.
 
-  (* TODO: More WIP repair *)
   Lemma source_red_store v v' l Ψ:
     length (serialize_dvalue v) = length (serialize_dvalue v') ->
     l ↦s v -∗
@@ -888,6 +888,7 @@ Section proof.
     iExists C, S, G; iFrame. rewrite Hlocal_t Hlocal_s; iFrame.
   Qed.
 
+  (* TODO: Term [alloc] is misleading; rename *)
   Lemma target_local_write_alloc
     (x : LLVMAst.raw_id) (v : uvalue) L i Φ :
     x ∉ L ->
