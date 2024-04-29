@@ -150,11 +150,17 @@ Section logical_relations_def.
   (* ------------------------------------------------------------------------ *)
   (** *Invariants *)
   (* Invariant for expressions. *)
-  Definition expr_inv i_t i_s m : iProp Σ :=
+  Definition expr_frame_inv i_t i_s m : iProp Σ :=
      stack_tgt i_t ∗ stack_src i_s ∗ frame_WF i_t i_s ∗
     (([∗ list] '(l, (v_t, v_s)) ∈ m,
       [ l := v_t ]t i_t ∗ [ l := v_s ]s i_s ∗
       uval_rel v_t v_s)).
+
+  Definition expr_inv {T} i_t i_s L_t L_s (e_t e_s : exp T) : iProp Σ :=
+    ldomain_tgt i_t (list_to_set L_t.*1) ∗
+    ldomain_src i_s (list_to_set L_s.*1) ∗
+    expr_frame_inv i_t i_s (filter_local_ids L_t L_s e_t e_s) ∗
+    checkout ∅.
 
   (* Invariant for codes. *)
    Definition code_inv C i_t i_s A_t A_s : iPropI Σ :=
@@ -202,16 +208,12 @@ Section logical_relations_def.
 
   (* Relaxed logical relation for expressions TODO comment *)
   Definition expr_logrel_relaxed e_t e_s : iPropI Σ :=
-    (∀ τ i_t i_s (L_t L_s : local_env),
-      ldomain_tgt i_t (list_to_set L_t.*1) -∗
-      ldomain_src i_s (list_to_set L_s.*1) -∗
-      expr_inv i_t i_s (filter_local_ids L_t L_s e_t e_s) -∗
-      checkout ∅ -∗
+    (∀ τ (i_t i_s : list frame_names) (L_t L_s : local_env),
+      expr_inv i_t i_s L_t L_s e_t e_s -∗
       exp_conv (denote_exp τ e_t) ⪯ exp_conv (denote_exp τ e_s)
       [{ (v_t, v_s),
           uval_rel v_t v_s ∗
-          expr_inv i_t i_s (filter_local_ids L_t L_s e_t e_s) ∗
-          checkout ∅ }])%I.
+          expr_inv i_t i_s L_t L_s e_t e_s }])%I.
 
    Definition term_logrel ϒ_t ϒ_s C : iPropI Σ :=
     (∀ i_t i_s A_t A_s,
@@ -339,7 +341,54 @@ Section logical_relations_properties.
 
   Context {Σ : gFunctors} `{!vellirisGS Σ}.
 
-  (* Useful properties for preserving [CFG_inv] *)
+  (* Useful properties for preserving [*_inv] *)
+  Lemma local_expr_inv {T} σ_t σ_s i_t i_s L_t L_s (e_t e_s: _ T):
+    ⊢ expr_inv i_t i_s L_t L_s e_t e_s -∗
+    state_interp σ_t σ_s ==∗
+      state_interp σ_t σ_s ∗
+      (([∗ list] '(l, (v_t, v_s)) ∈ (filter_local_ids L_t L_s e_t e_s),
+      [ l := v_t ]t i_t ∗ [ l := v_s ]s i_s ∗
+      uval_rel v_t v_s)) ∗
+      ⌜(list_to_set L_t.*1 : gset _) =
+        (list_to_set (vlocal σ_t).1.*1 : gset _)⌝ ∗
+      ⌜(list_to_set L_s.*1 : gset _) =
+        (list_to_set (vlocal σ_s).1.*1 : gset _)⌝ ∗
+      ldomain_tgt i_t (list_to_set (vlocal σ_t).1.*1) ∗
+      ldomain_src i_s (list_to_set (vlocal σ_s).1.*1) ∗
+      checkout ∅ ∗
+      stack_tgt i_t ∗ stack_src i_s ∗
+      frame_WF i_t i_s.
+  Proof.
+    iIntros "CI SI".
+    iDestruct "SI" as (???) "(Hh_s & Hh_t & H_c & Hbij & %Hdom_c & SI)".
+    iDestruct "CI" as  "(Hd_t & Hd_s & (Hf_t & Hf_s & WF & Harg) & HC)".
+
+    destruct_HC "Hh_s".
+
+    iDestruct "Hh_t" as (cft hFt)
+        "(Hσ_t&HB_t&HCF_t&HA_t&HL_t&HD_t&HSA_t&HG_t&%Hdup_t&%Hbs_t&%Hwf_t)".
+
+    iDestruct (ghost_var_agree with "Hf_s HCF") as %Hf_s.
+    iDestruct (ghost_var_agree with "Hf_t HCF_t") as %Hf_t. subst.
+    iDestruct (ghost_var_agree with "Hd_s HD") as %Hd_s.
+    iDestruct (ghost_var_agree with "Hd_t HD_t") as %Hd_t.
+    iDestruct (ghost_var_agree with "HC H_c") as %Hc.
+    iFrame.
+
+    subst.
+    iSplitL
+      "Hd_t Hf_t Hd_s Hf_s HA HL HSA Hb HA_t HL_t HSA_t HG_t HG H_c Hbij HB_t".
+    { repeat iExists _; iFrame "Hbij".
+      iSplitR "Hd_t Hf_t HA_t HL_t HSA_t H_c HG_t HB_t".
+      - iExists cf, _; rewrite Hd_s; iFrame.
+        done.
+      - iFrame "H_c"; iSplitR ""; last done.
+        iExists cft, _; rewrite Hd_t; iFrame.
+        done. }
+
+    done.
+  Qed.
+
   Lemma local_code_inv σ_t σ_s C i_t i_s A_t A_s:
     ⊢ code_inv C i_t i_s A_t A_s -∗
     state_interp σ_t σ_s ==∗
@@ -619,6 +668,73 @@ Section logical_relations_properties.
       iExists ((x, v_t) :: args_t), ((x, v_s) :: args_s); iFrame.
       cbn. rewrite H0 H1; iFrame.
       rewrite H; iSplit; done. }
+  Qed.
+
+  (* Utility lemmas TODO Move *)
+  Lemma nodup_filter_local_ids {T} L_t L_s (e_t e_s : exp T):
+    NoDup ((filter_local_ids L_t L_s e_t e_s).*1).
+  Proof. Admitted.
+
+  Lemma lookup_filter_local_ids {T} {L_t L_s n m x v_t v_s} (e_t e_s : exp T):
+    L_t !! n = Some (x, v_t) ->
+    L_s !! m = Some (x, v_s) ->
+    exists i, filter_local_ids L_t L_s e_t e_s !! i = Some (x, (v_t, v_s)).
+  Proof. Admitted.
+
+  Lemma expr_local_read_refl {T} x i_t i_s L_t L_s (e_t e_s : exp T):
+    x ∈ L_t.*1 ->
+    x ∈ L_s.*1 ->
+    ⊢ expr_inv i_t i_s L_t L_s e_t e_s -∗
+    trigger (LocalRead x) ⪯ trigger (LocalRead x)
+      [{ (v1, v2), uval_rel v1 v2 ∗ expr_inv i_t i_s L_t L_s e_t e_s }].
+  Proof.
+    iIntros (Hx_t Hx_s) "CI".
+    iApply sim_update_si.
+
+    iIntros "%σ_t %σ_s SI".
+    iDestruct (local_expr_inv with "CI SI") as ">H".
+    iDestruct "H" as
+        "(SI & Hv & %Ht & %Hs & Hd_t & Hd_s & HC & Hs_t & Hs_s & Hwf)".
+    iFrame.
+
+    assert (e: x ∈ (vlocal σ_t).1.*1).
+    { set_solver. }
+
+    assert (HL_t: exists n v, L_t !! n = Some (x, v)).
+    { eapply (@elem_of_list_to_set raw_id (@gset local_loc _ _)) in e.
+      Unshelve. all : try typeclasses eauto.
+      setoid_rewrite <-Ht in e. clear -e.
+      rewrite elem_of_list_to_set in e.
+      by apply elem_of_fst_list_some. }
+
+    assert (es: x ∈ (vlocal σ_s).1.*1) by set_solver.
+
+    assert (HL_s: exists n v, L_s !! n = Some (x, v)).
+    { eapply (@elem_of_list_to_set raw_id (@gset local_loc _ _)) in e.
+      Unshelve. all : try typeclasses eauto.
+      setoid_rewrite <-Ht in e.
+      rewrite elem_of_list_to_set in e.
+      by apply elem_of_fst_list_some. }
+
+    destruct HL_t as (?&?&HL_t).
+    destruct HL_s as (?&?&HL_s).
+
+    destruct (lookup_filter_local_ids e_t e_s HL_t HL_s) as (?&?).
+
+    iDestruct (big_sepL_delete with "Hv") as "(Helemt & Hl_t)"; eauto; cbn.
+    iDestruct "Helemt" as "(Helemt & Helems & #Hv)".
+
+    iApply (sim_expr_bupd_mono with "[Hd_t Hd_s HC Hwf Hv Hl_t]");
+      [ | iApply (sim_local_read with "Helemt Helems Hs_t Hs_s")].
+    iIntros (??) "Hp".
+    iDestruct "Hp" as (????) "(%Ht' & %Hs' & Ht' & Hs' & Hf_t' & Hf_s')";
+      subst.
+    iModIntro. iExists _,_.
+    do 2 (iSplitL ""; [ done | ]).
+    iFrame.
+    rewrite Ht Hs; iFrame.
+
+    setoid_rewrite big_sepL_delete at 2; eauto; iFrame; iFrame "Hv".
   Qed.
 
   Lemma local_read_refl C x i_t i_s A_t A_s:
