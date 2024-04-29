@@ -1942,57 +1942,6 @@ Section mem_rel.
        ∃ v', ⌜lookup k m_t = Some v'⌝ ∗ val_rel v' v) ∗
     ⌜∀ k, lookup k m_s = None -> lookup k m_t = None⌝.
 
-  (* Non-zero size dynamic types (with non-zero size fields for struct types)
-    that are supported for memory read/writes *)
-  Inductive dtyp_WF : dtyp → Prop :=
-      dtyp_WF_I1 : dtyp_WF (DTYPE_I 1)
-    | dtyp_WF_I8 : dtyp_WF (DTYPE_I 8)
-    | dtyp_WF_I32 : dtyp_WF (DTYPE_I 32)
-    | dtyp_WF_I64 : dtyp_WF (DTYPE_I 64)
-    | dtyp_WF_Pointer : dtyp_WF DTYPE_Pointer
-    | dtyp_WF_Float : dtyp_WF DTYPE_Float
-    | dtyp_WF_Double : dtyp_WF DTYPE_Double
-    | dtyp_WF_Array :
-      ∀ (sz : N) (τ : dtyp),
-        dtyp_WF τ →
-        sz <> 0%N ->
-        dtyp_WF (DTYPE_Array sz τ)
-    | dtyp_WF_Struct :
-      ∀ fields : list dtyp,
-        length fields <> 0 ->
-        Forall dtyp_WF fields →
-        dtyp_WF (DTYPE_Struct fields).
-
-  Lemma dtyp_WF_implies_is_supported τ:
-    dtyp_WF τ -> is_supported τ.
-  Proof.
-    induction τ; intros.
-    1-11: inversion H; constructor; eauto.
-    1,3: inversion H; constructor; eauto.
-    inversion H0; constructor; eauto; subst.
-      rewrite Forall_forall in H3.
-      rewrite Forall_forall; intros.
-      specialize (H3 _ H1).
-      eapply H; eauto.
-      by rewrite -elem_of_list_In.
-  Qed.
-
-  Lemma dtyp_WF_size_nonzero τ :
-    dtyp_WF τ ->
-    sizeof_dtyp τ <> 0%N.
-  Proof.
-    induction 0; cbn; eauto; try lia; inversion 1; subst; eauto.
-    { specialize (IHτ H2). lia. }
-    { rewrite List.Forall_forall in H3.
-      induction fields; [ done | ].
-      cbn in *.
-      rewrite fold_sizeof.
-
-      assert (sizeof_dtyp a <> 0%N).
-      { eapply H; eauto. }
-      lia. }
-  Qed.
-
   Definition mem_read_rel (m_t m_s : mem_block) : iPropI Σ :=
     (∀ τ o,
       ⌜dtyp_WF τ⌝ -∗

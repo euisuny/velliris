@@ -517,3 +517,8 @@ Ltac simp_instr :=
 Notation "⟅ e ⟆" := (L0'expr_conv e).
 Notation " e ⤉" := (lift_post e) (at level 50).
 Notation "⟦ e ⟧ σ" := (interp_L2 vir_handler e σ) (at level 50).
+
+(* FIXME: Why isn't this notation readily available here? *)
+(* Notation "et '⪯' es [[ Φ ]]" := *)
+(*   (sim_expr' (η := vir_handler) Φ et es) (at level 70, Φ at level 200, *)
+(*         format "'[hv' et  '/' '⪯' '/' es  '/' [[  '[ ' Φ  ']' ]] ']'") : bi_scope. *)

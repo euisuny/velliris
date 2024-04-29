@@ -5,7 +5,7 @@ From stdpp Require Import gmap.
 From Vellvm Require Import
   Syntax.DynamicTypes Handlers Utils.Util.
 
-From velliris Require Import vir.util.
+From velliris Require Import vir.util utils.tactics.
 
 (* Misc. Utilities for vir *)
 
@@ -24,6 +24,137 @@ Qed.
 Definition lb_mem (b : logical_block) : mem_block :=
   match b with
     | LBlock _ m _ => m
+  end.
+
+(* ------------------------------------------------------------------------ *)
+(* Utilities for [dtyp] *)
+
+(* Well-formedness for dynamic types. *)
+
+(* Non-zero size dynamic types (with non-zero size fields for struct types)
+  that are supported for memory read/writes *)
+Inductive dtyp_WF : dtyp → Prop :=
+    dtyp_WF_I1 : dtyp_WF (DTYPE_I 1)
+  | dtyp_WF_I8 : dtyp_WF (DTYPE_I 8)
+  | dtyp_WF_I32 : dtyp_WF (DTYPE_I 32)
+  | dtyp_WF_I64 : dtyp_WF (DTYPE_I 64)
+  | dtyp_WF_Pointer : dtyp_WF DTYPE_Pointer
+  | dtyp_WF_Float : dtyp_WF DTYPE_Float
+  | dtyp_WF_Double : dtyp_WF DTYPE_Double
+  | dtyp_WF_Array :
+    ∀ (sz : N) (τ : dtyp),
+      dtyp_WF τ →
+      sz <> 0%N ->
+      dtyp_WF (DTYPE_Array sz τ)
+  | dtyp_WF_Struct :
+    ∀ fields : list dtyp,
+      length fields <> 0 ->
+      Forall dtyp_WF fields →
+      dtyp_WF (DTYPE_Struct fields).
+
+Lemma dtyp_WF_implies_is_supported τ:
+  dtyp_WF τ -> is_supported τ.
+Proof.
+  induction τ; intros.
+  1-11: inversion H; constructor; eauto.
+  1,3: inversion H; constructor; eauto.
+  inversion H0; constructor; eauto; subst.
+    rewrite Forall_forall in H3.
+    rewrite Forall_forall; intros.
+    specialize (H3 _ H1).
+    eapply H; eauto.
+    by rewrite -elem_of_list_In.
+Qed.
+
+Lemma dtyp_WF_size_nonzero τ :
+  dtyp_WF τ ->
+  sizeof_dtyp τ <> 0%N.
+Proof.
+  induction 0; cbn; eauto; try lia; inversion 1; subst; eauto.
+  { specialize (IHτ H2). lia. }
+  { rewrite List.Forall_forall in H3.
+    induction fields; [ done | ].
+    cbn in *.
+    rewrite fold_sizeof.
+
+    assert (sizeof_dtyp a <> 0%N).
+    { eapply H; eauto. }
+    lia. }
+Qed.
+
+Fixpoint dtyp_WF_b (d : dtyp) : bool :=
+  match d with
+  | DTYPE_I 1
+  | DTYPE_I 8
+  | DTYPE_I 32
+  | DTYPE_I 64
+  | DTYPE_Pointer
+  | DTYPE_Float
+  | DTYPE_Double => true
+  | DTYPE_Array sz τ => dtyp_WF_b τ && negb (N.eqb sz 0)
+  | DTYPE_Struct (x :: tl) => dtyp_WF_b x && forallb dtyp_WF_b tl
+  | _ => false
+  end.
+
+Lemma dtyp_WF_b_dtyp_WF d :
+  dtyp_WF_b d = true <-> dtyp_WF d.
+Proof.
+  split; intros; induction d; try constructor;
+    cbn in *; destruct_match; try constructor;
+    inversion H; eauto.
+  { apply IHd.
+    apply andb_prop in H1; destruct H1; auto. }
+  { apply andb_prop in H; destruct H; auto.
+    rewrite negb_true_iff in H0.
+    intro. rewrite -N.eqb_eq in H2.
+    rewrite H0 in H2; inversion H2. }
+  { apply andb_prop in H; destruct H; auto.
+    apply H0; eauto. apply in_eq. }
+  { apply andb_prop in H; destruct H; auto.
+    clear H2 H3. revert d H0 H.
+    induction l; eauto; cbn. cbn in H1.
+    apply andb_prop in H1; destruct H1; auto.
+    intros; rewrite Forall_cons; split; eauto. }
+  { subst. specialize (IHd H2).
+    apply andb_true_intro; split; eauto.
+    rewrite negb_true_iff.
+    red in H3.
+    rewrite -N.eqb_eq in H3.
+    destruct ((sz =? 0)%N); eauto.
+    exfalso; done. }
+  subst. induction fields; eauto.
+  rewrite Forall_cons in H3. destruct H3.
+  apply andb_true_intro; split.
+  { apply H0; eauto. apply in_eq. }
+  { destruct fields; eauto.
+    cbn. apply IHfields; eauto.
+    { intros ; eapply H0; eauto.
+      by apply in_cons. }
+    { constructor; eauto. } }
+Qed.
+
+Definition non_void_b (d : dtyp) : bool :=
+  match d with
+  | DTYPE_Void => false
+  | _ => true
+  end.
+
+Lemma non_void_b_non_void d :
+  non_void_b d = true <-> non_void d.
+Proof.
+  split; unfold non_void_b; cbn; intros; destruct d;
+    eauto; done.
+Qed.
+
+(* ------------------------------------------------------------------------ *)
+(* Utilities for [raw_id] *)
+
+Definition raw_id_eqb (x y : raw_id) : bool :=
+  match x, y with
+  | Name x, Name y => (x =? y)%string
+  | Anon x, Anon y => (x =? y)%Z
+  | Raw x, Raw y => (x =? y)%Z
+  | _, _ => false
   end.
 
 (* ------------------------------------------------------------------------ *)
@@ -156,7 +287,7 @@ Proof.
   assert (a ∈ mf') by set_solver.
 
   assert (NoDup (remove Z.eq_dec a mf')).
-  { by apply NoDup_remove. }
+  { by apply util.NoDup_remove. }
   symmetry in H4.
   specialize (IHmf _ H3 H6 H4).
   symmetry.
@@ -189,7 +320,7 @@ Proof.
     2 : set_solver.
     2 : rewrite list_to_set_delete_from_frame; set_solver.
     done. }
-  assert (NoDup (remove Z.eq_dec a mf')) by (by apply NoDup_remove).
+  assert (NoDup (remove Z.eq_dec a mf')) by (by apply util.NoDup_remove).
 
   specialize (IHmf _ (delete a l, u) H4 H6 H5).
   inversion IHmf.
@@ -249,7 +380,7 @@ Definition disjoint_keys {A} : relation (list (dvalue * A)) :=
   fun fundefs fundefs' =>
     doesnt_include_keys fundefs fundefs' /\ doesnt_include_keys fundefs' fundefs.
 
-
+(* ------------------------------------------------------------------------ *)
 (* Util lemmas about uvalues and dvalues *)
 Lemma uvalue_to_dvalue_list :
   forall fields,

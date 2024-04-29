@@ -126,7 +126,32 @@ Proof.
       f_equiv. by eapply IHl.
 Qed.
 
+Fixpoint list_eqb (l l' : list dvalue): bool :=
+  match l, l' with
+    | nil, nil => true
+    | x :: tl, x' :: tl' =>
+        Coqlib.proj_sumbool (@dvalue_eq_dec x x') && list_eqb tl tl'
+    | _ , _ => false
+  end.
+
+Lemma list_eqb_eq l l' :
+  list_eqb l l' <-> l = l'.
+Proof.
+  split; revert l'; induction l; cbn;
+    destruct l'; intros; try done.
+  { apply andb_prop_elim in H. destruct H.
+    destruct (Coqlib.proj_sumbool dvalue_eq_dec) eqn: H'; try done.
+    apply Coqlib.proj_sumbool_true in H'; subst.
+    f_equiv; eauto. }
+  { inv H.
+    specialize (IHl _ eq_refl).
+    destruct (list_eqb l' l'); try done.
+    compute.
+    destruct (dvalue_eq_dec (d1:=d) (d2:=d)) eqn: Hd; eauto. }
+Qed.
+
 (* [alist]-related util functions *)
+
 
 Lemma alist_find_app_some {A} f l1 l2 (d : A):
   (FMapAList.alist_find AstLib.eq_dec_raw_id f (l1 ++ l2) = Some d <->
@@ -409,6 +434,309 @@ Proof.
   eapply alist_to_gmap_none; eauto.
 Qed.
 
+Lemma alist_add_domain_stable:
+  ∀ (L : local_env) (l : local_loc) (v v': local_val),
+    (list_to_map L : gmap _ _) !! l = Some v ->
+    (list_to_set (FMapAList.alist_add AstLib.eq_dec_raw_id l v' L).*1 =
+                  (list_to_set L.*1 : gset _)).
+Proof.
+  induction L; [ intros; inversion H | ].
+  intros. cbn in H. cbn.
+  assert
+    (Haux: forall a : LLVMAst.raw_id,
+      list_to_set
+      (List.filter (λ x : LLVMAst.raw_id * uvalue, negb (RelDec.rel_dec a x.1)) L).*1 =
+      list_to_set L.*1 ∖ ({[ a ]} : gset _)).
+  { clear. induction L.
+    - cbn; intros.
+      by rewrite difference_disjoint_L.
+    - intros. cbn.
+      destruct (RelDec.rel_dec a0 a.1) eqn: Ha.
+      { rewrite RelDec.rel_dec_correct in Ha; rewrite Ha.
+        set_solver. }
+      { cbn. rewrite difference_union_distr_l_L.
+        rewrite difference_disjoint_L; cycle 1.
+        { apply disjoint_singleton_r.
+          apply not_elem_of_singleton_2.
+          by rewrite RelDec.neg_rel_dec_correct. }
+        by rewrite IHL. } }
+  destruct (RelDec.rel_dec l a.1) eqn: Ha.
+  { rewrite RelDec.rel_dec_correct in Ha; subst.
+    rewrite Util.eq_dec_eq.
+    cbn. rewrite lookup_insert in H.
+    rewrite Haux. clear.
+
+    destruct (decide (a.1 ∈ (list_to_set L.*1 : gset _))).
+    { rewrite -union_difference_singleton_L; eauto.
+      set_solver. }
+    { set_solver. } }
+
+  { rewrite Ha; cbn.
+    rewrite -RelDec.neg_rel_dec_correct in Ha.
+    rewrite lookup_insert_ne in H; eauto.
+    specialize (IHL _ _ v' H).
+    rewrite Haux.
+    assert (l ∈ (list_to_set L.*1 : gset _)). { set_solver. }
+    clear -Ha H0.
+    assert ({[l]} ∪ ({[a.1]} ∪ list_to_set L.*1 ∖ {[l]}) =
+            {[l]} ∪ ({[a.1]} ∪ list_to_set L.*1) ∖ ({[l]} : gset _)).
+    { set_solver. }
+    rewrite H.
+    rewrite -union_difference_singleton_L; eauto.
+    set_solver. }
+Qed.
+
+Lemma fold_left_delete_comm {K} `{!EqDecision K} `{!Countable K}
+  `{Countable K} (f : list K) a {A} (m : gmap K A):
+  fold_left (fun m key => base.delete key m) f (base.delete a m) =
+  base.delete a (fold_left (fun m key => base.delete key m) f m).
+Proof.
+  revert a m.
+  induction f; cbn; auto.
+  intros.
+  setoid_rewrite delete_commute. by rewrite IHf.
+Qed.
+
+Lemma foldl_delete_comm {K} `{!EqDecision K} `{!Countable K}
+  `{Countable K} (f : list K) a {A} (m : gmap K A):
+  foldl (fun m key => base.delete key m) (base.delete a m) f =
+  base.delete a (foldl (fun m key => base.delete key m) m f).
+Proof.
+  revert a m.
+  induction f; cbn; auto.
+  intros.
+  setoid_rewrite delete_commute. by rewrite IHf.
+Qed.
+
+Instance foldl_proper {A B}
+  `{LeibnizEquiv A}
+  : Proper
+    ((@equiv A _ ==> @eq B ==> @equiv A _) ==>
+        eq ==> @equiv A _  ==> @equiv A _) (@fold_left A B).
+Proof.
+  repeat intro; subst.
+  revert x y x1 y1 H1 H3.
+  induction y0; cbn; eauto.
+  intros; eauto.
+  apply IHy0; eauto.
+  apply H1; eauto.
+Qed.
+
+Lemma fold_delete_some_L:
+  ∀ (K : Type) (EqDecision0 : EqDecision K) (Countable0 : 
+      Countable K) 
+    (A : cmra) (a : K) (f : list K),
+    a ∉ f
+    → ∀ (m2 : gmap K A) (x : A),
+      m2 !! a = Some x
+      → fold_left (λ (m : gmap K A) (key : K), delete key m) f m2
+          !! a = Some x.
+Proof.
+  intros K EqDecision0 Countable0 A a f; revert a.
+  induction f; cbn; intros; eauto.
+  apply not_elem_of_cons in H.
+  destruct H; eauto.
+  apply IHf; eauto.
+  by rewrite lookup_delete_ne.
+Qed.
+
+Lemma fold_delete_some:
+  ∀ (K : Type) (EqDecision0 : EqDecision K) (Countable0 : 
+      Countable K) 
+    (A : cmra) (a : K) (f : list K),
+    a ∉ f
+    → ∀ (m2 : gmap K A) (x : A),
+      m2 !! a ≡ Some x
+      → fold_left (λ (m : gmap K A) (key : K), delete key m) f m2
+          !! a ≡ Some x.
+Proof.
+  intros K EqDecision0 Countable0 A a f; revert a.
+  induction f; cbn; intros; eauto.
+  apply not_elem_of_cons in H.
+  destruct H; eauto.
+  apply IHf; eauto.
+  by rewrite lookup_delete_ne.
+Qed.
+
+Lemma delete_local_update'
+  `{!EqDecision K} `{!Countable K} {A : cmra}
+  (m1 m2 : gmap K A) i x `{!Exclusive x} :
+  m2 !! i ≡ Some x → (m1, m2) ~l~> (delete i m1, delete i m2).
+Proof.
+  intros Hi. apply local_update_unital=> n mf Hmv Hm; simpl in *.
+  split; auto using delete_validN.
+  { by apply delete_validN. }
+  rewrite Hm=> j; destruct (decide (i = j)) as [<-|].
+  - rewrite lookup_op !lookup_delete left_id symmetry_iff dist_None.
+    apply eq_None_not_Some=> -[y Hi'].
+    move: (Hmv i). rewrite Hm lookup_op Hi Hi' -Some_op. by apply exclusiveN_l.
+  - by rewrite lookup_op !lookup_delete_ne // lookup_op.
+Qed.
+
+Lemma delete_fold_local_update (K : Type)
+  `{!EqDecision K} `{!Countable K}
+  {A : cmra} (m1 m2 : gmap K A) (f : list K):
+  NoDup f ->
+  (∀ i, i ∈ f -> ∃ x, m2 !! i ≡ Some x /\ Exclusive x) ->
+  (m1, m2) ~l~>
+  (fold_left (fun m key => base.delete key m) f m1,
+    fold_left (fun m key => base.delete key m) f m2).
+Proof.
+  intros Hnd H. revert m1 m2 H.
+  induction f; [ by intros | ].
+  intros; cbn. apply NoDup_cons in Hnd.
+  destruct Hnd as (?&?).
+  etrans; [ eapply (IHf _ m1 m2); eauto | ].
+  { intros. eapply H. rewrite elem_of_cons; by right. }
+  do 2 rewrite fold_left_delete_comm.
+  assert (Helem: a ∈ a :: f) by set_solver.
+  destruct (H _ Helem) as (?&?&?).
+  eapply delete_local_update'; eauto.
+  apply fold_delete_some; eauto.
+  Unshelve. all :eauto.
+Qed.
+
+Lemma delete_fold_local_update_L (K : Type)
+  `{!EqDecision K} `{!Countable K}
+  {A : cmra}
+  (m1 m2 : gmap K A) (f : list K):
+  NoDup f ->
+  (∀ i, i ∈ f -> ∃ x, m2 !! i = Some x /\ Exclusive x) ->
+  (m1, m2) ~l~>
+  (fold_left (fun m key => base.delete key m) f m1,
+    fold_left (fun m key => base.delete key m) f m2).
+Proof.
+  intros Hnd H. revert m1 m2 H.
+  induction f; [ by intros | ].
+  intros; cbn. apply NoDup_cons in Hnd.
+  destruct Hnd as (?&?).
+  etrans; [ eapply (IHf _ m1 m2); eauto | ].
+  { intros. eapply H. rewrite elem_of_cons; by right. }
+  do 2 rewrite fold_left_delete_comm.
+  assert (Helem: a ∈ a :: f) by set_solver.
+  destruct (H _ Helem) as (?&?&?).
+  eapply delete_local_update; eauto.
+  apply fold_delete_some_L; eauto.
+  Unshelve. all :eauto.
+Qed.
+
+Lemma big_opM_fold_left_delete_domain {A B}
+  {EqDec : EqDecision A} {Cont: Countable A}
+  {LE: LeibnizEquiv (gmapUR A (prodR fracR (agreeR B)))}
+  (d : list A) (m : gmap A B) :
+  NoDup d ->
+  dom m ≡ list_to_set d ->
+  fold_left (fun m k => base.delete k m) d
+    ([^op map] k↦x ∈ m, ({[k := (1%Qp, to_agree x)]}) : gmapUR _ _)
+    ≡ (ε : gmapUR _ _).
+Proof.
+  revert m.
+  induction d.
+  { intros.
+    apply dom_empty_inv in H0; subst; cbn.
+    by rewrite big_opM_empty. }
+  intros; cbn.
+  rewrite fold_left_delete_comm.
+
+  cbn in H0.
+  apply dom_union_inv in H0; cycle 1.
+  { rewrite NoDup_cons in H. destruct H as (?&?).
+    set_solver. }
+  destruct H0 as (?&?&?&?&?&?); subst.
+  apply NoDup_cons in H. destruct H.
+  specialize (IHd x0 H0 H3). cbn in IHd.
+  rewrite <- IHd.
+
+  apply dom_singleton_inv in H2; destruct H2 as (?&?); subst.
+  rewrite -fold_left_delete_comm.
+  eapply foldl_proper; try done.
+  { repeat intro; subst; by rewrite H2. }
+  rewrite big_opM_union; eauto.
+  rewrite {1} /op /cmra_op; cbn -[op].
+  rewrite /ucmra_op ; cbn -[op].
+  rewrite /gmap_op_instance ; cbn -[op].
+  rewrite delete_merge.
+  rewrite big_opM_singleton. rewrite delete_singleton.
+  rewrite merge_empty_l.
+  rewrite /compose {1} /op /cmra_op; cbn.
+  rewrite delete_notin; cycle 1.
+  { clear IHd H3 H.
+    revert a x1 H1.
+    induction x0 using map_ind; cbn.
+    - rewrite big_opM_empty. set_solver.
+    - pose proof (big_opM_insert
+        (fun k x => {[ k := (1%Qp, to_agree x)]} ) _ i x H) as H'.
+      repeat red in H'. intros.
+      specialize (H' a).
+      inversion H'; cycle 1.
+      { symmetry; done. }
+      { assert ({[a := x1]} ##ₘ m). {
+          rewrite map_disjoint_insert_r in H1.
+          destruct H1; done. }
+        specialize (IHx0 _ _ H5).
+        rewrite lookup_op in H3.
+        rewrite IHx0 in H3.
+        rewrite lookup_singleton_ne in H3; first inversion H3.
+        clear -H1.
+        apply map_disjoint_dom_1 in H1; cbn in H1.
+        rewrite dom_singleton in H1.
+        rewrite dom_insert in H1.
+        set_solver. } }
+
+  repeat red. intros.
+  rewrite lookup_omap.
+  destruct (([^ op map] k↦y ∈ x0, {[k := (1%Qp, to_agree y)]}) !! i);
+    simpl; by constructor.
+Qed.
+
+Lemma big_opM_delete_singleton_lookup
+  {K B} (A : cmra) `{Countable K} `{!EqDecision K} `{!Countable K}
+    (m : gmap K B) (f : _ -> A) (i z: K):
+  i <> z ->
+  ([^ op map] k↦y ∈ base.delete i m, {[k := f y]}) !! z ≡
+  ([^ op map] k↦y ∈ m, {[k := f y]}) !! z.
+Proof.
+  revert i z f.
+  induction m using map_ind; intros; cbn.
+  { rewrite delete_empty. rewrite big_opM_empty.
+    by rewrite lookup_empty. }
+  { intros. destruct (decide (i = i0)).
+    { subst. rewrite !delete_insert_delete.
+
+      assert (([^ op map] k↦y ∈ <[i0:=x]> m, {[k := f y]}) ≡
+        {[i0 := f x]} ⋅ ([^ op map] k↦y ∈ delete i0 m, {[k := f y]})).
+      { rewrite big_opM_insert; eauto.
+        rewrite delete_notin; eauto. }
+      repeat red in H2. specialize (H2 z).
+      inversion H2; subst.
+      { rewrite lookup_op in H4.
+        rewrite lookup_singleton_ne in H4; eauto.
+        rewrite op_None_left_id in H4.
+        rewrite -H4. rewrite -H3. f_equiv. by symmetry. }
+      { rewrite lookup_op in H5.
+        rewrite lookup_singleton_ne in H5; eauto.
+        rewrite op_None_left_id in H5.
+        rewrite -H4. rewrite -H5. done. } }
+    { rewrite delete_insert_ne; auto.
+      assert (([^ op map] k↦y ∈ <[i:=x]> (delete i0 m), {[k := f y]}) ≡
+        {[i := f x]} ⋅ ([^ op map] k↦y ∈ delete i0 m, {[k := f y]})).
+      { rewrite big_opM_insert; eauto.
+        rewrite lookup_delete_ne; eauto. }
+      do 7 red in H2.
+      rewrite H2. clear H2.
+
+      assert (([^ op map] k↦y ∈ <[i:=x]> m, {[k := f y]}) ≡
+        {[i := f x]} ⋅ ([^ op map] k↦y ∈ m, {[k := f y]})).
+      { by rewrite big_opM_insert. }
+
+      do 7 red in H2.
+      rewrite H2. clear H2.
+
+      rewrite !lookup_op.
+      f_equiv. by eapply IHm. } }
+Qed.
+
+(* ------------------------------------------------------------------------ *)
 (* Some utility lemmas *)
 
 Lemma combine_fst {A B} (l : list A) (l' : list B) :
@@ -448,17 +776,6 @@ Proof.
 Qed.
 
 (* Utility functions about fold *)
-
-Lemma fold_left_delete_comm {A K} `{!EqDecision K} `{!Countable K}
-(f : list K) a (m : gmap K A):
-  fold_left (fun m key => base.delete key m) f (base.delete a m) =
-  base.delete a (fold_left (fun m key => base.delete key m) f m).
-Proof.
-  revert a m.
-  induction f; cbn; auto.
-  intros.
-  rewrite delete_commute. by rewrite IHf.
-Qed.
 
 Lemma fold_delete_distr {A B} `{Countable A} `{EQA:EqDecision A}:
   forall a (d : list A) (m : gmap A B),
@@ -858,32 +1175,6 @@ Proof.
   iDestruct (big_sepL2_cons_inv_l with "Hl") as (???) "(HΦ' & Hl')".
   subst; cbn.
   iFrame. iApply ("IH" with "HΦ Hl'").
-Qed.
-
-Lemma big_opM_delete_singleton_lookup
-  {K B} (A : cmra) `{Countable K} `{!EqDecision K} `{!Countable K}
-    (m : gmap K B) (f : _ -> A) (i : K):
-  ([^ op map] k↦y ∈ base.delete i m, {[k := f y]}) !! i = None.
-Proof.
-  induction m using map_ind; cbn.
-  { rewrite delete_empty. rewrite big_opM_empty.
-    by rewrite lookup_empty. }
-  { destruct (decide  (i = i0)).
-    { subst. by rewrite delete_insert_delete. }
-    { rewrite delete_insert_ne; auto.
-      assert (([^ op map] k↦y ∈ <[i0:=x]> (base.delete i m), {[k := f y]}) ≡
-        {[i0 := f x]} ⋅ ([^ op map] k↦y ∈ base.delete i m, {[k := f y]})).
-      { rewrite big_opM_insert; eauto.
-        rewrite lookup_delete_ne; eauto. }
-      repeat red in H1.
-      specialize (H1 i). inversion H1; subst.
-      { rewrite lookup_op in H3.
-        rewrite IHm in H3.
-        rewrite op_None_right_id in H3.
-        assert (i0 <> i) by auto.
-        apply (lookup_singleton_ne i0 i (f x)) in H5.
-        rewrite H5 in H3; inversion H3. }
-      { by rewrite -H3. } } }
 Qed.
 
 Lemma alist_find_dom_None' {A} (id : LLVMAst.raw_id) (l : list (_ * A)) :
