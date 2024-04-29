@@ -90,6 +90,9 @@ Section logical_relations_def.
 
   Context {Σ} `{!vellirisGS Σ}.
 
+(* ------------------------------------------------------------------------ *)
+  (* Auxiliary definitions for stating invariants for logical relation. *)
+
   (* Collect the local ids that occur in an expression [e]. *)
   Fixpoint exp_local_ids_ {T} (e : exp T) (acc : list raw_id) : list raw_id :=
     match e with
@@ -111,6 +114,41 @@ Section logical_relations_def.
   Definition dummy : raw_id * (local_val * local_val) :=
     (Name "dummy", (UVALUE_None, UVALUE_None)).
 
+  Definition empty_WF :
+    gmap (loc * loc) Qp → gmap raw_id uvalue → gmap raw_id uvalue → Prop :=
+    fun _ _ _ => True.
+
+  (* Filter keys from local environment *)
+  Definition filter_keys m L_t L_s :=
+    List.map
+      (fun (x : raw_id) =>
+          match
+            FMapAList.alist_find AstLib.eq_dec_raw_id x L_t,
+            FMapAList.alist_find AstLib.eq_dec_raw_id x L_s with
+          | Some v_t, Some v_s =>
+              ((x, (v_t, v_s)) : raw_id * (local_val * local_val))
+          | _, _ => dummy
+          end) m.
+
+  (* Given the current local environments, filter out the elements
+    that exist in both the source and target local environments. *)
+  Definition filter_local_ids {T} (L_t L_s : local_env) (e_t e_s : exp T) :=
+    let m := list_intersection (exp_local_ids e_t) (exp_local_ids e_s) in
+    filter_keys m L_t L_s.
+
+  (* Helper functions for [mcfg]. *)
+  Definition address_one_function (df : definition dtyp (CFG.cfg dtyp)) :
+    itree LLVMEvents.L0 (dvalue * definition dtyp (CFG.cfg dtyp)) :=
+    let fid := (dc_name (df_prototype df)) in
+    fv <- trigger (GlobalRead fid) ;;
+    Ret (fv, df).
+
+  Definition mcfg_definitions (mcfg : CFG.mcfg dtyp) :
+    itree LLVMEvents.L0 (list (dvalue * _)) :=
+     (Util.map_monad address_one_function (CFG.m_definitions mcfg)).
+
+  (* ------------------------------------------------------------------------ *)
+  (** *Invariants *)
   (* Invariant for expressions. *)
   Definition expr_inv i_t i_s m : iProp Σ :=
      stack_tgt i_t ∗ stack_src i_s ∗ frame_WF i_t i_s ∗
@@ -118,32 +156,7 @@ Section logical_relations_def.
       [ l := v_t ]t i_t ∗ [ l := v_s ]s i_s ∗
       uval_rel v_t v_s)).
 
-  Definition expr_logrel_relaxed e_t e_s : iPropI Σ :=
-     (∀ τ i_t i_s,
-        ∃ (L_t L_s : list (raw_id * local_val)),
-        let m : list raw_id :=
-          list_intersection (local_ids e_t) (local_ids e_s) in
-        let m : list (raw_id * (local_val * local_val)) :=
-          List.map
-            (fun (x : raw_id) =>
-               match
-                 FMapAList.alist_find AstLib.eq_dec_raw_id x L_t,
-                 FMapAList.alist_find AstLib.eq_dec_raw_id x L_s with
-                | Some v_t, Some v_s =>
-                    ((x, (v_t, v_s)) : raw_id * (local_val * local_val))
-                | _, _ => dummy
-                end) m
-        in
-        ldomain_tgt i_t (list_to_set L_t.*1) -∗
-        ldomain_src i_s (list_to_set L_s.*1) -∗
-        expr_inv i_t i_s m -∗
-        checkout ∅ -∗
-        exp_conv (denote_exp τ e_t) ⪯ exp_conv (denote_exp τ e_s)
-        [{ (v_t, v_s),
-            uval_rel v_t v_s ∗
-            expr_inv i_t i_s m ∗
-            checkout ∅ }])%I.
-
+  (* Invariant for codes. *)
    Definition code_inv C i_t i_s A_t A_s : iPropI Σ :=
     (∃ (args_t args_s : local_env),
         ldomain_tgt i_t (list_to_set args_t.*1) ∗
@@ -161,6 +174,12 @@ Section logical_relations_def.
       ([∗ list] v_t; v_s ∈ A_t;A_s, (v_t, 0%Z) ↔h (v_s, 0%Z) ∗
            ⌜C !! (v_t, v_s) = None⌝))%I.
 
+   (* Postcondition that states monotonically increasing alloca set. *)
+   Definition code_inv_post C i_t i_s A_t A_s : iPropI Σ:=
+    (∃ nA_t nA_s,
+      code_inv C i_t i_s (nA_t ++ A_t) (nA_s ++ A_s))%I.
+
+  (* Invariant for CFG. *)
    Definition CFG_inv C i_t i_s : iPropI Σ :=
     (∃ args_t args_s,
         ldomain_tgt i_t (list_to_set args_t.*1) ∗
@@ -172,15 +191,27 @@ Section logical_relations_def.
        ([∗ list] v_t; v_s ∈ args_t.*2;args_s.*2, uval_rel v_t v_s) ∗
      checkout C ∗ alloca_tgt i_t ∅ ∗ alloca_src i_s ∅)%I.
 
-  Definition empty_WF :
-    gmap (loc * loc) Qp → gmap raw_id uvalue → gmap raw_id uvalue → Prop :=
-    fun _ _ _ => True.
+  (* ------------------------------------------------------------------------ *)
+   (** *Logical relations *)
 
    Definition expr_logrel C (e_t e_s : itree exp_E uvalue) A_t A_s : iPropI Σ :=
     (∀ i_t i_s, code_inv C i_t i_s A_t A_s -∗
         exp_conv e_t ⪯ exp_conv e_s
         [{ (v_t, v_s),
             uval_rel v_t v_s ∗ code_inv C i_t i_s A_t A_s }])%I.
+
+  (* Relaxed logical relation for expressions TODO comment *)
+  Definition expr_logrel_relaxed e_t e_s : iPropI Σ :=
+    (∀ τ i_t i_s (L_t L_s : local_env),
+      ldomain_tgt i_t (list_to_set L_t.*1) -∗
+      ldomain_src i_s (list_to_set L_s.*1) -∗
+      expr_inv i_t i_s (filter_local_ids L_t L_s e_t e_s) -∗
+      checkout ∅ -∗
+      exp_conv (denote_exp τ e_t) ⪯ exp_conv (denote_exp τ e_s)
+      [{ (v_t, v_s),
+          uval_rel v_t v_s ∗
+          expr_inv i_t i_s (filter_local_ids L_t L_s e_t e_s) ∗
+          checkout ∅ }])%I.
 
    Definition term_logrel ϒ_t ϒ_s C : iPropI Σ :=
     (∀ i_t i_s A_t A_s,
@@ -195,10 +226,6 @@ Section logical_relations_def.
                         | inr v_t, inr v_s => uval_rel v_t v_s
                         | _, _ => False
                         end}])%I.
-
-   Definition code_inv_post C i_t i_s A_t A_s : iPropI Σ:=
-    (∃ nA_t nA_s,
-      code_inv C i_t i_s (nA_t ++ A_t) (nA_s ++ A_s))%I.
 
    Definition instr_logrel id_t e_t id_s e_s C A_t A_s
      : iPropI Σ :=
@@ -305,16 +332,6 @@ Section logical_relations_def.
         [[ fun v_t v_s =>
               ∃ r_t r_s, ⌜v_t = Ret r_t⌝ ∗ ⌜v_s = Ret r_s⌝ ∗
                 stack_tgt i_t ∗ stack_src i_s ∗ checkout C ∗ uval_rel r_t r_s]])%I.
-
-  Definition address_one_function (df : definition dtyp (CFG.cfg dtyp)) :
-    itree LLVMEvents.L0 (dvalue * definition dtyp (CFG.cfg dtyp)) :=
-    let fid := (dc_name (df_prototype df)) in
-    fv <- trigger (GlobalRead fid) ;;
-    Ret (fv, df).
-
-  Definition mcfg_definitions (mcfg : CFG.mcfg dtyp) :
-    itree LLVMEvents.L0 (list (dvalue * _)) :=
-     (Util.map_monad address_one_function (CFG.m_definitions mcfg)).
 
 End logical_relations_def.
 
