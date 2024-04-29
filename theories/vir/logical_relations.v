@@ -104,8 +104,8 @@ Section logical_relations_def.
     | OP_Conversion _ _ v _ =>
         exp_local_ids_ v acc
     | OP_GetElementPtr _ (_, e) l =>
-        exp_local_ids_ e acc ++
-        List.concat (List.map (fun x => exp_local_ids_ x.2 nil) l)
+        exp_local_ids_ e nil ++
+        List.concat (List.map (fun x => exp_local_ids_ x.2 nil) l) ++ acc
     | _ => acc
     end.
 
@@ -150,17 +150,19 @@ Section logical_relations_def.
   (* ------------------------------------------------------------------------ *)
   (** *Invariants *)
   (* Invariant for expressions. *)
-  Definition expr_frame_inv i_t i_s m : iProp Σ :=
-     stack_tgt i_t ∗ stack_src i_s ∗ frame_WF i_t i_s ∗
-    (([∗ list] '(l, (v_t, v_s)) ∈ m,
-      [ l := v_t ]t i_t ∗ [ l := v_s ]s i_s ∗
-      uval_rel v_t v_s)).
-
-  Definition expr_inv {T} i_t i_s L_t L_s (e_t e_s : exp T) : iProp Σ :=
+  Definition expr_frame_inv i_t i_s (L_t L_s : local_env) : iProp Σ :=
+    stack_tgt i_t ∗ stack_src i_s ∗ frame_WF i_t i_s ∗
     ldomain_tgt i_t (list_to_set L_t.*1) ∗
     ldomain_src i_s (list_to_set L_s.*1) ∗
-    expr_frame_inv i_t i_s (filter_local_ids L_t L_s e_t e_s) ∗
     checkout ∅.
+
+  Definition expr_local_env_inv i_t i_s m :=
+    ([∗ list] '(l, (v_t, v_s)) ∈ m,
+      [ l := v_t ]t i_t ∗ [ l := v_s ]s i_s ∗ uval_rel v_t v_s)%I.
+
+  Definition expr_inv {T} i_t i_s L_t L_s (e_t e_s : exp T) : iProp Σ :=
+    expr_frame_inv i_t i_s L_t L_s ∗
+    expr_local_env_inv i_t i_s (filter_local_ids L_t L_s e_t e_s).
 
   (* Invariant for codes. *)
    Definition code_inv C i_t i_s A_t A_s : iPropI Σ :=
@@ -361,7 +363,7 @@ Section logical_relations_properties.
   Proof.
     iIntros "CI SI".
     iDestruct "SI" as (???) "(Hh_s & Hh_t & H_c & Hbij & %Hdom_c & SI)".
-    iDestruct "CI" as  "(Hd_t & Hd_s & (Hf_t & Hf_s & WF & Harg) & HC)".
+    iDestruct "CI" as  "((Hf_t & Hf_s & WF & Hd_t & Hd_s & HC) & Harg)".
 
     destruct_HC "Hh_s".
 
