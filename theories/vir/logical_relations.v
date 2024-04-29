@@ -24,15 +24,6 @@ Set Default Proof Using "Type*".
 Import ListNotations.
 Import SemNotations.
 
-(* FIXME: Why isn't this notation readily available here? *)
-Notation "et '⪯' es [[ Φ ]]" :=
-  (sim_expr' (η := vir_handler) Φ et es) (at level 70, Φ at level 200,
-        format "'[hv' et  '/' '⪯' '/' es  '/' [[  '[ ' Φ  ']' ]] ']'") : bi_scope.
-
-Ltac simp_instr :=
-  rewrite /subevent /resum /ReSum_inr /cat /Cat_IFun /inr_ /Inr_sum1;
-  simp instrE_conv.
-
 Section WF.
 
   Local Open Scope nat_scope.
@@ -47,78 +38,6 @@ Section WF.
       | TERM_Switch (τ, e) bid l => true
       (* Unsupported terminators *)
       | _ => false
-    end.
-
-  Fixpoint dtyp_WF_b (d : dtyp) : bool :=
-    match d with
-    | DTYPE_I 1
-    | DTYPE_I 8
-    | DTYPE_I 32
-    | DTYPE_I 64
-    | DTYPE_Pointer
-    | DTYPE_Float
-    | DTYPE_Double => true
-    | DTYPE_Array sz τ => dtyp_WF_b τ && negb (N.eqb sz 0)
-    | DTYPE_Struct (x :: tl) => dtyp_WF_b x && forallb dtyp_WF_b tl
-    | _ => false
-    end.
-
-  Lemma dtyp_WF_b_dtyp_WF d :
-    dtyp_WF_b d = true <-> dtyp_WF d.
-  Proof.
-    split; intros; induction d; try constructor;
-      cbn in *; destruct_match; try constructor;
-      inversion H; eauto.
-    { apply IHd.
-      apply andb_prop in H1; destruct H1; auto. }
-    { apply andb_prop in H; destruct H; auto.
-      rewrite negb_true_iff in H0.
-      intro. rewrite -N.eqb_eq in H2.
-      rewrite H0 in H2; inversion H2. }
-    { apply andb_prop in H; destruct H; auto.
-      apply H0; eauto. apply in_eq. }
-    { apply andb_prop in H; destruct H; auto.
-      clear H2 H3. revert d H0 H.
-      induction l; eauto; cbn. cbn in H1.
-      apply andb_prop in H1; destruct H1; auto.
-      intros; rewrite Forall_cons; split; eauto. }
-    { subst. specialize (IHd H2).
-      apply andb_true_intro; split; eauto.
-      rewrite negb_true_iff.
-      red in H3.
-      rewrite -N.eqb_eq in H3.
-      destruct ((sz =? 0)%N); eauto.
-      exfalso; done. }
-    subst. induction fields; eauto.
-    rewrite Forall_cons in H3. destruct H3.
-    apply andb_true_intro; split.
-    { apply H0; eauto. apply in_eq. }
-    { destruct fields; eauto.
-      cbn. apply IHfields; eauto.
-      { intros ; eapply H0; eauto.
-        by apply in_cons. }
-      { constructor; eauto. } }
-  Qed.
-
-  Definition non_void_b (d : dtyp) : bool :=
-    match d with
-    | DTYPE_Void => false
-    | _ => true
-    end.
-
-  Lemma non_void_b_non_void d :
-    non_void_b d = true <-> non_void d.
-  Proof.
-    split; unfold non_void_b; cbn; intros; destruct d;
-      eauto; done.
-  Qed.
-
-  Definition raw_id_eqb (x y : raw_id) : bool :=
-    match x, y with
-    | Name x, Name y => (x =? y)%string
-    | Anon x, Anon y => (x =? y)%Z
-    | Raw x, Raw y => (x =? y)%Z
-    | _, _ => false
     end.
 
   Definition instr_WF (i : instr dtyp) :=
@@ -154,30 +73,6 @@ Section WF.
     forallb (fun '(_, f) => fun_WF f) F &&
     NoDup_b F.*1.
 
-  Fixpoint list_eqb (l l' : list dvalue): bool :=
-    match l, l' with
-      | nil, nil => true
-      | x :: tl, x' :: tl' =>
-          Coqlib.proj_sumbool (@dvalue_eq_dec x x') && list_eqb tl tl'
-      | _ , _ => false
-    end.
-
-  Lemma list_eqb_eq l l' :
-    list_eqb l l' <-> l = l'.
-  Proof.
-    split; revert l'; induction l; cbn;
-      destruct l'; intros; try done.
-    { apply andb_prop_elim in H. destruct H.
-      destruct (Coqlib.proj_sumbool dvalue_eq_dec) eqn: H'; try done.
-      apply Coqlib.proj_sumbool_true in H'; subst.
-      f_equiv; eauto. }
-    { inv H.
-      specialize (IHl _ eq_refl).
-      destruct (list_eqb l' l'); try done.
-      compute.
-      destruct (dvalue_eq_dec (d1:=d) (d2:=d)) eqn: Hd; eauto. }
-  Qed.
-
   Lemma fundefs_WF_cons_inv f F a Attr:
     fundefs_WF (f :: F) (a :: Attr) ->
     fundefs_WF [f] [a] /\ fundefs_WF F Attr.
@@ -195,15 +90,33 @@ Section logical_relations_def.
 
   Context {Σ} `{!vellirisGS Σ}.
 
-  Definition local_ids {T} (e : exp T) : list raw_id. Admitted.
+  (* Collect the local ids that occur in an expression [e]. *)
+  Fixpoint exp_local_ids_ {T} (e : exp T) (acc : list raw_id) : list raw_id :=
+    match e with
+    | EXP_Ident (ID_Local i) => i :: acc
+    | EXP_Cstring l | EXP_Struct l | EXP_Array l =>
+       List.concat (List.map (fun x => exp_local_ids_ x.2 nil) l) ++ acc
+    | OP_IBinop _ _ v1 v2 | OP_ICmp _ _ v1 v2 =>
+        exp_local_ids_ v1 (exp_local_ids_ v2 acc)
+    | OP_Conversion _ _ v _ =>
+        exp_local_ids_ v acc
+    | OP_GetElementPtr _ (_, e) l =>
+        exp_local_ids_ e acc ++
+        List.concat (List.map (fun x => exp_local_ids_ x.2 nil) l)
+    | _ => acc
+    end.
 
+  Definition exp_local_ids {T} (e : exp T) := exp_local_ids_ e nil.
+
+  Definition dummy : raw_id * (local_val * local_val) :=
+    (Name "dummy", (UVALUE_None, UVALUE_None)).
+
+  (* Invariant for expressions. *)
   Definition expr_inv i_t i_s m : iProp Σ :=
      stack_tgt i_t ∗ stack_src i_s ∗ frame_WF i_t i_s ∗
     (([∗ list] '(l, (v_t, v_s)) ∈ m,
       [ l := v_t ]t i_t ∗ [ l := v_s ]s i_s ∗
       uval_rel v_t v_s)).
-
-  Definition dummy : raw_id * (local_val * local_val). Admitted.
 
   Definition expr_logrel_relaxed e_t e_s : iPropI Σ :=
      (∀ τ i_t i_s,
