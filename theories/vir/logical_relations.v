@@ -437,6 +437,59 @@ Section logical_relations_properties.
     rewrite !intersection_local_ids_eq; iFrame.
   Qed.
 
+  Lemma expr_local_env_inv_big_opL {T : Set}
+    i_t i_s L_t L_s (l : list (T * exp T)):
+    ([∗ list] x ∈ l, expr_local_env_inv i_t i_s (exp_local_ids x.2) L_t L_s) ⊣⊢
+    expr_local_env_inv i_t i_s
+      (concat (map (λ x, exp_local_ids_ x.2 []) l))
+      L_t L_s.
+  Proof.
+    iInduction l as [ | ] "IH"; cbn; try done.
+    iSplit.
+    { iIntros "(H1&H2)".
+      iApply (expr_local_env_inv_app with "H1").
+      iApply ("IH" with "H2"). }
+    { iIntros "H".
+      iDestruct (expr_local_env_inv_app_invert with "H") as "(H1 & H2)".
+      iFrame.
+      iApply ("IH" with "H2"). }
+  Qed.
+
+  (* ------------------------------------------------------------------------ *)
+  (* Expression-specific [expr-inv] properties *)
+  Lemma expr_inv_op_conversion:
+    ∀ (conv : conversion_type)
+      (t_from t_to : dtyp)
+      (e : exp dtyp)
+      (i_t i_s : list frame_names)
+      (L_t L_s : local_env),
+      expr_inv i_t i_s L_t L_s
+        (OP_Conversion conv t_from e t_to)
+        (OP_Conversion conv t_from e t_to) -∗
+      expr_inv i_t i_s L_t L_s e e.
+  Proof.
+    iIntros (????????) "H"; done.
+  Qed.
+
+  Lemma expr_inv_op_gep_invert:
+    ∀ {T} i_t i_s L_t L_s t ptr_t (e : exp T) dt,
+      expr_inv i_t i_s L_t L_s
+        (OP_GetElementPtr t (ptr_t, e) dt)
+        (OP_GetElementPtr t (ptr_t, e) dt) -∗
+      expr_inv i_t i_s L_t L_s e e ∗
+    ([∗ list] x ∈ dt,
+      expr_local_env_inv i_t i_s (exp_local_ids x.2) L_t L_s).
+  Proof.
+    iIntros (?????????) "(Hf & Helts)".
+    rewrite /expr_inv !intersection_local_ids_eq; iFrame.
+
+    cbn -[expr_local_env_inv].
+    iDestruct (expr_local_env_inv_app_invert with "Helts") as "(He & Helts)".
+    iFrame.
+    iApply expr_local_env_inv_big_opL.
+    by rewrite app_nil_r.
+  Qed.
+
   (* [expr inv] inversion and cons rule for [struct]-y expressions *)
 
   (* EXP_Cstring *)
