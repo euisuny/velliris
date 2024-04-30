@@ -112,7 +112,8 @@ Section fundamental_exp.
       [ set_solver | set_solver | ].
 
       iApply sim_expr_bupd_mono ;
-        [ | iApply (expr_local_read_refl with "HC")]; eauto.
+        [ | iApply (expr_local_read_refl with "HC")]; eauto; cycle 1.
+      { cbn; case_decide; set_solver. }
       iIntros (??) "H".
       iDestruct "H" as (????) "H".
       rewrite H H0. rewrite !bind_ret_l.
@@ -131,10 +132,10 @@ Section fundamental_exp.
       uval_rel (Vexp l_t) (Vexp l_s) -∗
       uval_rel (Vexp (v_t :: l_t)) (Vexp (v_s :: l_s))) -∗
     (* [expr_inv] over the struct values *)
-    □ (expr_inv i_t i_s L_t L_s (Exp elts) (Exp elts) -∗
-       expr_frame_inv i_t i_s L_t L_s ∗
-        (∀ x, ⌜In x elts⌝ -∗
-          expr_local_env_inv i_t i_s (filter_local_ids L_t L_s x.2 x.2))) -∗
+    (* □ (expr_inv i_t i_s L_t L_s (Exp elts) (Exp elts) -∗ *)
+    (*    expr_frame_inv i_t i_s L_t L_s ∗ *)
+    (*     (∀ x, ⌜In x elts⌝ -∗ *)
+    (*       expr_local_env_inv i_t i_s (filter_local_ids L_t L_s x.2 x.2))) -∗ *)
     □ (∀ x : dtyp * exp dtyp,
       ⌜In x elts⌝
       → ∀ (a : option dtyp) (a0 : gmap (vir.loc * vir.loc) Qp),
@@ -153,28 +154,28 @@ Section fundamental_exp.
         uval_rel v_t v_s ∗
           expr_inv i_t i_s L_t L_s (Exp elts) (Exp elts) }].
   Proof.
-    iIntros (elts i_t i_s L_t L_s Vexp Exp) "#Hbase #Hind #Hinvp #IH HI".
-    rewrite /exp_conv.
-    (* We follow by induction on the structure elements. *)
-    iInduction elts as [] "IHl".
-    (* nil case *)
-    { cbn; rewrite interp_ret bind_ret_l.
-      iApply sim_expr_base; iExists _, _; iFrame;
-      iSplitL ""; [ | iSplitL ""]; try (iPureIntro; reflexivity); done. }
-    (* cons case *)
-    { cbn. destruct a. rewrite /exp_conv.
-      rewrite interp_bind bind_bind.
-      iApply sim_expr_bind.
-      iAssert (□
-        (∀ x : dtyp * exp dtyp,
-          ⌜In x elts⌝ →
-          ∀ (a : option dtyp) (a0 : gmap (vir.loc * vir.loc) Qp),
-            expr_inv i_t i_s L_t L_s x.2 x.2 -∗
-            exp_conv (denote_exp a x.2) ⪯ exp_conv (denote_exp a x.2)
-        [{ (v_t, v_s), uval_rel v_t v_s ∗ expr_inv i_t i_s L_t L_s x.2 x.2  }]))%I as "#Helts".
-      { iModIntro. iIntros (x Hin dt' l') "Hinv".
-        assert ((d, e) = x \/ In x elts) by (by right).
-        by iSpecialize ("IH" $! _ H _  l' with "Hinv"). }
+    (* iIntros (elts i_t i_s L_t L_s Vexp Exp) "#Hbase #Hind #Hinvp #IH HI". *)
+    (* rewrite /exp_conv. *)
+    (* (* We follow by induction on the structure elements. *) *)
+    (* iInduction elts as [] "IHl". *)
+    (* (* nil case *) *)
+    (* { cbn; rewrite interp_ret bind_ret_l. *)
+    (*   iApply sim_expr_base; iExists _, _; iFrame; *)
+    (*   iSplitL ""; [ | iSplitL ""]; try (iPureIntro; reflexivity); done. } *)
+    (* (* cons case *) *)
+    (* { cbn. destruct a. rewrite /exp_conv. *)
+    (*   rewrite interp_bind bind_bind. *)
+    (*   iApply sim_expr_bind. *)
+    (*   iAssert (□ *)
+    (*     (∀ x : dtyp * exp dtyp, *)
+    (*       ⌜In x elts⌝ → *)
+    (*       ∀ (a : option dtyp) (a0 : gmap (vir.loc * vir.loc) Qp), *)
+    (*         expr_inv i_t i_s L_t L_s x.2 x.2 -∗ *)
+    (*         exp_conv (denote_exp a x.2) ⪯ exp_conv (denote_exp a x.2) *)
+    (*     [{ (v_t, v_s), uval_rel v_t v_s ∗ expr_inv i_t i_s L_t L_s x.2 x.2  }]))%I as "#Helts". *)
+    (*   { iModIntro. iIntros (x Hin dt' l') "Hinv". *)
+    (*     assert ((d, e) = x \/ In x elts) by (by right). *)
+    (*     by iSpecialize ("IH" $! _ H _  l' with "Hinv"). } *)
 
   (*     iSpecialize ("IHl" with "Helts"); iClear "Helts". *)
   (*     assert (EQ: (d, e) = (d, e) ∨ In (d, e) elts) by (left; auto). *)
@@ -379,27 +380,9 @@ Section fundamental_exp.
     apply list_intersection_subset; set_solver.
   Qed.
 
-  (* TODO Move: lemma about filter keys *)
-  Lemma filter_keys_nil L_t L_s :
-    filter_keys nil L_t L_s = nil.
-  Proof. done. Qed.
-
-  Lemma filter_keys_cons x l L_t L_s :
-    filter_keys (x :: l) L_t L_s =
-    filter_keys [x] L_t L_s ++
-    filter_keys l L_t L_s.
-  Proof.
-    revert x; induction l; intros.
-    { by rewrite filter_keys_nil app_nil_r. }
-
-    rewrite IHl {1 2}/filter_keys; cbn -[filter_keys].
-  Admitted.
-
-  Opaque filter_keys.
-
   (* TODO Move: more about [expr_local_env_inv] *)
-  Lemma expr_local_env_inv_nil i_t i_s :
-    (expr_local_env_inv i_t i_s [] ⊣⊢ emp)%I.
+  Lemma expr_local_env_inv_nil i_t i_s L_t L_s:
+    (expr_local_env_inv i_t i_s [] L_t L_s ⊣⊢ emp)%I.
   Proof.
     rewrite /expr_local_env_inv; by cbn.
   Qed.
@@ -407,40 +390,47 @@ Section fundamental_exp.
   Lemma expr_local_env_inv_binop_invert
     {T} i_t i_s L_t L_s τ iop (e1 e2: exp T):
     expr_local_env_inv i_t i_s
-      (filter_local_ids L_t L_s
-        (OP_IBinop iop τ e1 e2) (OP_IBinop iop τ e1 e2)) -∗
+      (intersection_local_ids
+        (OP_IBinop iop τ e1 e2) (OP_IBinop iop τ e1 e2)) L_t L_s -∗
     expr_local_env_inv i_t i_s
-      (filter_keys (exp_local_ids e1 ++ exp_local_ids e2) L_t L_s).
+      (exp_local_ids e1 ++ exp_local_ids e2) L_t L_s.
   Proof.
-    rewrite {1}/filter_local_ids; cbn -[filter_keys]; iIntros "Hv".
+    rewrite /expr_local_env_inv; cbn.
     repeat rewrite exp_local_ids_acc_commute; rewrite app_nil_r.
-    by rewrite /filter_local_ids list_intersection_eq.
+    rewrite list_intersection_eq.
+    by iIntros "H".
   Qed.
 
   Lemma expr_local_env_inv_cons_invert i_t i_s L_t L_s x l:
-    expr_local_env_inv i_t i_s (filter_keys (x :: l) L_t L_s) -∗
-    expr_local_env_inv i_t i_s (filter_keys [x] L_t L_s) ∗
-    expr_local_env_inv i_t i_s (filter_keys l L_t L_s).
+    expr_local_env_inv i_t i_s (x :: l) L_t L_s -∗
+    expr_local_env_inv i_t i_s [x] L_t L_s ∗
+    expr_local_env_inv i_t i_s l L_t L_s.
   Proof.
-    iInduction l as [ | ] "IH" forall (x); cbn -[filter_keys].
+    iInduction l as [ | ] "IH" forall (x).
     { (* nil case *)
-      rewrite filter_keys_nil expr_local_env_inv_nil; iIntros "$". }
-
-    { (* cons case *)
-  Admitted.
-
-  Lemma expr_local_env_inv_app_invert i_t i_s L_t L_s l1 l2:
-    expr_local_env_inv i_t i_s (filter_keys (l1 ++ l2) L_t L_s) -∗
-    expr_local_env_inv i_t i_s (filter_keys l1 L_t L_s) ∗
-    expr_local_env_inv i_t i_s (filter_keys l2 L_t L_s).
-  Proof.
-    iInduction l1 as [ | ] "IH" forall (l2); cbn -[filter_keys].
-    { (* nil case *)
-      rewrite filter_keys_nil expr_local_env_inv_nil; iIntros "$". }
+      cbn; iIntros "$". }
 
     (* cons case *)
-    iIntros "H".
-  Admitted.
+    iIntros "(Hx & Ha)".
+    iSpecialize ("IH" with "Ha"); iDestruct "IH" as "((Ha & H) & IH)";
+      cbn; iFrame.
+  Qed.
+
+  Lemma expr_local_env_inv_app_invert i_t i_s L_t L_s l1 l2:
+    expr_local_env_inv i_t i_s (l1 ++ l2) L_t L_s -∗
+    expr_local_env_inv i_t i_s l1 L_t L_s ∗
+    expr_local_env_inv i_t i_s l2 L_t L_s.
+  Proof.
+    iInduction l1 as [ | ] "IH" forall (l2).
+    { (* nil case *)
+      cbn; iIntros "$". }
+
+    (* cons case *)
+    iIntros "H". cbn -[expr_local_env_inv].
+    iDestruct (expr_local_env_inv_cons_invert with "H") as "((Ha & _) & Hl)".
+    iSpecialize ("IH" with "Hl"); iDestruct "IH" as "(Hl & IH)".
+    iFrame.
+  Qed.
 
   (* Inversion rule for [expr_inv] for binop expression. *)
   Lemma expr_inv_binop_invert
@@ -450,12 +440,13 @@ Section fundamental_exp.
       (OP_IBinop iop τ e1 e2)
       (OP_IBinop iop τ e1 e2) -∗
     expr_inv i_t i_s L_t L_s e1 e1 ∗
-    expr_local_env_inv i_t i_s (filter_local_ids L_t L_s e2 e2).
+    expr_local_env_inv i_t i_s (exp_local_ids e2) L_t L_s.
   Proof.
     iIntros "Hb"; iDestruct "Hb" as "(Hf_inv & Hl)"; iFrame.
     iPoseProof (expr_local_env_inv_binop_invert with "Hl") as "Hl".
-    
-  Admitted.
+    iDestruct (expr_local_env_inv_app_invert with "Hl") as "(H1 & H2)".
+    iFrame; by rewrite /intersection_local_ids list_intersection_eq.
+  Qed.
 
   Lemma expr_logrel_OP_IBinop:
     ∀ (iop : ibinop) (t : dtyp) (e1 e2 : exp dtyp) (dt : option dtyp)
@@ -486,6 +477,8 @@ Section fundamental_exp.
             (OP_IBinop iop t e1 e2) }].
   Proof.
     iIntros (iop t e1 e2 dt ????) "#IH IH1 HI".
+
+    iDestruct (expr_inv_binop_invert with "HI") as "(HI&H2)".
 
     (* FIXME repair *)
     iSpecialize ("IH" with "HI").
