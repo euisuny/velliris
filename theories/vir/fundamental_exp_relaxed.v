@@ -380,6 +380,12 @@ Section fundamental_exp.
     apply list_intersection_subset; set_solver.
   Qed.
 
+  Lemma intersection_local_ids_eq {T} (e : exp T):
+    intersection_local_ids e e = exp_local_ids e.
+  Proof.
+    apply list_intersection_eq.
+  Qed.
+
   (* TODO Move: more about [expr_local_env_inv] *)
   Lemma expr_local_env_inv_nil i_t i_s L_t L_s:
     (expr_local_env_inv i_t i_s [] L_t L_s ⊣⊢ emp)%I.
@@ -432,6 +438,36 @@ Section fundamental_exp.
     iFrame.
   Qed.
 
+  Lemma expr_local_env_inv_cons i_t i_s L_t L_s x l:
+    expr_local_env_inv i_t i_s [x] L_t L_s -∗
+    expr_local_env_inv i_t i_s l L_t L_s -∗
+    expr_local_env_inv i_t i_s (x :: l) L_t L_s.
+  Proof.
+    iInduction l as [ | ] "IH" forall (x).
+    { (* nil case *)
+      cbn; by iIntros "$ _". }
+
+    (* cons case *)
+    iIntros "Hx (Hl & Ha)".
+    iSpecialize ("IH" with "Hx Ha"); iDestruct "IH" as "(H1 & H2)".
+    cbn; iFrame.
+  Qed.
+
+  Lemma expr_local_env_inv_app i_t i_s L_t L_s l1 l2:
+    expr_local_env_inv i_t i_s l1 L_t L_s -∗
+    expr_local_env_inv i_t i_s l2 L_t L_s -∗
+    expr_local_env_inv i_t i_s (l1 ++ l2) L_t L_s.
+  Proof.
+    iInduction l1 as [ | ] "IH" forall (l2).
+    { (* nil case *)
+      cbn; iIntros "_ $". }
+
+    (* cons case *)
+    iIntros "H1 H2". cbn -[expr_local_env_inv].
+    iDestruct (expr_local_env_inv_cons_invert with "H1") as "((Ha & _) & H1)".
+    iSpecialize ("IH" with "H1 H2"); iDestruct "IH" as "(Hl & IH)"; iFrame.
+  Qed.
+
   (* Inversion rule for [expr_inv] for binop expression. *)
   Lemma expr_inv_binop_invert
     {T} i_t i_s L_t L_s τ iop (e1 e2 : exp T):
@@ -445,20 +481,47 @@ Section fundamental_exp.
     iIntros "Hb"; iDestruct "Hb" as "(Hf_inv & Hl)"; iFrame.
     iPoseProof (expr_local_env_inv_binop_invert with "Hl") as "Hl".
     iDestruct (expr_local_env_inv_app_invert with "Hl") as "(H1 & H2)".
-    iFrame; by rewrite /intersection_local_ids list_intersection_eq.
+    iFrame; by rewrite intersection_local_ids_eq.
+  Qed.
+
+  Lemma expr_inv_binop
+    {T} i_t i_s L_t L_s τ iop (e1 e2 : exp T):
+    expr_inv
+      i_t i_s L_t L_s
+      (OP_IBinop iop τ e1 e2)
+      (OP_IBinop iop τ e1 e2) ⊣⊢
+    expr_inv i_t i_s L_t L_s e1 e1 ∗
+    expr_local_env_inv i_t i_s (exp_local_ids e2) L_t L_s.
+  Proof.
+    iSplit; first iApply expr_inv_binop_invert.
+    iIntros "((Hf & H1)& H2)"; iFrame.
+    rewrite !intersection_local_ids_eq; cbn -[expr_local_env_inv].
+    rewrite exp_local_ids_acc_commute.
+    iApply (expr_local_env_inv_app with "H1 H2").
+  Qed.
+
+  Lemma expr_local_env_inv_commute
+    {T} i_t i_s L_t L_s (e1 e2 : exp T):
+    expr_inv i_t i_s L_t L_s e1 e1 -∗
+    expr_local_env_inv i_t i_s (exp_local_ids e2) L_t L_s -∗
+    expr_inv i_t i_s L_t L_s e2 e2 ∗
+    expr_local_env_inv i_t i_s (exp_local_ids e1) L_t L_s.
+  Proof.
+    iIntros "(Hf & H1) H2"; iFrame.
+    rewrite !intersection_local_ids_eq; iFrame.
   Qed.
 
   Lemma expr_logrel_OP_IBinop:
     ∀ (iop : ibinop) (t : dtyp) (e1 e2 : exp dtyp) (dt : option dtyp)
       i_t i_s L_t L_s,
-      □ (∀ (a : option dtyp) (a0 : gmap (vir.loc * vir.loc) Qp),
+      □ (∀ (a : option dtyp),
           expr_inv i_t i_s L_t L_s e1 e1 -∗
           exp_conv (denote_exp a e1) ⪯
           exp_conv (denote_exp a e1)
           [{ (v_t, v_s),
               uval_rel v_t v_s ∗
               expr_inv i_t i_s L_t L_s e1 e1 }]) -∗
-        (∀ (a : option dtyp) (a0 : gmap (vir.loc * vir.loc) Qp),
+        (∀ (a : option dtyp),
           expr_inv i_t i_s L_t L_s e2 e2 -∗
           exp_conv (denote_exp a e2) ⪯
           exp_conv (denote_exp a e2)
@@ -480,20 +543,21 @@ Section fundamental_exp.
 
     iDestruct (expr_inv_binop_invert with "HI") as "(HI&H2)".
 
-    (* FIXME repair *)
-    iSpecialize ("IH" with "HI").
+    iSpecialize ("IH" $! (Some t) with "HI").
     cbn; setoid_rewrite interp_bind.
     iApply sim_expr_bind.
-    iApply (sim_expr_bupd_mono with "[IH1]"); [ | iApply "IH"].
+    iApply (sim_expr_bupd_mono with "[IH1 H2]"); [ | iApply "IH"].
     iIntros (e_t e_s) "H".
     iDestruct "H" as (?? Ht Hs) "(Hv & HI)".
     rename v_t into v1', v_s into v1.
     rewrite Ht Hs; clear Ht Hs.
     do 2 rewrite bind_ret_l interp_bind.
 
-    iSpecialize ("IH1" with "HI").
+    iDestruct (expr_local_env_inv_commute with "HI H2") as "(HI & H1)".
+
+    iSpecialize ("IH1" $! (Some t) with "HI").
     iApply sim_expr_bind.
-    iApply (sim_expr_bupd_mono with "[Hv]"); [ | iApply "IH1"].
+    iApply (sim_expr_bupd_mono with "[H1 Hv]"); [ | iApply "IH1"].
     clear e_t e_s.
     iIntros (e_t e_s) "H".
     iDestruct "H" as (?? Ht Hs) "(Hv0 & HI)".
@@ -503,8 +567,9 @@ Section fundamental_exp.
 
     do 2 rewrite interp_ret. iApply sim_expr_base.
     do 2 iExists _. do 2 (iSplitL ""; [ done | ]).
-    iFrame.
-    iApply (uval_rel_binop with "Hv Hv0").
+    iSplitL "Hv Hv0"; first iApply (uval_rel_binop with "Hv Hv0").
+    iApply expr_inv_binop; iFrame.
+    iApply (expr_local_env_inv_commute with "HI H1").
   Qed.
 
   (* Lemma expr_logrel_OP_Conversion: *)
