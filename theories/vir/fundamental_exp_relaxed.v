@@ -26,7 +26,6 @@ Import ListNotations.
 Import SemNotations.
 Import LLVMAst.
 
-
 (** *Reflexivity theorems for logical relations *)
 Section fundamental_exp.
 
@@ -224,6 +223,13 @@ Section fundamental_exp.
     iApply (expr_local_env_inv_commute with "HI H1").
   Qed.
 
+  Tactic Notation "expr_case" constr(lem) :=
+    iApply (sim_expr_mono with "[HI]"); last iApply lem;
+        eauto;
+      iIntros (??) "H"; iDestruct "H" as (????) "Hv";
+      iExists _, _; by iFrame.
+
+  (* Inductive cases *)
 
   (* TODO: Factor out the [expr_inv] into an arbitrary invariant *)
    Lemma expr_logrel_ind_case :
@@ -236,17 +242,18 @@ Section fundamental_exp.
       uval_rel (Vexp l_t) (Vexp l_s) -∗
       uval_rel (Vexp (v_t :: l_t)) (Vexp (v_s :: l_s))) -∗
     (* [expr_inv] over the struct values *)
-    (* □ (expr_inv i_t i_s L_t L_s (Exp elts) (Exp elts) -∗ *)
-    (*    expr_frame_inv i_t i_s L_t L_s ∗ *)
-    (*     (∀ x, ⌜In x elts⌝ -∗ *)
-    (*       expr_local_env_inv i_t i_s (filter_local_ids L_t L_s x.2 x.2))) -∗ *)
+    □ (expr_inv i_t i_s L_t L_s (Exp elts) (Exp elts) -∗
+       expr_frame_inv i_t i_s L_t L_s ∗
+        (∀ x, ⌜In x elts⌝ -∗
+          expr_local_env_inv i_t i_s (exp_local_ids x.2) L_t L_s)) -∗
     □ (∀ x : dtyp * exp dtyp,
       ⌜In x elts⌝
-      → ∀ (a : option dtyp) (a0 : gmap (vir.loc * vir.loc) Qp),
+      → ∀ (a : option dtyp) i_t i_s L_t L_s,
           expr_inv i_t i_s L_t L_s x.2 x.2 -∗
             exp_conv (denote_exp a x.2) ⪯
             exp_conv (denote_exp a x.2)
-            [{ (v_t, v_s),uval_rel v_t v_s ∗ expr_inv i_t i_s L_t L_s x.2 x.2 }]) -∗
+            [{ (v_t, v_s),
+                uval_rel v_t v_s ∗ expr_inv i_t i_s L_t L_s x.2 x.2 }]) -∗
       expr_inv i_t i_s L_t L_s (Exp elts) (Exp elts) -∗
       r <- exp_conv
             (map_monad (λ '(dt0, ex), (denote_exp (Some dt0) ex)) elts);;
@@ -304,7 +311,185 @@ Section fundamental_exp.
   (*     iSplitL ""; [| iSplitL ""]; auto; iFrame. *)
   (*     iApply ("Hind" with "Hv Hp"). } *)
   (* Qed. *)
-  Abort.
+  Admitted.
+
+  (* TODO Move to [logical_relations]. *)
+  Lemma expr_inv_cstring_invert
+    {T : Set} i_t i_s L_t L_s (elts: list (T * exp T)):
+    expr_inv i_t i_s L_t L_s (EXP_Cstring elts) (EXP_Cstring elts) -∗
+    expr_frame_inv i_t i_s L_t L_s ∗
+    (∀ x,
+        ⌜In x elts⌝ -∗
+      expr_local_env_inv i_t i_s (exp_local_ids x.2) L_t L_s).
+  Proof.
+    iIntros "(Hf & Helts)"; iFrame.
+    rewrite intersection_local_ids_eq; cbn -[expr_local_env_inv].
+    rewrite app_nil_r.
+    iInduction elts as [ | ] "IH"; iIntros (??); first inv H.
+    apply in_inv in H; first destruct H; subst.
+    { cbn -[expr_local_env_inv].
+      iDestruct (expr_local_env_inv_app_invert with "Helts") as "(Hx & elts)".
+      iSpecialize ("IH" with "elts"); iFrame. }
+    { cbn -[expr_local_env_inv].
+      iDestruct (expr_local_env_inv_app_invert with "Helts") as "(Hx & elts)".
+      iSpecialize ("IH" with "elts"); iFrame.
+      by iApply "IH". }
+  Qed.
+
+  Lemma expr_logrel_EXP_Cstring:
+    ∀ (elts : list (dtyp * exp dtyp))
+      (τ : option dtyp) (i_t i_s : list frame_names) (L_t L_s : local_env),
+    expr_inv i_t i_s L_t L_s (EXP_Cstring elts) (EXP_Cstring elts) -∗
+    □ (∀ x : dtyp * exp dtyp,
+        ⌜In x elts⌝
+        → ∀ (τ0 : option dtyp) (i_t0 i_s0 : list frame_names) (L_t0 L_s0 : local_env),
+            expr_inv i_t0 i_s0 L_t0 L_s0 x.2 x.2 -∗
+            exp_conv (denote_exp τ0 x.2)
+            ⪯
+            exp_conv (denote_exp τ0 x.2)
+            [{ (v_t, v_s),uval_rel v_t v_s ∗ expr_inv i_t0 i_s0 L_t0 L_s0 x.2 x.2}]) -∗
+    exp_conv (denote_exp τ (EXP_Cstring elts))
+    ⪯
+    exp_conv (denote_exp τ (EXP_Cstring elts))
+    [{ (v_t, v_s),
+        uval_rel v_t v_s ∗
+          expr_inv i_t i_s L_t L_s (EXP_Cstring elts) (EXP_Cstring elts)}].
+  Proof.
+    intros elts dt ? ? ? ?. iIntros "Hi #IH".
+    cbn; setoid_rewrite interp_bind; setoid_rewrite interp_ret.
+    iApply expr_logrel_ind_case; auto.
+    { iModIntro; cbn; iApply uval_rel_lift; eauto;
+        rewrite unfold_dval_rel; auto. cbn; done. }
+    { iModIntro.
+      iIntros (v_t v_s l_t l_s) "Hv Hl".
+      iApply (uval_rel_array_cons with "Hv Hl"); cbn; iFrame. }
+    iModIntro. iApply expr_inv_cstring_invert.
+  Qed.
+
+  Lemma expr_logrel_EXP_Struct:
+    ∀ (fields : list (dtyp * exp dtyp))
+      (τ : option dtyp)
+      (i_t i_s : list frame_names) (L_t L_s : local_env),
+      expr_inv i_t i_s L_t L_s
+        (EXP_Struct fields) (EXP_Struct fields) -∗
+      □ (∀ x : dtyp * exp dtyp,
+          ⌜In x fields⌝
+          → ∀ (τ0 : option dtyp) (i_t0 i_s0 : list frame_names) (L_t0 L_s0 : local_env),
+              expr_inv i_t0 i_s0 L_t0 L_s0 x.2 x.2 -∗
+              exp_conv (denote_exp τ0 x.2)
+              ⪯
+              exp_conv (denote_exp τ0 x.2)
+              [{ (v_t, v_s), uval_rel v_t v_s ∗ expr_inv i_t0 i_s0 L_t0 L_s0 x.2 x.2}]) -∗
+      exp_conv (denote_exp τ (EXP_Struct fields))
+      ⪯
+      exp_conv (denote_exp τ (EXP_Struct fields))
+      [{ (v_t, v_s), uval_rel v_t v_s ∗
+            expr_inv i_t i_s L_t L_s (EXP_Struct fields) (EXP_Struct fields)}].
+  Proof.
+  (*   intros elts dt C ? ? ? ? . *)
+  (*   cbn; setoid_rewrite interp_bind; setoid_rewrite interp_ret. *)
+  (*   iApply expr_logrel_ind_case. *)
+  (*   { iModIntro; cbn; iApply uval_rel_lift; eauto; *)
+  (*       rewrite unfold_dval_rel; auto. cbn; done. } *)
+  (*   iModIntro. *)
+  (*   iIntros (v_t v_s l_t l_s) "Hv Hl". *)
+  (*   iApply (uval_rel_struct_cons with "Hv Hl"). *)
+  (* Qed. *)
+  Admitted.
+
+  (* Reflexivity theorems *)
+  Theorem expr_logrel_relaxed_refl e:
+    (⊢ expr_logrel_relaxed e e)%I.
+  Proof.
+    iIntros. rewrite /expr_logrel_relaxed.
+    iInduction e as [] "IH" using AstLib.exp_ind;
+    iIntros (τ ? ? L_t L_s) "HI".
+    { (* EXP_Ident *)
+      by iApply expr_logrel_EXP_Ident. }
+    (* Numeric cases *)
+    { iApply (sim_expr_mono with "[HI]"); last iApply expr_logrel_EXP_Integer;
+        eauto.
+      iIntros (??) "H". iDestruct "H" as (????) "Hv".
+      iExists _, _; by iFrame. }
+    { expr_case expr_logrel_EXP_Float. }
+    { expr_case expr_logrel_EXP_Double. }
+    { expr_case expr_logrel_EXP_Hex. }
+    { expr_case expr_logrel_EXP_Bool. }
+
+    { (* EXP_Null *)
+      iApply sim_null_bij. iIntros "#Hn".
+      setoid_rewrite interp_ret; iApply sim_expr_base; iExists _ , _;
+        iFrame; iSplitL ""; [  | iSplitL "" ]; try (iPureIntro; reflexivity).
+      iApply uval_rel_lift; eauto.
+      by rewrite unfold_dval_rel. }
+
+    { (* EXP_Zero_initializer *)
+      iApply sim_null_bij. iIntros "#Hn".
+      exp_logrel_pre τ. rewrite /exp_conv /denote_exp /lift_err; cbn.
+      destruct (dv_zero_initializer d) eqn: Hzi.
+      - iApply exp_conv_raise.
+      - setoid_rewrite interp_ret; iApply sim_expr_base; iExists _, _; iFrame;
+        iSplitL ""; [ | iSplitL ""]; try (iPureIntro; reflexivity).
+        iApply dval_rel_lift.
+        iApply (@zero_initializer_uval_refl _ _ _ _ Hzi with "Hn"). }
+
+    { (* EXP_CString *)
+      by iApply (expr_logrel_EXP_Cstring with "HI"). }
+
+    { (* EXP_Undef *)
+      destruct τ; cbn; [ | iApply exp_conv_raise ].
+      iApply sim_null_bij. iIntros "#Hnull".
+      setoid_rewrite interp_ret; iApply sim_expr_base; iExists _ , _;
+        iFrame; iSplitL ""; [  | iSplitL "" ]; try (iPureIntro; reflexivity).
+      by iApply uval_rel_undef. }
+
+    { by iApply (expr_logrel_EXP_Struct with "HI"). }
+
+    (* EXP_Array *)
+    { admit. }
+
+    { iApply expr_logrel_OP_IBinop; eauto.
+      - iModIntro; iIntros; iApply "IH"; done.
+      - iIntros; iApply "IH1"; done. }
+
+    { iApply expr_logrel_EXP_Array; eauto;
+      iModIntro; iIntros; iApply "IH"; done. }
+    { iApply expr_logrel_OP_ICmp; eauto.
+      - iModIntro; iIntros; iApply "IH"; done.
+      - iModIntro; iIntros; iApply "IH1"; done. }
+    { iApply expr_logrel_OP_Conversion; eauto;
+      iModIntro; iIntros; iApply "IH"; done. }
+    { iApply expr_logrel_EXP_GEP; eauto.
+      - iModIntro. iIntros. iApply "IH1"; done.
+      - iModIntro; iIntros; iApply "IH"; done. }
+    all: exp_logrel_pre dt.
+    Unshelve. all : eauto.
+  Qed.
+
+  (* TODO: Should be a matter of porting things over... *)
+  (* Lemma expr_logrel_EXP_Array: *)
+  (*   ∀ (elts : list (dtyp * exp dtyp)) (dt : option dtyp) C i_t i_s A_t A_s , *)
+  (*       □ (∀ x : dtyp * exp dtyp, *)
+  (*         ⌜In x elts⌝ → *)
+  (*         ∀ (a : option dtyp) (a0 : gmap (vir.loc * vir.loc) Qp), *)
+  (*         expr_inv a0 i_t i_s A_t A_s  -∗ *)
+  (*         exp_conv (denote_exp a x.2) ⪯ *)
+  (*         exp_conv (denote_exp a x.2) *)
+  (*         [{ (v_t, v_s),uval_rel v_t v_s ∗ expr_inv a0 i_t i_s A_t A_s  }]) -∗ *)
+  (*       expr_inv C i_t i_s A_t A_s  -∗ *)
+  (*       exp_conv (denote_exp dt (EXP_Array elts)) ⪯ *)
+  (*       exp_conv (denote_exp dt (EXP_Array elts)) *)
+  (*     [{ (v_t, v_s),uval_rel v_t v_s ∗ expr_inv C i_t i_s A_t A_s  }]. *)
+  (* Proof. *)
+  (*   iIntros (elts dt C ? ? ? ? ) "#IH HI". *)
+  (*   cbn; setoid_rewrite interp_bind; setoid_rewrite interp_ret. *)
+  (*   iApply expr_logrel_ind_case; auto. *)
+  (*   { iModIntro; cbn; iApply uval_rel_lift; eauto; *)
+  (*       rewrite unfold_dval_rel; auto. cbn; done. } *)
+  (*   iModIntro. *)
+  (*   iIntros (v_t v_s l_t l_s) "Hv Hl". *)
+  (*   iApply (uval_rel_array_cons with "Hv Hl"). *)
+  (* Qed. *)
 
   (* Lemma expr_logrel_OP_Conversion: *)
   (*   ∀ (conv : conversion_type) (t_from : dtyp) (e : exp dtyp) (t_to : dtyp) *)
@@ -463,170 +648,6 @@ Section fundamental_exp.
   (*     iDestruct "Hp" as (????????) "[Hp CI]". *)
   (*     apply eqit_inv_Ret in H3, H4; subst. rewrite H1 H2. do 2 rewrite bind_ret_l. *)
   (*     iApply sim_expr_base. iModIntro; do 2 iExists _. eauto. *)
-  (* Qed. *)
-
-  Tactic Notation "expr_case" constr(lem) :=
-    iApply (sim_expr_mono with "[HI]"); last iApply lem;
-        eauto;
-      iIntros (??) "H"; iDestruct "H" as (????) "Hv";
-      iExists _, _; by iFrame.
-
-  (* Reflexivity theorems *)
-  Theorem expr_logrel_relaxed_refl e:
-    (⊢ expr_logrel_relaxed e e)%I.
-  Proof.
-    iIntros. rewrite /expr_logrel_relaxed.
-    iInduction e as [] "IH" using AstLib.exp_ind;
-    iIntros (τ ? ? L_t L_s) "HI".
-    { (* EXP_Ident *)
-      by iApply expr_logrel_EXP_Ident. }
-    (* Numeric cases *)
-    { iApply (sim_expr_mono with "[HI]"); last iApply expr_logrel_EXP_Integer;
-        eauto.
-      iIntros (??) "H". iDestruct "H" as (????) "Hv".
-      iExists _, _; by iFrame. }
-    { expr_case expr_logrel_EXP_Float. }
-    { expr_case expr_logrel_EXP_Double. }
-    { expr_case expr_logrel_EXP_Hex. }
-    { expr_case expr_logrel_EXP_Bool. }
-
-    { (* EXP_Null *)
-      iApply sim_null_bij. iIntros "#Hn".
-      setoid_rewrite interp_ret; iApply sim_expr_base; iExists _ , _;
-        iFrame; iSplitL ""; [  | iSplitL "" ]; try (iPureIntro; reflexivity).
-      iApply uval_rel_lift; eauto.
-      by rewrite unfold_dval_rel. }
-
-    (* TODO Repair *)
-    { (* EXP_Zero_initializer *) admit. }
-      (* iApply sim_null_bij. iIntros "#Hn". *)
-      (* exp_logrel_pre dt. rewrite /exp_conv /denote_exp /lift_err; cbn. *)
-      (* destruct (dv_zero_initializer d) eqn: Hzi. *)
-      (* - iApply exp_conv_raise. *)
-      (* - setoid_rewrite interp_ret; iApply sim_expr_base; iExists _, _; iFrame; *)
-      (*   iSplitL ""; [ | iSplitL ""]; try (iPureIntro; reflexivity). *)
-      (*   iApply dval_rel_lift. *)
-      (*   iApply (@zero_initializer_uval_refl _ _ _ _ Hzi with "Hn"). } *)
-
-    (* EXP_CString *)
-    { admit. }
-
-    (* { iApply expr_logrel_EXP_Cstring ; eauto; *)
-    (*   iModIntro. iIntros; iApply "IH"; eauto. } *)
-
-    { (* EXP_Undef *)
-      destruct τ; cbn; [ | iApply exp_conv_raise ].
-      iApply sim_null_bij. iIntros "#Hnull".
-      setoid_rewrite interp_ret; iApply sim_expr_base; iExists _ , _;
-        iFrame; iSplitL ""; [  | iSplitL "" ]; try (iPureIntro; reflexivity).
-      by iApply uval_rel_undef. }
-
-    3 :
-    { iApply expr_logrel_OP_IBinop; eauto.
-      - iModIntro; iIntros; iApply "IH"; done.
-      - iIntros; iApply "IH1"; done. }
-
-    { iRevert "HI IH".
-  expr_inv i_t i_s L_t L_s (EXP_Struct fields) (EXP_Struct fields) -∗
-  □ (∀ x : dtyp * exp dtyp,
-       ⌜In x fields⌝
-       → ∀ (τ0 : option dtyp) (i_t0 i_s0 : list frame_names) (L_t0 L_s0 : local_env),
-           expr_inv i_t0 i_s0 L_t0 L_s0 x.2 x.2 -∗
-           exp_conv ⟦ x.2 at? τ0 ⟧e
-           ⪯
-           exp_conv ⟦ x.2 at? τ0 ⟧e
-           [{ (v_t, v_s),uval_rel v_t v_s ∗ expr_inv i_t0 i_s0 L_t0 L_s0 x.2 x.2}]) -∗
-  exp_conv ⟦ EXP_Struct fields at? τ ⟧e
-  ⪯
-  exp_conv ⟦ EXP_Struct fields at? τ ⟧e
-  [{ (v_t, v_s),uval_rel v_t v_s ∗ expr_inv i_t i_s L_t L_s (EXP_Struct fields) (EXP_Struct fields)}]
-  
-      iApply expr_logrel_EXP_Struct; eauto;
-      iModIntro; iIntros; iApply "IH"; done. }
-    { iApply expr_logrel_EXP_Array; eauto;
-      iModIntro; iIntros; iApply "IH"; done. }
-    { iApply expr_logrel_OP_ICmp; eauto.
-      - iModIntro; iIntros; iApply "IH"; done.
-      - iModIntro; iIntros; iApply "IH1"; done. }
-    { iApply expr_logrel_OP_Conversion; eauto;
-      iModIntro; iIntros; iApply "IH"; done. }
-    { iApply expr_logrel_EXP_GEP; eauto.
-      - iModIntro. iIntros. iApply "IH1"; done.
-      - iModIntro; iIntros; iApply "IH"; done. }
-    all: exp_logrel_pre dt.
-    Unshelve. all : eauto.
-  Qed.
-
-  (* Lemma expr_logrel_EXP_Cstring: *)
-  (*   ∀ (elts : list (dtyp * exp dtyp)) (dt : option dtyp) C i_t i_s A_t A_s , *)
-  (*     □ (∀ x : dtyp * exp dtyp, *)
-  (*         ⌜In x elts⌝ → *)
-  (*         ∀ (a : option dtyp) (a0 : gmap (vir.loc * vir.loc) Qp), *)
-  (*         expr_inv a0 i_t i_s A_t A_s  -∗ *)
-  (*         exp_conv (denote_exp a x.2) ⪯ *)
-  (*         exp_conv (denote_exp a x.2) *)
-  (*         [{ (v_t, v_s),uval_rel v_t v_s ∗ expr_inv a0 i_t i_s A_t A_s  }]) -∗ *)
-  (*       expr_inv C i_t i_s A_t A_s  -∗ *)
-  (*       exp_conv (denote_exp dt (EXP_Cstring elts)) ⪯ *)
-  (*       exp_conv (denote_exp dt (EXP_Cstring elts)) *)
-  (*       [{ (v_t, v_s),uval_rel v_t v_s ∗ expr_inv C i_t i_s A_t A_s  }]. *)
-  (* Proof. *)
-  (*   intros elts dt C ? ? ? ? . *)
-  (*   cbn; setoid_rewrite interp_bind; setoid_rewrite interp_ret. *)
-  (*   iApply expr_logrel_ind_case; auto. *)
-  (*   { iModIntro; cbn; iApply uval_rel_lift; eauto; *)
-  (*       rewrite unfold_dval_rel; auto. cbn; done. } *)
-  (*   iModIntro. *)
-  (*   iIntros (v_t v_s l_t l_s) "Hv Hl". *)
-  (*   iApply (uval_rel_array_cons with "Hv Hl"); cbn; iFrame. *)
-  (* Qed. *)
-
-  (* Lemma expr_logrel_EXP_Struct: *)
-  (*   ∀ (elts : list (dtyp * exp dtyp)) (dt : option dtyp) C i_t i_s A_t A_s , *)
-  (*     □ (∀ x : dtyp * exp dtyp, *)
-  (*         ⌜In x elts⌝ → *)
-  (*         ∀ (a : option dtyp) (a0 : gmap (vir.loc * vir.loc) Qp), *)
-  (*         expr_inv a0 i_t i_s A_t A_s  -∗ *)
-  (*         exp_conv (denote_exp a x.2) ⪯ *)
-  (*         exp_conv (denote_exp a x.2) *)
-  (*         [{ (v_t, v_s),uval_rel v_t v_s ∗ expr_inv a0 i_t i_s A_t A_s  }]) -∗ *)
-  (*       expr_inv C i_t i_s A_t A_s  -∗ *)
-  (*       exp_conv (denote_exp dt (EXP_Struct elts)) ⪯ *)
-  (*       exp_conv (denote_exp dt (EXP_Struct elts)) *)
-  (*     [{ (v_t, v_s), uval_rel v_t v_s ∗ expr_inv C i_t i_s A_t A_s  }]. *)
-  (* Proof. *)
-  (*   intros elts dt C ? ? ? ? . *)
-  (*   cbn; setoid_rewrite interp_bind; setoid_rewrite interp_ret. *)
-  (*   iApply expr_logrel_ind_case. *)
-  (*   { iModIntro; cbn; iApply uval_rel_lift; eauto; *)
-  (*       rewrite unfold_dval_rel; auto. cbn; done. } *)
-  (*   iModIntro. *)
-  (*   iIntros (v_t v_s l_t l_s) "Hv Hl". *)
-  (*   iApply (uval_rel_struct_cons with "Hv Hl"). *)
-  (* Qed. *)
-
-  (* Lemma expr_logrel_EXP_Array: *)
-  (*   ∀ (elts : list (dtyp * exp dtyp)) (dt : option dtyp) C i_t i_s A_t A_s , *)
-  (*       □ (∀ x : dtyp * exp dtyp, *)
-  (*         ⌜In x elts⌝ → *)
-  (*         ∀ (a : option dtyp) (a0 : gmap (vir.loc * vir.loc) Qp), *)
-  (*         expr_inv a0 i_t i_s A_t A_s  -∗ *)
-  (*         exp_conv (denote_exp a x.2) ⪯ *)
-  (*         exp_conv (denote_exp a x.2) *)
-  (*         [{ (v_t, v_s),uval_rel v_t v_s ∗ expr_inv a0 i_t i_s A_t A_s  }]) -∗ *)
-  (*       expr_inv C i_t i_s A_t A_s  -∗ *)
-  (*       exp_conv (denote_exp dt (EXP_Array elts)) ⪯ *)
-  (*       exp_conv (denote_exp dt (EXP_Array elts)) *)
-  (*     [{ (v_t, v_s),uval_rel v_t v_s ∗ expr_inv C i_t i_s A_t A_s  }]. *)
-  (* Proof. *)
-  (*   iIntros (elts dt C ? ? ? ? ) "#IH HI". *)
-  (*   cbn; setoid_rewrite interp_bind; setoid_rewrite interp_ret. *)
-  (*   iApply expr_logrel_ind_case; auto. *)
-  (*   { iModIntro; cbn; iApply uval_rel_lift; eauto; *)
-  (*       rewrite unfold_dval_rel; auto. cbn; done. } *)
-  (*   iModIntro. *)
-  (*   iIntros (v_t v_s l_t l_s) "Hv Hl". *)
-  (*   iApply (uval_rel_array_cons with "Hv Hl"). *)
   (* Qed. *)
 
 End fundamental_exp.
