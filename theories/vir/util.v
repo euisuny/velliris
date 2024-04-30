@@ -157,6 +157,7 @@ Qed.
 
 Arguments alist_find [_ _ _ _].
 Arguments alist_add [_ _ _ _].
+Arguments alist_remove [_ _ _ _].
 
 Section alist_properties.
 
@@ -1446,7 +1447,7 @@ Proof.
   intros.
   specialize (IHL H3 l v').
   destruct a.
-  destruct (RelDec.rel_dec l r) eqn: Heq; [ cbn in *; rewrite Heq; cbn; eauto | ].
+  destruct (RelDec.rel_dec l u) eqn: Heq; [ cbn in *; rewrite Heq; cbn; eauto | ].
   cbn in *. rewrite Heq; cbn.
   inversion IHL; subst; eauto.
   constructor; cycle 1.
