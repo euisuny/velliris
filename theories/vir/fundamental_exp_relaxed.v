@@ -61,10 +61,15 @@ Section fundamental_exp.
       x ∈ list_intersection (exp_local_ids e_t) (exp_local_ids e_s)).
     { by rewrite elem_of_list_intersection. }
 
-    rewrite /filter_local_ids.
-    
-    rewrite
-  Admitted.
+    rewrite /expr_local_env_inv.
+    apply elem_of_list_lookup_1 in Hint; destruct Hint.
+
+    iDestruct (big_sepL_delete with "Hl") as "(Helem & Hl)"; eauto; cbn.
+
+    iDestruct "Helem" as (????) "(Hlt & Hls & #Hv)".
+    iPureIntro.
+    split; by eapply alist_find_elem_of.
+  Qed.
 
   (* ------------------------------------------------------------------------ *)
 

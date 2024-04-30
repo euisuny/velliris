@@ -266,6 +266,22 @@ Section alist_properties.
       by apply RelDec.neg_rel_dec_correct. }
   Qed.
 
+  Lemma alist_find_elem_of {x l v} :
+    alist_find x l = Some v ->
+    x ∈ l.*1.
+  Proof.
+    induction l ;cbn; intros H ; try inv H; eauto.
+    destruct a.
+    destruct (RelDec.rel_dec x k) eqn: Heq.
+    { inv H1; cbn.
+      assert (x = k).
+      { by apply RelDec.rel_dec_correct. }
+      subst; set_solver. }
+    assert (x <> k).
+    { by apply RelDec.neg_rel_dec_correct. }
+    subst; set_solver.
+  Qed.
+
   Lemma alist_find_app_some f l m (d : A):
     (alist_find f (l ++ m) = Some d <->
     (alist_find f l = Some d \/
