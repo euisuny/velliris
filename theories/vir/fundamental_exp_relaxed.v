@@ -241,8 +241,15 @@ Section fundamental_exp.
       uval_rel v_t v_s -∗
       uval_rel (Vexp l_t) (Vexp l_s) -∗
       uval_rel (Vexp (v_t :: l_t)) (Vexp (v_s :: l_s))) -∗
-    (* [expr_inv] over the struct values *)
-    □ (expr_inv i_t i_s L_t L_s (Exp elts) (Exp elts) -∗
+    (* [expr_inv] cons over the struct values *)
+    □ (∀ i_t i_s L_t L_s d e elts,
+        expr_inv i_t i_s L_t L_s e e ∗
+        expr_local_env_inv i_t i_s (exp_local_ids (Exp elts)) L_t L_s
+        ∗-∗
+        expr_inv i_t i_s L_t L_s (Exp ((d, e) :: elts)) (Exp ((d, e) :: elts))) -∗
+    (* [expr_inv] introduction over the struct values *)
+    □ (∀ i_t i_s L_t L_s elts,
+      expr_inv i_t i_s L_t L_s (Exp elts) (Exp elts) -∗
        expr_frame_inv i_t i_s L_t L_s ∗
         (∀ x, ⌜In x elts⌝ -∗
           expr_local_env_inv i_t i_s (exp_local_ids x.2) L_t L_s)) -∗
@@ -265,53 +272,51 @@ Section fundamental_exp.
         uval_rel v_t v_s ∗
           expr_inv i_t i_s L_t L_s (Exp elts) (Exp elts) }].
   Proof.
-    (* iIntros (elts i_t i_s L_t L_s Vexp Exp) "#Hbase #Hind #Hinvp #IH HI". *)
-    (* rewrite /exp_conv. *)
-    (* (* We follow by induction on the structure elements. *) *)
-    (* iInduction elts as [] "IHl". *)
-    (* (* nil case *) *)
-    (* { cbn; rewrite interp_ret bind_ret_l. *)
-    (*   iApply sim_expr_base; iExists _, _; iFrame; *)
-    (*   iSplitL ""; [ | iSplitL ""]; try (iPureIntro; reflexivity); done. } *)
-    (* (* cons case *) *)
-    (* { cbn. destruct a. rewrite /exp_conv. *)
-    (*   rewrite interp_bind bind_bind. *)
-    (*   iApply sim_expr_bind. *)
-    (*   iAssert (□ *)
-    (*     (∀ x : dtyp * exp dtyp, *)
-    (*       ⌜In x elts⌝ → *)
-    (*       ∀ (a : option dtyp) (a0 : gmap (vir.loc * vir.loc) Qp), *)
-    (*         expr_inv i_t i_s L_t L_s x.2 x.2 -∗ *)
-    (*         exp_conv (denote_exp a x.2) ⪯ exp_conv (denote_exp a x.2) *)
-    (*     [{ (v_t, v_s), uval_rel v_t v_s ∗ expr_inv i_t i_s L_t L_s x.2 x.2  }]))%I as "#Helts". *)
-    (*   { iModIntro. iIntros (x Hin dt' l') "Hinv". *)
-    (*     assert ((d, e) = x \/ In x elts) by (by right). *)
-    (*     by iSpecialize ("IH" $! _ H _  l' with "Hinv"). } *)
+    iIntros (elts i_t i_s L_t L_s Vexp Exp) "#Hbase #Hind #Hinv #Hinvp #IH HI".
+    rewrite /exp_conv.
+    (* We follow by induction on the structure elements. *)
+    iInduction elts as [] "IHl".
+    (* nil case *)
+    { cbn; rewrite interp_ret bind_ret_l.
+      iApply sim_expr_base; iExists _, _; iFrame;
+      iSplitL ""; [ | iSplitL ""]; try (iPureIntro; reflexivity); done. }
+    (* cons case *)
+    { cbn. destruct a. rewrite /exp_conv.
+      rewrite interp_bind bind_bind.
+      iApply sim_expr_bind.
 
-  (*     iSpecialize ("IHl" with "Helts"); iClear "Helts". *)
-  (*     assert (EQ: (d, e) = (d, e) ∨ In (d, e) elts) by (left; auto). *)
-  (*     iSpecialize ("IH" $! (d, e) EQ _ _); clear EQ; cbn. *)
-  (*     iSpecialize ("IH" with "HI"). *)
-  (*     iApply (sim_expr_bupd_mono with "[IHl]"); [ | done]. *)
-  (*     iIntros (??) "Hr". *)
-  (*     iDestruct "Hr" as (????) "[Hv Hinv]". *)
-  (*     rewrite H H0. do 2 rewrite bind_ret_l. *)
-  (*     iSpecialize ("IHl" with "Hinv"). iModIntro. *)
-  (*     do 2 rewrite interp_bind bind_bind. *)
-  (*     setoid_rewrite interp_ret. *)
-  (*     setoid_rewrite bind_ret_l. *)
-  (*     iPoseProof sim_expr_fmap_inv as "Hfmap". *)
-  (*     iSpecialize ("Hfmap" with "IHl"). *)
-  (*     iApply sim_expr_bind. *)
-  (*     iApply (sim_expr_bupd_mono with "[Hv]"); [ | done]. *)
-  (*     iIntros (??) "Hp". rewrite /lift_post. *)
-  (*     iDestruct "Hp" as (????????) "[Hp CI]". *)
-  (*     apply eqit_inv_Ret in H3, H4; subst. rewrite H1 H2. do 2 rewrite bind_ret_l. *)
-  (*     iApply sim_expr_base. iModIntro; do 2 iExists _. eauto. *)
-  (*     iSplitL ""; [| iSplitL ""]; auto; iFrame. *)
-  (*     iApply ("Hind" with "Hv Hp"). } *)
-  (* Qed. *)
-  Admitted.
+      iDestruct ("Hinv" with "HI") as "(He & Helts)".
+
+      iSpecialize ("IHl" with "[]").
+      { iModIntro. iIntros (x Hin dt' i_t' i_s' L_t' L_s') "Hinv'".
+        assert ((d, e) = x \/ In x elts) by (by right).
+        by iSpecialize ("IH" $! _ H dt' i_t' i_s' L_t' L_s' with "Hinv'"). }
+
+      assert (EQ: (d, e) = (d, e) ∨ In (d, e) elts) by (left; auto).
+      iSpecialize ("IH" $! (d, e) EQ _ _); clear EQ; cbn.
+      iSpecialize ("IH" with "He").
+      iApply (sim_expr_bupd_mono with "[Helts]"); [ | done].
+      iIntros (??) "Hr".
+      iDestruct "Hr" as (????) "[Hv Hinv']".
+      rewrite H H0. do 2 rewrite bind_ret_l.
+      iDestruct (expr_local_env_inv_commute with "Hinv' Helts") as "(Helts & Hinv')".
+      iSpecialize ("IHl" with "Helts"). iModIntro.
+      do 2 rewrite interp_bind bind_bind.
+      setoid_rewrite interp_ret.
+      setoid_rewrite bind_ret_l.
+      iPoseProof sim_expr_fmap_inv as "Hfmap".
+      iSpecialize ("Hfmap" with "IHl").
+      iApply sim_expr_bind.
+      iApply (sim_expr_bupd_mono with "[Hinv' Hv]"); [ | done].
+      iIntros (??) "Hp". rewrite /lift_post.
+      iDestruct "Hp" as (????????) "[Hp CI]".
+      apply eqit_inv_Ret in H3, H4; subst. rewrite H1 H2. do 2 rewrite bind_ret_l.
+      iApply sim_expr_base. iModIntro; do 2 iExists _. eauto.
+      iSplitL ""; [| iSplitL ""]; auto; iFrame.
+      iSplitL "Hv Hp"; first iApply ("Hind" with "Hv Hp").
+      iApply "Hinv"; iFrame.
+      iApply (expr_local_env_inv_commute with "CI Hinv'"). }
+  Qed.
 
   (* TODO Move to [logical_relations]. *)
   Lemma expr_inv_cstring_invert
@@ -334,6 +339,33 @@ Section fundamental_exp.
       iDestruct (expr_local_env_inv_app_invert with "Helts") as "(Hx & elts)".
       iSpecialize ("IH" with "elts"); iFrame.
       by iApply "IH". }
+  Qed.
+
+  Lemma expr_inv_cstring_cons:
+    ∀ (i_t i_s : list frame_names)
+      (L_t L_s : local_env)
+      (d : dtyp) (e : exp dtyp) (elts : list (dtyp * exp dtyp)),
+      expr_inv i_t i_s L_t L_s e e ∗
+        expr_local_env_inv i_t i_s
+        (exp_local_ids (EXP_Cstring elts)) L_t L_s
+      ⊣⊢
+      expr_inv i_t i_s L_t L_s
+        (EXP_Cstring ((d, e) :: elts))
+        (EXP_Cstring ((d, e) :: elts)).
+  Proof.
+    iIntros (???????).
+    iSplit.
+    { iIntros "((Hf & He) & Helts)";
+        cbn -[expr_local_env_inv]; iFrame.
+      rewrite !intersection_local_ids_eq;
+        cbn -[expr_local_env_inv].
+      rewrite !app_nil_r.
+      iApply (expr_local_env_inv_app with "He Helts"). }
+    { rewrite /expr_inv !intersection_local_ids_eq.
+      iIntros "(Hf & He)"; iFrame.
+      cbn -[expr_local_env_inv].
+      rewrite !app_nil_r.
+      iApply (expr_local_env_inv_app_invert with "He"). }
   Qed.
 
   Lemma expr_logrel_EXP_Cstring:
@@ -363,7 +395,8 @@ Section fundamental_exp.
     { iModIntro.
       iIntros (v_t v_s l_t l_s) "Hv Hl".
       iApply (uval_rel_array_cons with "Hv Hl"); cbn; iFrame. }
-    iModIntro. iApply expr_inv_cstring_invert.
+    { iModIntro. iIntros. iApply expr_inv_cstring_cons. }
+    { iModIntro. iIntros. by iApply expr_inv_cstring_invert. }
   Qed.
 
   Lemma expr_logrel_EXP_Struct:
