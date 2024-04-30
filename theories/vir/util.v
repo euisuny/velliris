@@ -1,11 +1,13 @@
 From iris.algebra Require Import gmap auth.
 From iris.prelude Require Import options.
 From iris.proofmode Require Export tactics.
-Set Default Proof Using "Type".
+Set Default Proof Using "Type*".
 
 From velliris.utils Require Import tactics.
 From velliris.vir Require Export vir.
 From Vellvm Require Import Handlers.Handlers.
+
+From Vellvm.Utils Require Export FMapAList.
 
 Open Scope nat_scope.
 
@@ -150,294 +152,152 @@ Proof.
     destruct (dvalue_eq_dec (d1:=d) (d2:=d)) eqn: Hd; eauto. }
 Qed.
 
+(* ------------------------------------------------------------------------ *)
 (* [alist]-related util functions *)
 
+Arguments alist_find [_ _ _ _].
+Arguments alist_add [_ _ _ _].
 
-Lemma alist_find_app_some {A} f l1 l2 (d : A):
-  (FMapAList.alist_find AstLib.eq_dec_raw_id f (l1 ++ l2) = Some d <->
-  (FMapAList.alist_find AstLib.eq_dec_raw_id f l1 = Some d \/
-  (FMapAList.alist_find AstLib.eq_dec_raw_id f l1 = None /\
-    FMapAList.alist_find AstLib.eq_dec_raw_id f l2 = Some d)))%list.
-Proof.
-  split.
-  { induction l1; intros; cbn in H.
-    { cbn. right; eauto. }
+Section alist_properties.
+
+  Context {K : Type}
+          {RelEq : RelDec.RelDec (@eq K)}
+          {RelEq_Correct : RelDec.RelDec_Correct RelEq}.
+  Context {A : Type}.
+
+  Implicit Type l : list (K * A).
+  Implicit Type m : list (K * A).
+
+  Lemma alist_find_app_some f l m (d : A):
+    (alist_find f (l ++ m) = Some d <->
+    (alist_find f l = Some d \/
+    (alist_find f l = None /\
+      alist_find f m = Some d)))%list.
+  Proof.
+    split.
+    { induction l; intros; cbn in H.
+      { cbn. right; eauto. }
+      { destruct a; cbn.
+        destruct (RelDec.rel_dec f k) eqn: Heq.
+        { left; auto. }
+        specialize (IHl H). destruct IHl.
+        - inversion H. rewrite H0 H2. by left.
+        - right; auto. } }
+    { induction l; intros; cbn in H.
+      { destruct H; inversion H; auto. }
+      { destruct a; cbn; destruct H.
+        { destruct (RelDec.rel_dec f k) eqn: Heq; auto. }
+        { destruct (RelDec.rel_dec f k) eqn: Heq; auto.
+          destruct H. inversion H. } } }
+  Qed.
+
+  Lemma alist_find_app_none f l m :
+    (alist_find f (l ++ m) = None <->
+    (alist_find f l = None /\
+      alist_find (V := A) f m = None))%list.
+  Proof.
+    split.
+    {induction l; intros; cbn in H.
+    { cbn; eauto. }
     { destruct a; cbn.
-      destruct (RelDec.rel_dec f r) eqn: Heq.
-      { left; auto. }
-      specialize (IHl1 H). destruct IHl1.
-      - inversion H. rewrite H0 H2. by left.
-      - right; auto. } }
-  { induction l1; intros; cbn in H.
-    { destruct H; inversion H; auto. }
-    { destruct a; cbn; destruct H.
-      { destruct (RelDec.rel_dec f r) eqn: Heq; auto. }
-      { destruct (RelDec.rel_dec f r) eqn: Heq; auto.
-        destruct H. inversion H. } } }
-Qed.
+      destruct (RelDec.rel_dec f k) eqn: Heq; [ inversion H | ].
+      specialize (IHl H). destruct IHl.
+      split; auto. } }
+    {induction l; intros; cbn in H.
+    { destruct H; cbn; eauto. }
+    { destruct a; cbn.
+      destruct (RelDec.rel_dec f k) eqn: Heq; [ inversion H | ].
+      { destruct H; eauto. }
+      specialize (IHl H). destruct IHl.
+      split; auto. } }
+  Qed.
 
-Lemma alist_find_app_none {A} f l1 l2 :
-  (FMapAList.alist_find AstLib.eq_dec_raw_id f (l1 ++ l2) = None <->
-  (FMapAList.alist_find AstLib.eq_dec_raw_id f l1 = None /\
-    FMapAList.alist_find (V := A) AstLib.eq_dec_raw_id f l2 = None))%list.
-Proof.
-  split.
-  {induction l1; intros; cbn in H.
-  { cbn; eauto. }
-  { destruct a; cbn.
-    destruct (RelDec.rel_dec f r) eqn: Heq; [ inversion H | ].
-    specialize (IHl1 H). destruct IHl1.
-    split; auto. } }
-  {induction l1; intros; cbn in H.
-  { destruct H; cbn; eauto. }
-  { destruct a; cbn.
-    destruct (RelDec.rel_dec f r) eqn: Heq; [ inversion H | ].
-    { destruct H; eauto. }
-    specialize (IHl1 H). destruct IHl1.
-    split; auto. } }
-Qed.
+  Lemma alist_find_singleton r f (d d0 : A) :
+    alist_find f [(r, d)] = Some d0 ->
+    f = r /\ d = d0.
+  Proof.
+    cbn;intros. destruct (RelDec.rel_dec f r) eqn: Heq; inversion H.
+    rewrite RelDec.rel_dec_correct in Heq; auto.
+  Qed.
 
-Lemma alist_find_singleton {A} r f (d d0 : A) :
-  FMapAList.alist_find AstLib.eq_dec_raw_id f [(r, d)] = Some d0 ->
-  f = r /\ d = d0.
-Proof.
-  cbn;intros. destruct (RelDec.rel_dec f r) eqn: Heq; inversion H.
-  rewrite RelDec.rel_dec_correct in Heq; auto.
-Qed.
+  Lemma alist_find_none f l :
+    alist_find (V := A) f l = None ->
+    forall k v, In (k, v) l -> k <> f.
+  Proof.
+    revert f.
+    induction l; cbn; intros; auto.
+    destruct a; destruct H0.
+    { inversion H0; subst.
+      destruct (RelDec.rel_dec f k) eqn: Hf; [ inversion H | ].
+      rewrite <- RelDec.neg_rel_dec_correct in Hf; auto. }
+    { destruct (RelDec.rel_dec f k0) eqn: Hf; [ inversion H | ].
+      eapply IHl; eauto. }
+  Qed.
 
-Lemma alist_find_none {A} f l :
-  FMapAList.alist_find (V := A) AstLib.eq_dec_raw_id f l = None ->
-  forall k v, In (k, v) l -> k <> f.
-Proof.
-  revert f.
-  induction l; cbn; intros; auto.
-  destruct a; destruct H0.
-  { inversion H0; subst.
-    destruct (RelDec.rel_dec f k) eqn: Hf; [ inversion H | ].
-    rewrite <- RelDec.neg_rel_dec_correct in Hf; auto. }
-  { destruct (RelDec.rel_dec f r) eqn: Hf; [ inversion H | ].
-    eapply IHl; eauto. }
-Qed.
+  Lemma alist_find_cons_eq :
+    ∀ {x l v},
+      alist_find x ((x, v) :: l) = Some v.
+  Proof.
+    intros. cbn. by rewrite eq_dec_eq.
+  Qed.
 
-(* LATER: Generalize these [fold_alist] lemmas to general association lists *)
-Lemma fold_alist_insert_some_neq f l1 l2 r d d0:
-  FMapAList.fold_alist (λ (k : LLVMAst.raw_id) (v0 : dvalue)
-   (acc : global_env), <[k:=v0]> acc) l2 l1 !! f = Some d -> r <> f ->
-  FMapAList.fold_alist (λ (k : LLVMAst.raw_id) (v0 : dvalue)
-   (acc : global_env), <[k:=v0]> acc) (<[r:=d0]> l2) l1 !! f = Some d.
-Proof.
-  revert f l2 r d d0.
-  induction l1; intros; cbn in H; cbn; auto.
-  { rewrite lookup_insert_ne; auto. }
-  { destruct a.
-    destruct (RelDec.rel_dec r r0) eqn: Hr.
-    { rewrite RelDec.rel_dec_correct in Hr. subst.
-      rewrite insert_insert. auto. }
-    { apply RelDec.neg_rel_dec_correct in Hr.
-      rewrite insert_commute; auto. } }
-Qed.
+  Lemma alist_not_in_domain :
+    ∀ {x r l v},
+      r ∉ l.*1 ->
+      alist_find x l = Some v ->
+      x <> r.
+  Proof.
+    intros; revert x r v H H0; induction l; eauto.
+    intros * Hn Hf; destruct a; cbn in *.
+    destruct (RelDec.rel_dec x k) eqn: Hxr0.
+    { inv Hf. rewrite RelDec.rel_dec_correct in Hxr0; subst.
+      set_solver. }
+    eapply IHl; eauto. set_solver.
+  Qed.
 
-Lemma fold_alist_insert_some_eq f l1 l2 r d:
-  FMapAList.fold_alist (λ (k : LLVMAst.raw_id) (v0 : dvalue)
-   (acc : global_env), <[k:=v0]> acc) l2 l1 !! f = Some d -> r = f ->
-  FMapAList.fold_alist (λ (k : LLVMAst.raw_id) (v0 : dvalue)
-   (acc : global_env), <[k:=v0]> acc) (<[r:=d]> l2) l1 !! f = Some d.
-Proof.
-  revert f l2 r d.
-  induction l1; intros; cbn in H; cbn; auto.
-  { subst; rewrite lookup_insert; auto. }
-  { destruct a. subst.
-    destruct (RelDec.rel_dec r0 f) eqn: Hr.
-    { rewrite RelDec.rel_dec_correct in Hr. subst.
-      rewrite insert_insert. auto. }
-    { apply RelDec.neg_rel_dec_correct in Hr.
-      rewrite insert_commute; auto. } }
-Qed.
+  Lemma alist_find_Some:
+    ∀ {x l v n},
+      NoDup l.*1 ->
+      l !! n = Some (x, v) ->
+      alist_find x l = Some v.
+  Proof.
+    intros * Hnd; revert n x v; induction l; intros; eauto.
+    { inversion H. }
+    { destruct a. cbn in *.
+      rewrite lookup_cons in H.
+      destruct n;
+        first inversion H; subst; first apply alist_find_cons_eq.
+      apply NoDup_cons in Hnd; destruct Hnd as (?&?).
+      eapply IHl in H; eauto.
+      pose proof (alist_not_in_domain H0 H) as Hneq.
+      apply eq_dec_neq in Hneq; by rewrite Hneq. }
+  Qed.
 
-Lemma fold_alist_insert_some f l1 l2 r d:
-  FMapAList.fold_alist (λ (k : LLVMAst.raw_id) (v0 : dvalue)
-   (acc : global_env), <[k:=v0]> acc) l2 l1 !! f = Some d ->
-  (forall d0, r <> f /\
-    FMapAList.fold_alist (λ (k : LLVMAst.raw_id) (v0 : dvalue)
-      (acc : global_env), <[k:=v0]> acc) (<[r:=d0]> l2) l1 !! f = Some d) \/
-  (r = f /\
-    FMapAList.fold_alist (λ (k : LLVMAst.raw_id) (v0 : dvalue)
-      (acc : global_env), <[k:=v0]> acc) (<[r:=d]> l2) l1 !! f = Some d).
-Proof.
-  intros.
-  destruct (RelDec.rel_dec r f) eqn: Hrf;
-    [ rewrite RelDec.rel_dec_correct in Hrf | apply RelDec.neg_rel_dec_correct in Hrf ].
-  { right. eapply fold_alist_insert_some_eq in H; eauto. }
-  { left. intros; eapply fold_alist_insert_some_neq in H; eauto. }
-Qed.
+  Lemma alist_find_Some_iff:
+    ∀ {x l v},
+      NoDup l.*1 ->
+      alist_find x l = Some v ↔ ∃ n, l !! n = Some (x, v).
+  Proof.
+    intros * Hnd; split; cycle 1.
+    { intros (?&?); by eapply alist_find_Some. }
 
-Lemma alist_to_gmap_find_gen f g g' d :
-  (FMapAList.alist_find AstLib.eq_dec_raw_id f g = Some d \/
-  (FMapAList.alist_find AstLib.eq_dec_raw_id f g = None /\
-    g' !! f = Some d)) ->
-  (FMapAList.fold_alist
-    (λ (k : LLVMAst.raw_id) (v0 : dvalue) (acc : global_env),
-        <[k:=v0]> acc) g' (rev g)) !! f = Some d.
-Proof.
-  intros; setoid_rewrite <- (rev_involutive g) in H.
-  revert g' f d H.
-  induction (rev g).
-  { intros; cbn in H; destruct H; [inversion H | by destruct H]. }
-  cbn in *; destruct a; intros.
-  destruct H.
-  { apply alist_find_app_some in H. destruct H.
-    { eapply IHl; eauto. }
-    { destruct H as (?&?); subst.
-      apply alist_find_singleton in H0. destruct H0 as (?&?); subst.
-      eapply IHl; right; eauto. split; auto.
-      by rewrite lookup_insert. } }
-  { destruct H as (Hf & Hg').
-    assert (r <> f).
-    { eapply alist_find_none in Hf; eauto.
-      eapply in_elt. }
-    eapply IHl; right.
-    apply alist_find_app_none in Hf. destruct Hf as (Hf1 & Hf2).
-    split; auto.
-    rewrite lookup_insert_ne; eauto. }
-Qed.
+    induction l; intros H; first inversion H.
+    cbn in *. destruct a.
+    setoid_rewrite lookup_cons.
+    destruct (RelDec.rel_dec x k) eqn: Heq.
+    { inv H. exists 0%nat.
+      rewrite RelDec.rel_dec_correct in Heq; by subst. }
+    apply NoDup_cons in Hnd; destruct Hnd.
+    apply IHl in H; eauto. destruct H.
+    by exists (S x0).
+  Qed.
 
-Lemma alist_to_gmap_find f g d :
-  FMapAList.alist_find AstLib.eq_dec_raw_id f g = Some d ->
-  (FMapAList.fold_alist
-    (λ (k : LLVMAst.raw_id) (v0 : dvalue) (acc : global_env),
-        <[k:=v0]> acc) ∅ (rev g)) !! f = Some d.
-Proof.
-  intros; eapply alist_to_gmap_find_gen; by left.
-Qed.
-
-Lemma fold_alist_find_insert r d l l' f d0:
-  FMapAList.fold_alist
-    (λ (k : LLVMAst.raw_id) (v0 : dvalue) (acc : global_env), <[k:=v0]> acc)
-    (<[r := d]>l') l !! f = Some d0 ->
-  FMapAList.fold_alist
-    (λ (k : LLVMAst.raw_id) (v0 : dvalue) (acc : global_env), <[k:=v0]> acc)
-    l' l !! f = Some d0 \/
-  (r = f /\ d = d0).
-Proof.
-  revert l' r d f d0.
-  induction l; cbn; intros; eauto.
-  { assert (H' := H).
-    rewrite lookup_insert_Some in H; destruct H.
-    - destruct H; subst; right; eauto.
-    - destruct H; eauto. }
-  destruct a; cbn in *.
-  destruct (RelDec.rel_dec r r0) eqn: Hr.
-  { rewrite RelDec.rel_dec_correct in Hr. subst.
-    rewrite insert_insert in H. left; auto. }
-  { apply RelDec.neg_rel_dec_correct in Hr.
-    eapply IHl; eauto.
-    rewrite insert_commute; eauto. }
-Qed.
-
-Lemma fold_alist_none_insert r d l l' f:
-  FMapAList.fold_alist
-      (λ (k : LLVMAst.raw_id) (v0 : dvalue) (acc : global_env), <[k:=v0]> acc)
-      (<[r := d]> l') l !! f = None <->
-  FMapAList.fold_alist
-      (λ (k : LLVMAst.raw_id) (v0 : dvalue) (acc : global_env), <[k:=v0]> acc)
-      l' l !! f = None /\ r <> f.
-Proof.
-  split.
-  { revert r d f l'.
-    induction l; cbn; intros; eauto.
-    { rewrite lookup_insert_None in H; destruct H. auto. }
-    destruct a; eauto.
-    destruct (RelDec.rel_dec r r0) eqn: Hr.
-    { eapply IHl; eauto.
-      rewrite RelDec.rel_dec_correct in Hr. subst.
-      rewrite insert_insert in H.
-      rewrite insert_insert. eauto. }
-    { apply RelDec.neg_rel_dec_correct in Hr.
-      eapply IHl; eauto.
-      rewrite insert_commute; eauto. } }
-  { revert r d f l'.
-    induction l; cbn; intros; eauto.
-    { destruct H; rewrite lookup_insert_None; auto. }
-    destruct a; eauto.
-    destruct (RelDec.rel_dec r r0) eqn: Hr.
-    { rewrite RelDec.rel_dec_correct in Hr. subst.
-      rewrite insert_insert. destruct H; eauto. }
-    { apply RelDec.neg_rel_dec_correct in Hr.
-      rewrite insert_commute; eauto. } }
-Qed.
-
-Lemma fold_alist_find_insert' r d l l' f d0:
-  FMapAList.fold_alist
-    (λ (k : LLVMAst.raw_id) (v0 : dvalue) (acc : global_env), <[k:=v0]> acc)
-    (<[r := d]>l') l !! f = Some d0 ->
-  FMapAList.fold_alist
-    (λ (k : LLVMAst.raw_id) (v0 : dvalue) (acc : global_env), <[k:=v0]> acc)
-    l' l !! f = Some d0 \/
-  (FMapAList.fold_alist
-    (λ (k : LLVMAst.raw_id) (v0 : dvalue) (acc : global_env), <[k:=v0]> acc)
-    ∅ l !! f = None /\
-    r = f /\ d = d0).
-Proof.
-  revert l' r d f d0.
-  induction l; cbn; intros; eauto.
-  { assert (H' := H). rewrite lookup_insert_Some in H; destruct H.
-    - destruct H; subst; right; eauto.
-    - destruct H; eauto. }
-  destruct a; cbn in *.
-  destruct (RelDec.rel_dec r r0) eqn: Hr.
-  { rewrite RelDec.rel_dec_correct in Hr. subst.
-    rewrite insert_insert in H. left; auto. }
-  { apply RelDec.neg_rel_dec_correct in Hr.
-    rewrite insert_commute in H; eauto.
-    specialize (IHl _ _ _ _ _ H).
-    destruct IHl; eauto.
-    destruct H0 as (?&?&?); right; subst; eauto.
-    split; eauto. clear -H0 Hr.
-    rewrite fold_alist_none_insert; eauto. }
-Qed.
-
-Lemma alist_to_gmap_none l f :
-  FMapAList.fold_alist
-        (λ (k : LLVMAst.raw_id) (v0 : dvalue) (acc : global_env), <[k:=v0]> acc)
-        ∅ l !! f = None ->
-  FMapAList.alist_find AstLib.eq_dec_raw_id f (rev l) = None.
-Proof.
-  revert f. induction l; eauto.
-  cbn; intros. destruct a.
-  apply fold_alist_none_insert in H; destruct H.
-  rewrite alist_find_app_none; split.
-  { eapply IHl; eauto. }
-  assert (f <> r). { intro; apply H0; eauto. }
-  cbn; apply Util.eq_dec_neq in H1. rewrite H1; eauto.
-Qed.
-
-Lemma alist_to_gmap_find' f g d :
-  (FMapAList.fold_alist
-    (λ (k : LLVMAst.raw_id) (v0 : dvalue) (acc : global_env),
-        <[k:=v0]> acc) ∅ (rev g)) !! f = Some d ->
-  FMapAList.alist_find AstLib.eq_dec_raw_id f g = Some d.
-Proof.
-  intros; setoid_rewrite <- (rev_involutive g).
-  revert f d H.
-  induction (rev g).
-  { cbn; intros; inversion H. }
-
-  cbn in *; destruct a; intros.
-  rewrite alist_find_app_some.
-  apply fold_alist_find_insert' in H; destruct H.
-  { left; apply IHl; auto. }
-  destruct H as (?&?); subst.
-
-  right; cbn. destruct H0; subst; eauto.
-  assert (Dec: RelDec.rel_dec f f = true) by apply Util.eq_dec_eq.
-  rewrite Dec; eauto; split; eauto.
-  eapply alist_to_gmap_none; eauto.
-Qed.
+End alist_properties.
 
 Lemma alist_add_domain_stable:
   ∀ (L : local_env) (l : local_loc) (v v': local_val),
     (list_to_map L : gmap _ _) !! l = Some v ->
-    (list_to_set (FMapAList.alist_add AstLib.eq_dec_raw_id l v' L).*1 =
+    (list_to_set (alist_add l v' L).*1 =
                   (list_to_set L.*1 : gset _)).
 Proof.
   induction L; [ intros; inversion H | ].
@@ -486,8 +346,222 @@ Proof.
     set_solver. }
 Qed.
 
+Lemma fold_alist_insert_some_neq f l1 l2 r d d0:
+  FMapAList.fold_alist (λ (k : LLVMAst.raw_id) (v0 : dvalue)
+  (acc : global_env), <[k:=v0]> acc) l2 l1 !! f = Some d -> r <> f ->
+  FMapAList.fold_alist (λ (k : LLVMAst.raw_id) (v0 : dvalue)
+  (acc : global_env), <[k:=v0]> acc) (<[r:=d0]> l2) l1 !! f = Some d.
+Proof.
+    revert f l2 r d d0.
+  induction l1; intros; cbn in H; cbn; auto.
+  { rewrite lookup_insert_ne; auto. }
+  { destruct a.
+    destruct (RelDec.rel_dec r r0) eqn: Hr.
+    { rewrite RelDec.rel_dec_correct in Hr. subst.
+      rewrite insert_insert. auto. }
+    { apply RelDec.neg_rel_dec_correct in Hr.
+      rewrite insert_commute; auto. } }
+Qed.
+
+Lemma fold_alist_insert_some_eq f l m r d:
+  fold_alist (λ (k : LLVMAst.raw_id) (v0 : dvalue)
+  (acc : global_env), <[k:=v0]> acc) m l !! f = Some d -> r = f ->
+  fold_alist (λ (k : LLVMAst.raw_id) (v0 : dvalue)
+  (acc : global_env), <[k:=v0]> acc) (<[r:=d]> m) l !! f = Some d.
+Proof.
+  revert f m r d.
+  induction l; intros; cbn in H; cbn; auto.
+  { subst; rewrite lookup_insert; auto. }
+  { destruct a. subst.
+    destruct (RelDec.rel_dec r0 f) eqn: Hr.
+    { rewrite RelDec.rel_dec_correct in Hr. subst.
+      rewrite insert_insert. auto. }
+    { apply RelDec.neg_rel_dec_correct in Hr.
+      rewrite insert_commute; auto. } }
+Qed.
+
+Lemma fold_alist_insert_some f l m r d:
+  fold_alist (λ (k : LLVMAst.raw_id) (v0 : dvalue)
+  (acc : global_env), <[k:=v0]> acc) m l !! f = Some d ->
+  (forall d0, r <> f /\
+    fold_alist (λ (k : LLVMAst.raw_id) (v0 : dvalue)
+      (acc : global_env), <[k:=v0]> acc) (<[r:=d0]> m) l !! f = Some d) \/
+  (r = f /\
+    fold_alist (λ (k : LLVMAst.raw_id) (v0 : dvalue)
+      (acc : global_env), <[k:=v0]> acc) (<[r:=d]> m) l !! f = Some d).
+Proof.
+  intros.
+  destruct (RelDec.rel_dec r f) eqn: Hrf;
+    [ rewrite RelDec.rel_dec_correct in Hrf | apply RelDec.neg_rel_dec_correct in Hrf ].
+  { right. eapply fold_alist_insert_some_eq in H; eauto. }
+  { left. intros; eapply fold_alist_insert_some_neq in H; eauto. }
+Qed.
+
+Lemma alist_to_gmap_find_gen f g g' d :
+  (alist_find f g = Some d \/
+  (alist_find f g = None /\
+    g' !! f = Some d)) ->
+  (fold_alist
+    (λ (k : LLVMAst.raw_id) (v0 : dvalue) (acc : global_env),
+        <[k:=v0]> acc) g' (rev g)) !! f = Some d.
+Proof.
+  intros; setoid_rewrite <- (rev_involutive g) in H.
+  revert g' f d H.
+  induction (rev g).
+  { intros; cbn in H; destruct H; [inversion H | by destruct H]. }
+  cbn in *; destruct a; intros.
+  destruct H.
+  { apply alist_find_app_some in H. destruct H.
+    { eapply IHl; eauto. }
+    { destruct H as (?&?); subst.
+      apply alist_find_singleton in H0. destruct H0 as (?&?); subst.
+      eapply IHl; right; eauto. split; auto.
+      by rewrite lookup_insert. } }
+  { destruct H as (Hf & Hg').
+    assert (r <> f).
+    { eapply alist_find_none in Hf; eauto.
+      eapply in_elt. }
+    eapply IHl; right.
+    apply alist_find_app_none in Hf. destruct Hf as (Hf1 & Hf2).
+    split; auto.
+    rewrite lookup_insert_ne; eauto. }
+Qed.
+
+Lemma alist_to_gmap_find f g d :
+  alist_find f g = Some d ->
+  (fold_alist
+    (λ (k : LLVMAst.raw_id) (v0 : dvalue) (acc : global_env),
+        <[k:=v0]> acc) ∅ (rev g)) !! f = Some d.
+Proof.
+  intros; eapply alist_to_gmap_find_gen; by left.
+Qed.
+
+Lemma fold_alist_find_insert r d l l' f d0:
+  fold_alist
+    (λ (k : LLVMAst.raw_id) (v0 : dvalue) (acc : global_env), <[k:=v0]> acc)
+    (<[r := d]>l') l !! f = Some d0 ->
+  fold_alist
+    (λ (k : LLVMAst.raw_id) (v0 : dvalue) (acc : global_env), <[k:=v0]> acc)
+    l' l !! f = Some d0 \/
+  (r = f /\ d = d0).
+Proof.
+  revert l' r d f d0.
+  induction l; cbn; intros; eauto.
+  { assert (H' := H).
+    rewrite lookup_insert_Some in H; destruct H.
+    - destruct H; subst; right; eauto.
+    - destruct H; eauto. }
+  destruct a; cbn in *.
+  destruct (RelDec.rel_dec r r0) eqn: Hr.
+  { rewrite RelDec.rel_dec_correct in Hr. subst.
+    rewrite insert_insert in H. left; auto. }
+  { apply RelDec.neg_rel_dec_correct in Hr.
+    eapply IHl; eauto.
+    rewrite insert_commute; eauto. }
+Qed.
+
+Lemma fold_alist_none_insert r d l l' f:
+  fold_alist
+      (λ (k : LLVMAst.raw_id) (v0 : dvalue) (acc : global_env), <[k:=v0]> acc)
+      (<[r := d]> l') l !! f = None <->
+  fold_alist
+      (λ (k : LLVMAst.raw_id) (v0 : dvalue) (acc : global_env), <[k:=v0]> acc)
+      l' l !! f = None /\ r <> f.
+Proof.
+  split.
+  { revert r d f l'.
+    induction l; cbn; intros; eauto.
+    { rewrite lookup_insert_None in H; destruct H. auto. }
+    destruct a; eauto.
+    destruct (RelDec.rel_dec r r0) eqn: Hr.
+    { eapply IHl; eauto.
+      rewrite RelDec.rel_dec_correct in Hr. subst.
+      rewrite insert_insert in H.
+      rewrite insert_insert. eauto. }
+    { apply RelDec.neg_rel_dec_correct in Hr.
+      eapply IHl; eauto.
+      rewrite insert_commute; eauto. } }
+  { revert r d f l'.
+    induction l; cbn; intros; eauto.
+    { destruct H; rewrite lookup_insert_None; auto. }
+    destruct a; eauto.
+    destruct (RelDec.rel_dec r r0) eqn: Hr.
+    { rewrite RelDec.rel_dec_correct in Hr. subst.
+      rewrite insert_insert. destruct H; eauto. }
+    { apply RelDec.neg_rel_dec_correct in Hr.
+      rewrite insert_commute; eauto. } }
+Qed.
+
+Lemma fold_alist_find_insert' r d l l' f d0:
+  fold_alist
+    (λ (k : LLVMAst.raw_id) (v0 : dvalue) (acc : global_env), <[k:=v0]> acc)
+    (<[r := d]>l') l !! f = Some d0 ->
+  fold_alist
+    (λ (k : LLVMAst.raw_id) (v0 : dvalue) (acc : global_env), <[k:=v0]> acc)
+    l' l !! f = Some d0 \/
+  (fold_alist
+    (λ (k : LLVMAst.raw_id) (v0 : dvalue) (acc : global_env), <[k:=v0]> acc)
+    ∅ l !! f = None /\
+    r = f /\ d = d0).
+Proof.
+  revert l' r d f d0.
+  induction l; cbn; intros; eauto.
+  { assert (H' := H). rewrite lookup_insert_Some in H; destruct H.
+    - destruct H; subst; right; eauto.
+    - destruct H; eauto. }
+  destruct a; cbn in *.
+  destruct (RelDec.rel_dec r r0) eqn: Hr.
+  { rewrite RelDec.rel_dec_correct in Hr. subst.
+    rewrite insert_insert in H. left; auto. }
+  { apply RelDec.neg_rel_dec_correct in Hr.
+    rewrite insert_commute in H; eauto.
+    specialize (IHl _ _ _ _ _ H).
+    destruct IHl; eauto.
+    destruct H0 as (?&?&?); right; subst; eauto.
+    split; eauto. clear -H0 Hr.
+    rewrite fold_alist_none_insert; eauto. }
+Qed.
+
+Lemma alist_to_gmap_none l f :
+  fold_alist
+        (λ (k : LLVMAst.raw_id) (v0 : dvalue) (acc : global_env), <[k:=v0]> acc)
+        ∅ l !! f = None ->
+  alist_find f (rev l) = None.
+Proof.
+  revert f. induction l; eauto.
+  cbn; intros. destruct a.
+  apply fold_alist_none_insert in H; destruct H.
+  rewrite alist_find_app_none; split.
+  { eapply IHl; eauto. }
+  assert (f <> r). { intro; apply H0; eauto. }
+  cbn; apply Util.eq_dec_neq in H1. rewrite H1; eauto.
+Qed.
+
+Lemma alist_to_gmap_find' f g d :
+  (fold_alist
+    (λ (k : LLVMAst.raw_id) (v0 : dvalue) (acc : global_env),
+        <[k:=v0]> acc) ∅ (rev g)) !! f = Some d ->
+  alist_find f g = Some d.
+Proof.
+  intros; setoid_rewrite <- (rev_involutive g).
+  revert f d H.
+  induction (rev g).
+  { cbn; intros; inversion H. }
+
+  cbn in *; destruct a; intros.
+  rewrite alist_find_app_some.
+  apply fold_alist_find_insert' in H; destruct H.
+  { left; apply IHl; auto. }
+  destruct H as (?&?); subst.
+
+  right; cbn. destruct H0; subst; eauto.
+  assert (Dec: RelDec.rel_dec f f = true) by apply Util.eq_dec_eq.
+  rewrite Dec; eauto; split; eauto.
+  eapply alist_to_gmap_none; eauto.
+Qed.
+
 Lemma fold_left_delete_comm {K} `{!EqDecision K} `{!Countable K}
-  `{Countable K} (f : list K) a {A} (m : gmap K A):
+  (f : list K) a {A} (m : gmap K A):
   fold_left (fun m key => base.delete key m) f (base.delete a m) =
   base.delete a (fold_left (fun m key => base.delete key m) f m).
 Proof.
@@ -498,7 +572,7 @@ Proof.
 Qed.
 
 Lemma foldl_delete_comm {K} `{!EqDecision K} `{!Countable K}
-  `{Countable K} (f : list K) a {A} (m : gmap K A):
+  (f : list K) a {A} (m : gmap K A):
   foldl (fun m key => base.delete key m) (base.delete a m) f =
   base.delete a (foldl (fun m key => base.delete key m) m f).
 Proof.
@@ -853,7 +927,7 @@ Qed.
 
 (* Properties about [list_to_map] and [list_to_set] used for local env *)
 Lemma list_to_map_insert x v (l : local_env) :
-  list_to_map (FMapAList.alist_add AstLib.eq_dec_raw_id x v l) =
+  list_to_map (alist_add x v l) =
     <[x := v]> (list_to_map l : gmap _ _).
 Proof.
   induction l; eauto.
@@ -872,7 +946,7 @@ Proof.
 Qed.
 
 Lemma list_to_map_delete_alist l (L : local_env):
-  (list_to_map (FMapAList.alist_remove AstLib.eq_dec_raw_id l L) : gmap _ _) =
+  (list_to_map (alist_remove l L) : gmap _ _) =
       base.delete l (list_to_map L).
 Proof.
   induction L; eauto.
@@ -890,7 +964,7 @@ Proof.
 Qed.
 
 Lemma list_to_set_delete (l : local_loc) (L : local_env):
-  ((list_to_set (FMapAList.alist_remove AstLib.eq_dec_raw_id l L).*1) : gset _) =
+  ((list_to_set (alist_remove l L).*1) : gset _) =
     ((list_to_set L.*1) : gset local_loc) ∖ {[ l ]}.
 Proof.
   induction L; eauto.
@@ -907,7 +981,7 @@ Proof.
 Qed.
 
 Lemma list_to_set_insert x v (l : local_env) :
-  (list_to_set (FMapAList.alist_add AstLib.eq_dec_raw_id x v l).*1 : gset _) =
+  (list_to_set (alist_add x v l).*1 : gset _) =
     {[x]} ∪ (list_to_set l.*1 : gset _).
 Proof.
   induction l.
@@ -929,14 +1003,14 @@ Proof.
 Qed.
 
 Lemma list_to_set_foldr_local_env (bs : local_env) :
-  (list_to_set (foldr (λ '(x, dv), FMapAList.alist_add AstLib.eq_dec_raw_id x dv) [] bs).*1 : gset _)
+  (list_to_set (foldr (λ '(x, dv), alist_add x dv) [] bs).*1 : gset _)
   = (list_to_set bs.*1).
 Proof.
   induction bs; eauto.
   cbn. destruct a; cbn. rewrite -IHbs.
   rewrite list_to_set_delete.
 
-  remember (list_to_set (foldr (λ '(x, dv), FMapAList.alist_add AstLib.eq_dec_raw_id x dv) [] bs).*1).
+  remember (list_to_set (foldr (λ '(x, dv), alist_add x dv) [] bs).*1).
   clear.
 
   unfold_leibniz.
@@ -947,19 +1021,19 @@ Proof.
 Qed.
 
 Lemma list_to_map_foldr_local_env (bs : local_env) :
-  (list_to_map (foldr (λ '(x, dv), FMapAList.alist_add AstLib.eq_dec_raw_id x dv) [] bs) : gmap _ _)
+  (list_to_map (foldr (λ '(x, dv), alist_add x dv) [] bs) : gmap _ _)
   = list_to_map bs.
 Proof.
   induction bs; eauto.
   cbn. destruct a; cbn. rewrite -IHbs.
   rewrite list_to_map_delete_alist.
 
-  remember (list_to_map (foldr (λ '(x, dv), FMapAList.alist_add AstLib.eq_dec_raw_id x dv) [] bs)).
+  remember (list_to_map (foldr (λ '(x, dv), alist_add x dv) [] bs)).
   by rewrite insert_delete_insert.
 Qed.
 
 Lemma alist_find_to_map_Some A (x : LLVMAst.raw_id) l v:
-  FMapAList.alist_find AstLib.eq_dec_raw_id x l = Some v <->
+  alist_find x l = Some v <->
   (list_to_map l : gmap _ A) !! x = Some v.
 Proof.
   induction l; eauto.
@@ -985,7 +1059,7 @@ Qed.
 
 Lemma alist_find_dom_None {A} (id : LLVMAst.raw_id) l :
   id ∉ dom (list_to_map l : gmap _ A) ->
-  FMapAList.alist_find AstLib.eq_dec_raw_id id l = None.
+  alist_find id l = None.
 Proof.
   induction l; eauto.
   cbn. destruct a; cbn.
@@ -998,7 +1072,7 @@ Qed.
 
 Lemma alist_find_dom_Some {A} (id : LLVMAst.raw_id) l :
   id ∈ dom (list_to_map l : gmap _ A) ->
-  is_Some (FMapAList.alist_find AstLib.eq_dec_raw_id id l).
+  is_Some (alist_find id l).
 Proof.
   induction l; [ set_solver | ].
   destruct a; cbn; intros.
@@ -1179,7 +1253,7 @@ Qed.
 
 Lemma alist_find_dom_None' {A} (id : LLVMAst.raw_id) (l : list (_ * A)) :
   id ∉ (list_to_set l.*1 : gset _) ->
-  FMapAList.alist_find AstLib.eq_dec_raw_id id l = None.
+  alist_find id l = None.
 Proof.
   revert id.
   induction l; eauto.
@@ -1197,7 +1271,7 @@ Qed.
 Lemma foldr_local_env (bs : local_env) :
   NoDup bs.*1 ->
   (foldr
-     (λ '(x, dv), FMapAList.alist_add AstLib.eq_dec_raw_id x dv)
+     (λ '(x, dv), alist_add x dv)
      [] bs) = bs.
 Proof.
   induction bs; eauto.
@@ -1207,7 +1281,7 @@ Proof.
   clear IHbs H.
 
   induction bs; cbn; eauto.
-  cbn. rewrite /FMapAList.alist_add.
+  cbn. rewrite /alist_add.
   intros.
   simpl.
   destruct (negb (RelDec.rel_dec r a.1)) eqn: H; cbn; eauto.
@@ -1218,12 +1292,12 @@ Proof.
     cbn in H2; cbn in H3. inversion H3; subst.
     assert (r ∉ bs.*1) by set_solver.
     specialize (IHbs H0 H5).
-    rewrite /FMapAList.alist_add in IHbs.
+    rewrite /alist_add in IHbs.
     inversion IHbs.
     by rewrite H6. }
   { assert (Heq: r = a.1).
     { rewrite negb_false_iff in H. by rewrite RelDec.rel_dec_correct in H. }
-    rewrite /FMapAList.alist_add in IHbs.
+    rewrite /alist_add in IHbs.
     destruct a; cbn in *; subst.
     inversion H3; subst.
     exfalso. set_solver. }
@@ -1363,7 +1437,7 @@ Qed.
 
 Lemma no_dup_alist_add {V} `{EqDecision V} L l (v' : V) :
   NoDup L.*1 ->
-  NoDup ((FMapAList.alist_add AstLib.eq_dec_raw_id l v' L).*1).
+  NoDup ((alist_add l v' L).*1).
 Proof.
   intros.
   revert l v'.
