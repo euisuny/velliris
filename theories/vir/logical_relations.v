@@ -331,6 +331,183 @@ Section logical_relations_properties.
 
   Context {Σ : gFunctors} `{!vellirisGS Σ}.
 
+  (* Helper lemmas on [expr_local_env_inv] *)
+  Lemma intersection_local_ids_eq {T} (e : exp T):
+    intersection_local_ids e e = exp_local_ids e.
+  Proof.
+    apply list_intersection_eq.
+  Qed.
+
+  (* Properties about [expr_local_env_inv] *)
+  Lemma exp_local_ids_acc_commute {T} (e : exp T) acc :
+    exp_local_ids_ e acc = exp_local_ids e ++ acc.
+  Proof.
+    revert acc.
+    induction e; cbn; try rewrite app_nil_r; eauto.
+    (* Ident *)
+    { destruct id; eauto. }
+    (* Binop *)
+    { intros.
+      do 2 rewrite IHe2. rewrite app_nil_r.
+      do 2 rewrite IHe1. by rewrite app_assoc. }
+    (* ICmp *)
+    { intros.
+      do 2 rewrite IHe2. rewrite app_nil_r.
+      do 2 rewrite IHe1. by rewrite app_assoc. }
+    (* GEP *)
+    { intros. destruct ptrval; cbn.
+      by rewrite app_assoc. }
+  Qed.
+
+  Lemma expr_local_env_inv_nil i_t i_s L_t L_s:
+    (expr_local_env_inv i_t i_s [] L_t L_s ⊣⊢ emp)%I.
+  Proof.
+    rewrite /expr_local_env_inv; by cbn.
+  Qed.
+
+  Lemma expr_local_env_inv_binop_invert
+    {T} i_t i_s L_t L_s τ iop (e1 e2: exp T):
+    expr_local_env_inv i_t i_s
+      (intersection_local_ids
+        (OP_IBinop iop τ e1 e2) (OP_IBinop iop τ e1 e2)) L_t L_s -∗
+    expr_local_env_inv i_t i_s
+      (exp_local_ids e1 ++ exp_local_ids e2) L_t L_s.
+  Proof.
+    rewrite /expr_local_env_inv; cbn.
+    repeat rewrite exp_local_ids_acc_commute; rewrite app_nil_r.
+    rewrite list_intersection_eq.
+    by iIntros "H".
+  Qed.
+
+  Lemma expr_local_env_inv_cons_invert i_t i_s L_t L_s x l:
+    expr_local_env_inv i_t i_s (x :: l) L_t L_s -∗
+    expr_local_env_inv i_t i_s [x] L_t L_s ∗
+    expr_local_env_inv i_t i_s l L_t L_s.
+  Proof.
+    iInduction l as [ | ] "IH" forall (x).
+    { (* nil case *)
+      cbn; iIntros "$". }
+
+    (* cons case *)
+    iIntros "(Hx & Ha)".
+    iSpecialize ("IH" with "Ha"); iDestruct "IH" as "((Ha & H) & IH)";
+      cbn; iFrame.
+  Qed.
+
+  Lemma expr_local_env_inv_app_invert i_t i_s L_t L_s l1 l2:
+    expr_local_env_inv i_t i_s (l1 ++ l2) L_t L_s -∗
+    expr_local_env_inv i_t i_s l1 L_t L_s ∗
+    expr_local_env_inv i_t i_s l2 L_t L_s.
+  Proof.
+    iInduction l1 as [ | ] "IH" forall (l2).
+    { (* nil case *)
+      cbn; iIntros "$". }
+
+    (* cons case *)
+    iIntros "H". cbn -[expr_local_env_inv].
+    iDestruct (expr_local_env_inv_cons_invert with "H") as "((Ha & _) & Hl)".
+    iSpecialize ("IH" with "Hl"); iDestruct "IH" as "(Hl & IH)".
+    iFrame.
+  Qed.
+
+  Lemma expr_local_env_inv_cons i_t i_s L_t L_s x l:
+    expr_local_env_inv i_t i_s [x] L_t L_s -∗
+    expr_local_env_inv i_t i_s l L_t L_s -∗
+    expr_local_env_inv i_t i_s (x :: l) L_t L_s.
+  Proof.
+    iInduction l as [ | ] "IH" forall (x).
+    { (* nil case *)
+      cbn; by iIntros "$ _". }
+
+    (* cons case *)
+    iIntros "Hx (Hl & Ha)".
+    iSpecialize ("IH" with "Hx Ha"); iDestruct "IH" as "(H1 & H2)".
+    cbn; iFrame.
+  Qed.
+
+  Lemma expr_local_env_inv_app i_t i_s L_t L_s l1 l2:
+    expr_local_env_inv i_t i_s l1 L_t L_s -∗
+    expr_local_env_inv i_t i_s l2 L_t L_s -∗
+    expr_local_env_inv i_t i_s (l1 ++ l2) L_t L_s.
+  Proof.
+    iInduction l1 as [ | ] "IH" forall (l2).
+    { (* nil case *)
+      cbn; iIntros "_ $". }
+
+    (* cons case *)
+    iIntros "H1 H2". cbn -[expr_local_env_inv].
+    iDestruct (expr_local_env_inv_cons_invert with "H1") as "((Ha & _) & H1)".
+    iSpecialize ("IH" with "H1 H2"); iDestruct "IH" as "(Hl & IH)"; iFrame.
+  Qed.
+
+  Lemma expr_local_env_inv_commute
+    {T} i_t i_s L_t L_s (e1 e2 : exp T):
+    expr_inv i_t i_s L_t L_s e1 e1 -∗
+    expr_local_env_inv i_t i_s (exp_local_ids e2) L_t L_s -∗
+    expr_inv i_t i_s L_t L_s e2 e2 ∗
+    expr_local_env_inv i_t i_s (exp_local_ids e1) L_t L_s.
+  Proof.
+    iIntros "(Hf & H1) H2"; iFrame.
+    rewrite !intersection_local_ids_eq; iFrame.
+  Qed.
+
+  (* Inversion rule for [expr_inv] for binop expression. *)
+  Lemma expr_inv_binop_invert
+    {T} i_t i_s L_t L_s τ iop (e1 e2 : exp T):
+    expr_inv
+      i_t i_s L_t L_s
+      (OP_IBinop iop τ e1 e2)
+      (OP_IBinop iop τ e1 e2) -∗
+    expr_inv i_t i_s L_t L_s e1 e1 ∗
+    expr_local_env_inv i_t i_s (exp_local_ids e2) L_t L_s.
+  Proof.
+    iIntros "Hb"; iDestruct "Hb" as "(Hf_inv & Hl)"; iFrame.
+    iPoseProof (expr_local_env_inv_binop_invert with "Hl") as "Hl".
+    iDestruct (expr_local_env_inv_app_invert with "Hl") as "(H1 & H2)".
+    iFrame; by rewrite intersection_local_ids_eq.
+  Qed.
+
+  Lemma expr_inv_binop
+    {T} i_t i_s L_t L_s τ iop (e1 e2 : exp T):
+    expr_inv
+      i_t i_s L_t L_s
+      (OP_IBinop iop τ e1 e2)
+      (OP_IBinop iop τ e1 e2) ⊣⊢
+    expr_inv i_t i_s L_t L_s e1 e1 ∗
+    expr_local_env_inv i_t i_s (exp_local_ids e2) L_t L_s.
+  Proof.
+    iSplit; first iApply expr_inv_binop_invert.
+    iIntros "((Hf & H1)& H2)"; iFrame.
+    rewrite !intersection_local_ids_eq; cbn -[expr_local_env_inv].
+    rewrite exp_local_ids_acc_commute.
+    iApply (expr_local_env_inv_app with "H1 H2").
+  Qed.
+
+  (* Utility lemma about [expr_inv].  *)
+  (* If [x] is included in the local ids of both [e_t] and [e_s]
+     and we have the [expr_inv] on those expressions, the local
+     environments must contain the local id. *)
+  Lemma expr_inv_local_env_includes {T} x {i_t i_s L_t L_s} (e_t e_s : exp T):
+    x ∈ (exp_local_ids e_t) ->
+    x ∈ (exp_local_ids e_s) ->
+    expr_inv i_t i_s L_t L_s e_t e_s -∗
+    ⌜x ∈ L_t.*1 /\ x ∈ L_s.*1⌝.
+  Proof.
+    iIntros (Ht Hs) "(Hf & Hl)".
+    assert (Hint:
+      x ∈ list_intersection (exp_local_ids e_t) (exp_local_ids e_s)).
+    { by rewrite elem_of_list_intersection. }
+
+    rewrite /expr_local_env_inv.
+    apply elem_of_list_lookup_1 in Hint; destruct Hint.
+
+    iDestruct (big_sepL_delete with "Hl") as "(Helem & Hl)"; eauto; cbn.
+
+    iDestruct "Helem" as (????) "(Hlt & Hls & #Hv)".
+    iPureIntro.
+    split; by eapply alist_find_elem_of.
+  Qed.
+
   (* Useful properties for preserving [*_inv] *)
   Lemma local_expr_inv {T} σ_t σ_s i_t i_s L_t L_s (e_t e_s: _ T):
     ⊢ expr_inv i_t i_s L_t L_s e_t e_s -∗

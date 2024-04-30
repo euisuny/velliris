@@ -1,3 +1,5 @@
+Require Import Coq.Program.Equality.
+
 From iris.algebra Require Import gmap auth.
 From iris.prelude Require Import options.
 From iris.proofmode Require Export tactics.
@@ -191,6 +193,24 @@ Defined.
 constructor; try split; repeat intro; try set_solver.
 - repeat red in H. by apply elem_of_list_union in H.
 - by apply elem_of_list_union.
+Qed.
+
+(* On [list_intersection] *)
+Lemma list_intersection_subset {A} `{EqDecision A} (l l' : list A):
+  l ⊆ l' ->
+  list_intersection l l' = l.
+Proof.
+  revert l'.
+  dependent induction l; eauto; cbn.
+  intros.
+  destruct (decide_rel elem_of a l'); try set_solver.
+  f_equiv. eapply IHl; set_solver.
+Qed.
+
+Lemma list_intersection_eq {A} `{EqDecision A} (l : list A):
+  list_intersection l l = l.
+Proof.
+  apply list_intersection_subset; set_solver.
 Qed.
 
 (* ========================================================================== *)
@@ -1194,9 +1214,6 @@ Proof.
   { rewrite -RelDec.neg_rel_dec_correct in Hid; subst.
     eapply IHl; eauto. set_solver. }
 Qed.
-
-
-Require Import Coq.Program.Equality.
 
 Lemma dvalue_has_dtyp_serialize dv1 dv2 τ:
   dvalue_has_dtyp dv1 τ ->
