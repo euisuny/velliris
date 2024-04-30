@@ -49,6 +49,8 @@ theories/vir/mcfg_contextual.v
 theories/vir/contextual.v
 theories/vir/contextual_laws.v
 
+theories/vir/fundamental_exp_relaxed.v
+
 theories/vir/examples/notations.v
 theories/vir/examples/examples.v
 theories/vir/examples/loop.v

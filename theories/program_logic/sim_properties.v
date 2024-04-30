@@ -1236,5 +1236,6 @@ Section sim_expr_properties.
 
 End sim_expr_properties.
 
-Notation "et '⪯' es [[ Φ ]]" := (sim_expr' Φ et es) (at level 70, Φ at level 200,
-                                                    format "'[hv' et  '/' '⪯'  '/' es  '/' [[  '[ ' Φ  ']' ]] ']'") : bi_scope.
+#[global]
+  Notation "et '⪯' es ⦉ Φ ⦊" := (sim_expr' Φ et es) (at level 70, Φ at level 200,
+    format "'[hv' et  '/' '⪯'  '/' es  '/' ⦉  '[ ' Φ  ']' ⦊ ']'") : bi_scope.

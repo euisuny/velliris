@@ -1,15 +1,12 @@
-Require Import Coq.Program.Equality.
+From Coq Require Import Program.Equality.
+
+From velliris.vir Require Export vir.
+From Vellvm.Utils Require Export FMapAList.
 
 From iris.algebra Require Import gmap auth.
 From iris.prelude Require Import options.
 From iris.proofmode Require Export tactics.
 Set Default Proof Using "Type*".
-
-From velliris.utils Require Import tactics.
-From velliris.vir Require Export vir.
-From Vellvm Require Import Handlers.Handlers.
-
-From Vellvm.Utils Require Export FMapAList.
 
 Open Scope nat_scope.
 

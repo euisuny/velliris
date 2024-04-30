@@ -1,19 +1,17 @@
 (** * Heap representation. *)
 
-From iris.algebra Require Import big_op gmap frac agree numbers gset list.
-From iris.algebra Require Import csum excl auth cmra_big_op numbers gmap_view.
-From iris.bi Require Import fractional.
-From iris.base_logic Require Export lib.own.
-From iris.base_logic.lib Require Import ghost_map ghost_var.
 From iris.prelude Require Import options.
-From iris.proofmode Require Export tactics.
+
+From iris.base_logic.lib Require Export own.
+From iris.base_logic.lib Require Import ghost_map ghost_var.
 
 From velliris.vir Require Export vir util vir_util.
-Set Default Proof Using "Type".
-Import uPred.
 
-From Vellvm Require Import Syntax.DynamicTypes.
-From Vellvm Require Import Handlers.Handlers Numeric.Integers.
+From iris.bi Require Import fractional.
+From iris.algebra Require Import cmra gmap agree frac auth.
+
+Set Default Proof Using "Type".
+
 Open Scope Z_scope.
 
 (* A points-to is a [block id * offset -> list byte] such that points-to's
@@ -654,7 +652,7 @@ Section heap.
     l ↦{q1} [v] ⊢ l ↦{q2} [v] -∗
     l ↦{q1 + q2} [v].
   Proof.
-    apply: wand_intro_r.
+    apply: bi.wand_intro_r.
     rewrite mapsto_eq -own_op -auth_frag_op singleton_op -!pair_op agree_idemp /= //.
   Qed.
 
@@ -1590,7 +1588,7 @@ Section heap.
   Lemma heap_block_size_rel_free_frame h hF f:
     heap_block_size_rel h hF ->
     heap_block_size_rel
-      (fold_left (λ (m0 : logical_memory) (key : Z), delete key m0) f h.1, h.2)
+      (fold_left (λ m0 (key : Z), delete key m0) f h.1, h.2)
       hF.
   Proof.
     repeat intro.
@@ -1852,7 +1850,7 @@ Section heap.
   Proof.
     rewrite mapsto_eq /mapsto_def.
     intros Hσv.
-    apply bi.entails_wand, wand_intro_r. rewrite -!own_op to_heap_insert.
+    apply bi.entails_wand, bi.wand_intro_r. rewrite -!own_op to_heap_insert.
     eapply own_update, auth_update, singleton_local_update.
     { by rewrite /to_heap lookup_fmap Hσv. }
     eapply exclusive_local_update. done.
@@ -1969,7 +1967,7 @@ End heap.
 
 Lemma heap_init `{heapG Σ} (gs : global_env):
   ⊢ |==> ∃ (γ : heap_names) (γf : frame_names),
-      heap_ctx γ (gmap_empty, gset_empty) (Singleton []) gs [] [] ∗
+      heap_ctx γ (gmap_empty, gset_empty) (Mem.Singleton []) gs [] [] ∗
       own γ.(heap_name) (◯ to_heap gmap_empty) ∗
       ([∗ map] k↦v ∈ gmap_empty, k ↪[γ.(heap_block_size_name)] v) ∗
       own (globals_name γ)

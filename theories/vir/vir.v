@@ -1,16 +1,12 @@
+From Coq Require Import String.
+From Equations Require Export Equations.
+
 From iris.prelude Require Import options.
 
-From Equations Require Import Equations.
+From velliris.program_logic Require Export program_logic.
+From velliris.utils Require Export tactics.
 
-From velliris.program_logic Require Import program_logic.
-From velliris.utils Require Import tactics.
-
-From Coq Require Import String.
-
-From ITree Require Import
-     ITree
-     ITreeFacts
-     Events.StateFacts.
+From ITree Require Export ITree ITreeFacts.
 
 From Vellvm Require Export
      Handlers.Handlers
