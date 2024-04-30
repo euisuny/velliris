@@ -18,7 +18,6 @@ From velliris.program_logic Require Import program_logic.
 From velliris.vir Require Import
    vir spec globalbij heapbij frame_laws primitive_laws bij_laws.
 From velliris.utils Require Import no_event.
-
 Set Default Proof Using "Type*".
 
 Import ListNotations.
@@ -111,30 +110,13 @@ Section logical_relations_def.
 
   Definition exp_local_ids {T} (e : exp T) := exp_local_ids_ e nil.
 
-  Definition dummy : raw_id * (local_val * local_val) :=
-    (Name "dummy", (UVALUE_None, UVALUE_None)).
-
   Definition empty_WF :
     gmap (loc * loc) Qp → gmap raw_id uvalue → gmap raw_id uvalue → Prop :=
     fun _ _ _ => True.
 
-  (* Filter keys from local environment *)
-  Definition filter_keys m L_t L_s :=
-    List.map
-      (fun (x : raw_id) =>
-          match
-            FMapAList.alist_find AstLib.eq_dec_raw_id x L_t,
-            FMapAList.alist_find AstLib.eq_dec_raw_id x L_s with
-          | Some v_t, Some v_s =>
-              ((x, (v_t, v_s)) : raw_id * (local_val * local_val))
-          | _, _ => dummy
-          end) m.
-
-  (* Given the current local environments, filter out the elements
-    that exist in both the source and target local environments. *)
-  Definition filter_local_ids {T} (L_t L_s : local_env) (e_t e_s : exp T) :=
-    let m := list_intersection (exp_local_ids e_t) (exp_local_ids e_s) in
-    filter_keys m L_t L_s.
+  (* Given expressions, get the intersection of their local ids. *)
+  Definition intersection_local_ids {T} (e_t e_s : exp T) :=
+    list_intersection (exp_local_ids e_t) (exp_local_ids e_s).
 
   (* Helper functions for [mcfg]. *)
   Definition address_one_function (df : definition dtyp (CFG.cfg dtyp)) :
@@ -151,18 +133,24 @@ Section logical_relations_def.
   (** *Invariants *)
   (* Invariant for expressions. *)
   Definition expr_frame_inv i_t i_s (L_t L_s : local_env) : iProp Σ :=
+    (* There are no duplicate keys on the local environment. *)
+    ⌜NoDup L_t.*1⌝ ∗ ⌜NoDup L_s.*1⌝ ∗
+    (* Current stack frame *)
     stack_tgt i_t ∗ stack_src i_s ∗ frame_WF i_t i_s ∗
+    (* Domain of local environments on source and target *)
     ldomain_tgt i_t (list_to_set L_t.*1) ∗
     ldomain_src i_s (list_to_set L_s.*1) ∗
+    (* Checkout set is empty *)
     checkout ∅.
 
-  Definition expr_local_env_inv i_t i_s m :=
-    ([∗ list] '(l, (v_t, v_s)) ∈ m,
+  Definition expr_local_env_inv i_t i_s m L_t L_s :=
+    ([∗ list] l ∈ m,
+      ∃ v_t v_s, ⌜alist_find l L_t = Some v_t⌝ ∗ ⌜alist_find l L_s = Some v_s⌝ ∗
       [ l := v_t ]t i_t ∗ [ l := v_s ]s i_s ∗ uval_rel v_t v_s)%I.
 
   Definition expr_inv {T} i_t i_s L_t L_s (e_t e_s : exp T) : iProp Σ :=
     expr_frame_inv i_t i_s L_t L_s ∗
-    expr_local_env_inv i_t i_s (filter_local_ids L_t L_s e_t e_s).
+    expr_local_env_inv i_t i_s (intersection_local_ids e_t e_s) L_t L_s.
 
   (* Invariant for codes. *)
    Definition code_inv C i_t i_s A_t A_s : iPropI Σ :=
@@ -348,9 +336,10 @@ Section logical_relations_properties.
     ⊢ expr_inv i_t i_s L_t L_s e_t e_s -∗
     state_interp σ_t σ_s ==∗
       state_interp σ_t σ_s ∗
-      (([∗ list] '(l, (v_t, v_s)) ∈ (filter_local_ids L_t L_s e_t e_s),
-      [ l := v_t ]t i_t ∗ [ l := v_s ]s i_s ∗
-      uval_rel v_t v_s)) ∗
+      ([∗ list] l ∈ (intersection_local_ids e_t e_s),
+        ∃ v_t v_s, ⌜alist_find l L_t = Some v_t⌝ ∗ ⌜alist_find l L_s = Some v_s⌝ ∗
+        [ l := v_t ]t i_t ∗ [ l := v_s ]s i_s ∗ uval_rel v_t v_s) ∗
+      ⌜NoDup L_t.*1⌝ ∗ ⌜NoDup L_s.*1⌝ ∗
       ⌜(list_to_set L_t.*1 : gset _) =
         (list_to_set (vlocal σ_t).1.*1 : gset _)⌝ ∗
       ⌜(list_to_set L_s.*1 : gset _) =
@@ -363,7 +352,7 @@ Section logical_relations_properties.
   Proof.
     iIntros "CI SI".
     iDestruct "SI" as (???) "(Hh_s & Hh_t & H_c & Hbij & %Hdom_c & SI)".
-    iDestruct "CI" as  "((Hf_t & Hf_s & WF & Hd_t & Hd_s & HC) & Harg)".
+    iDestruct "CI" as  "((%Hnd_t & %Hnd_s & Hf_t & Hf_s & WF & Hd_t & Hd_s & HC) & Harg)".
 
     destruct_HC "Hh_s".
 
@@ -672,59 +661,25 @@ Section logical_relations_properties.
       rewrite H; iSplit; done. }
   Qed.
 
-  (* Utility lemmas TODO Move *)
-  Lemma nodup_filter_local_ids {T} L_t L_s (e_t e_s : exp T):
-    NoDup ((filter_local_ids L_t L_s e_t e_s).*1).
-  Proof. Admitted.
-
-  Lemma lookup_filter_local_ids {T} {L_t L_s n m x v_t v_s} (e_t e_s : exp T):
-    L_t !! n = Some (x, v_t) ->
-    L_s !! m = Some (x, v_s) ->
-    exists i, filter_local_ids L_t L_s e_t e_s !! i = Some (x, (v_t, v_s)).
-  Proof. Admitted.
-
   Lemma expr_local_read_refl {T} x i_t i_s L_t L_s (e_t e_s : exp T):
-    x ∈ L_t.*1 ->
-    x ∈ L_s.*1 ->
+    x ∈ intersection_local_ids e_t e_s ->
     ⊢ expr_inv i_t i_s L_t L_s e_t e_s -∗
     trigger (LocalRead x) ⪯ trigger (LocalRead x)
       [{ (v1, v2), uval_rel v1 v2 ∗ expr_inv i_t i_s L_t L_s e_t e_s }].
   Proof.
-    iIntros (Hx_t Hx_s) "CI".
+    iIntros (He) "CI".
     iApply sim_update_si.
 
     iIntros "%σ_t %σ_s SI".
     iDestruct (local_expr_inv with "CI SI") as ">H".
     iDestruct "H" as
-        "(SI & Hv & %Ht & %Hs & Hd_t & Hd_s & HC & Hs_t & Hs_s & Hwf)".
+        "(SI & Hv & %Hndt & %Hnds & %Ht & %Hs & Hd_t & Hd_s & HC & Hs_t & Hs_s & Hwf)".
     iFrame.
 
-    assert (e: x ∈ (vlocal σ_t).1.*1).
-    { set_solver. }
-
-    assert (HL_t: exists n v, L_t !! n = Some (x, v)).
-    { eapply (@elem_of_list_to_set raw_id (@gset local_loc _ _)) in e.
-      Unshelve. all : try typeclasses eauto.
-      setoid_rewrite <-Ht in e. clear -e.
-      rewrite elem_of_list_to_set in e.
-      by apply elem_of_fst_list_some. }
-
-    assert (es: x ∈ (vlocal σ_s).1.*1) by set_solver.
-
-    assert (HL_s: exists n v, L_s !! n = Some (x, v)).
-    { eapply (@elem_of_list_to_set raw_id (@gset local_loc _ _)) in e.
-      Unshelve. all : try typeclasses eauto.
-      setoid_rewrite <-Ht in e.
-      rewrite elem_of_list_to_set in e.
-      by apply elem_of_fst_list_some. }
-
-    destruct HL_t as (?&?&HL_t).
-    destruct HL_s as (?&?&HL_s).
-
-    destruct (lookup_filter_local_ids e_t e_s HL_t HL_s) as (?&?).
+    apply elem_of_list_lookup_1 in He. destruct He.
 
     iDestruct (big_sepL_delete with "Hv") as "(Helemt & Hl_t)"; eauto; cbn.
-    iDestruct "Helemt" as "(Helemt & Helems & #Hv)".
+    iDestruct "Helemt" as (????) "(Helemt & Helems & #Hv)".
 
     iApply (sim_expr_bupd_mono with "[Hd_t Hd_s HC Hwf Hv Hl_t]");
       [ | iApply (sim_local_read with "Helemt Helems Hs_t Hs_s")].
@@ -737,6 +692,7 @@ Section logical_relations_properties.
     rewrite Ht Hs; iFrame.
 
     setoid_rewrite big_sepL_delete at 2; eauto; iFrame; iFrame "Hv".
+    iSplitL ""; first done. iExists v_t', v_s'; iFrame; by iFrame "Hv".
   Qed.
 
   Lemma local_read_refl C x i_t i_s A_t A_s:
