@@ -152,12 +152,70 @@ Proof.
     destruct (dvalue_eq_dec (d1:=d) (d2:=d)) eqn: Hd; eauto. }
 Qed.
 
-(* ------------------------------------------------------------------------ *)
+
+(* ========================================================================== *)
+
+(* List-related helpers *)
+
+Lemma list_filter_filter {A} f (l : list A):
+  List.filter f l = filter f l.
+Proof.
+  induction l; eauto.
+  cbn. destruct (decide (f a)); destruct (f a); try inversion i;
+  by try rewrite IHl.
+Qed.
+
+Lemma list_fst_fmap_filter {A B} `{RelDec.RelDec A} L l:
+  (filter (λ x : A * B, negb (RelDec.rel_dec l x.1)) L).*1 =
+    filter (λ x, negb (RelDec.rel_dec l x)) L.*1.
+Proof.
+  revert l. induction L; eauto.
+  intros; cbn.
+  destruct a; cbn.
+  destruct (decide (negb (RelDec.rel_dec l a))) eqn: Ha; cbn; [ by f_equiv | done ].
+Qed.
+
+#[global] Instance list_empty {A} : Empty (list A).
+  constructor; eauto.
+Defined.
+
+#[global] Instance list_singleton {A}: base.Singleton A (list A).
+  repeat red. intro. exact (X :: []).
+Defined.
+
+#[global] Instance list_union {A} `{EqDecision A} : Union (list A).
+  repeat intro. apply (list_union X X0).
+Defined.
+
+#[global] Instance list_semiset {A} `{EqDecision A}: SemiSet A (list A).
+constructor; try split; repeat intro; try set_solver.
+- repeat red in H. by apply elem_of_list_union in H.
+- by apply elem_of_list_union.
+Qed.
+
+(* ========================================================================== *)
+#[global] Instance RelDec_EqDecision {K : Type}
+  {RelEq : RelDec.RelDec (@eq K)}
+  {RelEq_Correct : RelDec.RelDec_Correct RelEq} :
+  EqDecision K.
+Proof.
+  repeat intro.
+  destruct (RelDec.rel_dec x y) eqn: Heq.
+  { assert (x = y).
+    { by apply RelDec.rel_dec_correct. }
+    by constructor. }
+  { assert (x <> y).
+    { by apply RelDec.neg_rel_dec_correct. }
+    by constructor. }
+Defined.
+(* ========================================================================== *)
+
 (* [alist]-related util functions *)
 
 Arguments alist_find [_ _ _ _].
 Arguments alist_add [_ _ _ _].
 Arguments alist_remove [_ _ _ _].
+
 
 Section alist_properties.
 
@@ -168,6 +226,37 @@ Section alist_properties.
 
   Implicit Type l : list (K * A).
   Implicit Type m : list (K * A).
+
+  Lemma no_dup_alist_add l k v :
+    NoDup l.*1 ->
+    NoDup ((alist_add k v l).*1).
+  Proof.
+    intros.
+    revert k v.
+    induction l; eauto; [ constructor; set_solver | ].
+    inversion H; subst; eauto.
+    intros.
+    specialize (IHl H3 k v).
+    destruct a.
+    destruct (RelDec.rel_dec k k0) eqn: Heq;
+      [ cbn in *; rewrite Heq; cbn; eauto | ].
+    cbn in *. rewrite Heq; cbn.
+    inversion IHl; subst; eauto.
+    constructor; cycle 1.
+    { constructor; try set_solver.
+      intro; apply H2.
+      eapply elem_of_weaken; eauto.
+      match goal with
+        | |- (List.filter ?f ?l).*1 ⊆ ?r =>
+            replace (List.filter f l) with (filter f l);
+            change r with l.*1
+      end; cycle 1.
+      { by rewrite list_filter_filter. }
+      rewrite list_fst_fmap_filter.
+      apply list_filter_subseteq. }
+    { rewrite not_elem_of_cons; split; eauto.
+      by apply RelDec.neg_rel_dec_correct. }
+  Qed.
 
   Lemma alist_find_app_some f l m (d : A):
     (alist_find f (l ++ m) = Some d <->
@@ -1402,63 +1491,6 @@ Proof.
     - destruct H1.
       eapply IHr; eauto. }
 Qed.
-
-
-(* ========================================================================== *)
-
-(* List-related helpers *)
-
-Lemma list_fst_fmap_filter {A B} `{RelDec.RelDec A} L l:
-  (List.filter (λ x : A * B, negb (RelDec.rel_dec l x.1)) L).*1 =
-    List.filter (λ x, negb (RelDec.rel_dec l x)) L.*1.
-Proof.
-  revert l. induction L; eauto.
-  intros; cbn.
-  destruct a; cbn.
-  destruct (negb (RelDec.rel_dec l a)) eqn: Ha; cbn; [ by f_equiv | done ].
-Qed.
-
-#[global] Instance list_empty {A} : Empty (list A).
-  constructor; eauto.
-Defined.
-
-#[global] Instance list_singleton {A}: base.Singleton A (list A).
-  repeat red. intro. exact (X :: []).
-Defined.
-
-#[global] Instance list_union {A} `{EqDecision A} : Union (list A).
-  repeat intro. apply (list_union X X0).
-Defined.
-
-#[global] Instance list_semiset {A} `{EqDecision A}: SemiSet A (list A).
-constructor; try split; repeat intro; try set_solver.
-- repeat red in H. by apply elem_of_list_union in H.
-- by apply elem_of_list_union.
-Qed.
-
-Lemma no_dup_alist_add {V} `{EqDecision V} L l (v' : V) :
-  NoDup L.*1 ->
-  NoDup ((alist_add l v' L).*1).
-Proof.
-  intros.
-  revert l v'.
-  induction L; eauto; [ constructor; set_solver | ].
-  inversion H; subst; eauto.
-  intros.
-  specialize (IHL H3 l v').
-  destruct a.
-  destruct (RelDec.rel_dec l u) eqn: Heq; [ cbn in *; rewrite Heq; cbn; eauto | ].
-  cbn in *. rewrite Heq; cbn.
-  inversion IHL; subst; eauto.
-  constructor; cycle 1.
-  { constructor; try set_solver.
-    intro; apply H2.
-    eapply elem_of_weaken; eauto.
-    rewrite list_fst_fmap_filter. apply list_filter_subseteq. }
-  { rewrite not_elem_of_cons; split; eauto.
-    by apply RelDec.neg_rel_dec_correct. }
-Qed.
-
 
 (* ========================================================================== *)
 
