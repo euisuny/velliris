@@ -47,12 +47,24 @@ Section fundamental_exp.
       cbn; eauto.
 
   (* Utility lemma about [expr_inv]. TODO move to [logical_relations] *)
+  (* If [x] is included in the local ids of both [e_t] and [e_s]
+     and we have the [expr_inv] on those expressions, the local
+     environments must contain the local id. *)
   Lemma expr_inv_local_env_includes {T} x {i_t i_s L_t L_s} (e_t e_s : exp T):
     x ∈ (exp_local_ids e_t) ->
     x ∈ (exp_local_ids e_s) ->
     expr_inv i_t i_s L_t L_s e_t e_s -∗
     ⌜x ∈ L_t.*1 /\ x ∈ L_s.*1⌝.
-  Proof. Admitted.
+  Proof.
+    iIntros (Ht Hs) "(Hf & Hl)".
+    assert (Hint:
+      x ∈ list_intersection (exp_local_ids e_t) (exp_local_ids e_s)).
+    { by rewrite elem_of_list_intersection. }
+
+    rewrite /filter_local_ids.
+    
+    rewrite
+  Admitted.
 
   (* ------------------------------------------------------------------------ *)
 
@@ -367,6 +379,17 @@ Section fundamental_exp.
     filter_keys nil L_t L_s = nil.
   Proof. done. Qed.
 
+  Lemma filter_keys_cons x l L_t L_s :
+    filter_keys (x :: l) L_t L_s =
+    filter_keys [x] L_t L_s ++
+    filter_keys l L_t L_s.
+  Proof.
+    revert x; induction l; intros.
+    { by rewrite filter_keys_nil app_nil_r. }
+
+    rewrite IHl {1 2}/filter_keys; cbn -[filter_keys].
+  Admitted.
+
   Opaque filter_keys.
 
   (* TODO Move: more about [expr_local_env_inv] *)
@@ -389,6 +412,18 @@ Section fundamental_exp.
     by rewrite /filter_local_ids list_intersection_eq.
   Qed.
 
+  Lemma expr_local_env_inv_cons_invert i_t i_s L_t L_s x l:
+    expr_local_env_inv i_t i_s (filter_keys (x :: l) L_t L_s) -∗
+    expr_local_env_inv i_t i_s (filter_keys [x] L_t L_s) ∗
+    expr_local_env_inv i_t i_s (filter_keys l L_t L_s).
+  Proof.
+    iInduction l as [ | ] "IH" forall (x); cbn -[filter_keys].
+    { (* nil case *)
+      rewrite filter_keys_nil expr_local_env_inv_nil; iIntros "$". }
+
+    { (* cons case *)
+  Admitted.
+
   Lemma expr_local_env_inv_app_invert i_t i_s L_t L_s l1 l2:
     expr_local_env_inv i_t i_s (filter_keys (l1 ++ l2) L_t L_s) -∗
     expr_local_env_inv i_t i_s (filter_keys l1 L_t L_s) ∗
@@ -399,6 +434,7 @@ Section fundamental_exp.
       rewrite filter_keys_nil expr_local_env_inv_nil; iIntros "$". }
 
     (* cons case *)
+    iIntros "H".
   Admitted.
 
   (* Inversion rule for [expr_inv] for binop expression. *)
@@ -413,7 +449,8 @@ Section fundamental_exp.
   Proof.
     iIntros "Hb"; iDestruct "Hb" as "(Hf_inv & Hl)"; iFrame.
     iPoseProof (expr_local_env_inv_binop_invert with "Hl") as "Hl".
-  Qed.
+    
+  Admitted.
 
   Lemma expr_logrel_OP_IBinop:
     ∀ (iop : ibinop) (t : dtyp) (e1 e2 : exp dtyp) (dt : option dtyp)

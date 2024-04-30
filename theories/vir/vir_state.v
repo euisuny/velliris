@@ -509,7 +509,7 @@ Section local_properties.
   Lemma alist_add_domain_stable:
     ∀ (L : local_env) (l : local_loc) (v v': local_val),
       (list_to_map L : gmap _ _) !! l = Some v ->
-      (list_to_set (FMapAList.alist_add AstLib.eq_dec_raw_id l v' L).*1 =
+      (list_to_set (alist_add l v' L).*1 =
                     (list_to_set L.*1 : gset _)).
   Proof.
     induction L; [ intros; inversion H | ].
@@ -562,7 +562,7 @@ Section local_properties.
     heap_ctx γ h mf g L LS -∗
     stack γ i -∗
     ❲ %l := v ❳ i ==∗
-    heap_ctx γ h mf g (FMapAList.alist_add AstLib.eq_dec_raw_id l v' L) LS ∗
+    heap_ctx γ h mf g (alist_add l v' L) LS ∗
     stack γ i ∗
     ❲ %l := v' ❳ i.
   Proof.
@@ -587,7 +587,7 @@ Section local_properties.
     ldomain γ (current_frame i) D -∗
     stack γ i -∗
     heap_ctx γ h mf g L LS ==∗
-    heap_ctx γ h mf g (FMapAList.alist_add AstLib.eq_dec_raw_id l v L) LS ∗
+    heap_ctx γ h mf g (alist_add l v L) LS ∗
     ❲ %l := v ❳ i ∗
     stack γ i ∗
     ldomain γ (current_frame i) ({[ l ]} ∪ D).

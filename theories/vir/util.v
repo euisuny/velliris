@@ -194,10 +194,18 @@ constructor; try split; repeat intro; try set_solver.
 Qed.
 
 (* ========================================================================== *)
+(* EqDecision classes. *)
+
+(* Warning: do not change the ordering or weight of these instances;
+ Coq Typeclass resolution is fragile. *)
+
+#[global] Instance attr_eq_dec: EqDecision fn_attr.
+Proof. solve_decision. Defined.
+
 #[global] Instance RelDec_EqDecision {K : Type}
   {RelEq : RelDec.RelDec (@eq K)}
   {RelEq_Correct : RelDec.RelDec_Correct RelEq} :
-  EqDecision K.
+  EqDecision K | 10000.
 Proof.
   repeat intro.
   destruct (RelDec.rel_dec x y) eqn: Heq.

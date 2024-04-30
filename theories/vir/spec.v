@@ -23,9 +23,6 @@ Notation "# l" := (DVALUE_Addr (to_addr l)) (at level 30).
 
 Notation "d  ̂" := (dvalue_to_uvalue d) (at level 40).
 
-#[global] Instance attr_eq_dec: EqDecision fn_attr.
-Proof. solve_decision. Defined.
-
 Definition HasAttr : fn_attr -> list fn_attr -> bool :=
   fun attr l => 
     match l with

@@ -909,7 +909,7 @@ Section proof.
     destruct (vlocal σ_t) eqn: Hlocal_t.
 
     iExists _,
-      (update_local (FMapAList.alist_add AstLib.eq_dec_raw_id x v l, l0) σ_t),
+      (update_local (alist_add x v l, l0) σ_t),
       (fun x => Tau (Ret tt)),_.
 
     iSplitL "".
@@ -960,7 +960,7 @@ Section proof.
     destruct (vlocal σ_s) eqn: Hlocal_s.
 
     iExists _,
-      (update_local (FMapAList.alist_add AstLib.eq_dec_raw_id x v l, l0) σ_s),
+      (update_local (alist_add x v l, l0) σ_s),
       (fun x => Tau (Ret tt)),_.
 
     iSplitL "".
@@ -1050,7 +1050,7 @@ Section proof.
     destruct (vlocal σ_t) eqn: Hlocal_t.
 
     iExists _,
-      (update_local (FMapAList.alist_add AstLib.eq_dec_raw_id x v l, l0) σ_t),
+      (update_local (alist_add x v l, l0) σ_t),
       (fun x => Tau (Ret tt)),_.
 
     iSplitL "".
@@ -1099,7 +1099,7 @@ Section proof.
     destruct (vlocal σ_s) eqn: Hlocal_s.
 
     iExists _,
-      (update_local (FMapAList.alist_add AstLib.eq_dec_raw_id x v l, l0) σ_s),
+      (update_local (alist_add x v l, l0) σ_s),
       (fun x => Tau (Ret tt)),_.
 
     iSplitL "".
