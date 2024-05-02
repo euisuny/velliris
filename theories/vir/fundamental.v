@@ -242,6 +242,72 @@ Section fundamental.
     iSplitL ""; done.
   Qed.
 
+  (* TODO WIP : Move after working on these *)
+  Ltac simp_instr :=
+    rewrite /subevent /resum /ReSum_inr /cat /Cat_IFun /inr_ /Inr_sum1;
+    simp instrE_conv.
+
+  Ltac itree_simp e :=
+    lazymatch e with
+    (* Conversion lemmas *)
+    | exp_conv (Ret _) => rewrite exp_conv_ret
+    | exp_conv (bind _ _) => rewrite exp_conv_bind
+    | exp_conv (ITree.bind _ _) => rewrite exp_conv_bind
+    | instr_conv (trigger (LocalWrite _ _)) => rewrite instr_conv_localwrite
+    | instr_conv (Ret ?x) => rewrite (instr_conv_ret x)
+    | instr_conv (Ret _) => rewrite instr_conv_ret
+    | instr_conv (bind _ _) => rewrite instr_conv_bind
+    | instr_conv (ITree.bind _ _) => rewrite instr_conv_bind
+    | L0'expr_conv (Ret _) => rewrite L0'expr_conv_ret
+    | L0'expr_conv (bind _ _) => rewrite L0'expr_conv_bind
+    | L0'expr_conv (ITree.bind _ _) => rewrite L0'expr_conv_bind
+
+    (* Basic rewrite *)
+    | ITree.bind _ (fun x => Ret x) => rewrite bind_ret_r
+    | ITree.bind (Ret ?r) ?k => rewrite (bind_ret_l r k)
+    | ITree.bind (Ret _) _ => rewrite bind_ret_l
+    | ITree.bind (ITree.bind _ _) _ => rewrite bind_bind
+    | ITree.bind ?e _ => progress itree_simp e
+
+    (* Interp-related laws *)
+    | interp ?f (Ret ?x) => rewrite (interp_ret f x)
+    | interp _ (Ret _) => rewrite interp_ret
+    | interp ?f (ITree.bind ?t ?k) => rewrite (interp_bind f t k)
+    | interp ?f (translate ?t ?k) => rewrite (interp_translate f t k)
+    | interp _ (translate _ _) => rewrite interp_translate
+
+    (* Specific to level translations *)
+    | interp (λ T e, Vis (instrE_conv T (exp_to_instr e)) (λ x : T , Ret x)) _ =>
+        rewrite (eq_itree_interp _ _ eq2_exp_to_L0); last done
+    end.
+
+  Ltac Base :=
+    match goal with
+    (* Base case *)
+    | |- environments.envs_entails _
+        (sim_expr _ (Ret _) (Ret _)) =>
+        iApply sim_expr_base
+    end.
+
+  Ltac sim_expr_simp e :=
+    match e with
+    (* Some symbolic execution under ITree rewrites *)
+    | sim_expr _ ?l ?r =>
+      (* Try doing ITree rewriting on both sides if possible *)
+      itree_simp l + itree_simp r
+    end.
+
+  Ltac Cut := iApply sim_expr_bind.
+
+  Ltac Simp := repeat
+    lazymatch goal with
+    | |- environments.envs_entails _ (bupd ?e) =>
+        iModIntro
+    | |- environments.envs_entails _ ?e =>
+        sim_expr_simp e
+    end.
+
+
   Theorem phis_compat C bid (Φ Φ' : list (local_id * phi dtyp)) A_t A_s:
     ([∗ list] ϕ;ϕ' ∈ Φ; Φ',
         phi_logrel (denote_phi bid ϕ) (denote_phi bid ϕ') C A_t A_s) -∗
@@ -250,32 +316,21 @@ Section fundamental.
     iIntros "HΦ" (??) "CI".
     iPoseProof (phi_list_compat with "HΦ CI") as "H".
     rewrite /denote_phis.
-    rewrite !instr_conv_bind.
-    Simp.
+    Simp. Cut.
     iApply sim_expr_bupd_mono ; [ | iApply "H"]; eauto; try iFrame.
 
-    cbn. iIntros (??) "H".
-    iDestruct "H" as (????) "(H & CI)".
-    rewrite H H0; clear H H0.
-    Simp.
+    iIntros (??) "H".
+    iDestruct "H" as (??->->) "(H & CI)".
+    Simp. setoid_rewrite instr_conv_ret.
 
     iInduction r_s as [] "IH" forall (r_t).
     { iDestruct (big_sepL2_nil_inv_r with "H") as %Hx; subst; cbn.
-      cbn; rewrite !bind_ret_l instr_conv_ret; cbn.
-      iApply sim_expr_base; iExists _, _; iFrame; iSplitL ""; done. }
+      Simp. Base.
+      iExists _, _; iFrame; iSplitL ""; done. }
 
     iDestruct (big_sepL2_cons_inv_r with "H") as (???) "(CI1 & CI2)";
-    cbn; rewrite interp_bind.
-
-    destruct a, x1; subst; cbn.
-    rewrite bind_bind; setoid_rewrite interp_bind; rewrite !bind_bind.
-    setoid_rewrite bind_bind.
-    setoid_rewrite interp_ret. setoid_rewrite bind_ret_l.
-
-    setoid_rewrite interp_vis.
-    setoid_rewrite interp_ret. setoid_rewrite bind_bind.
-    setoid_rewrite bind_tau; setoid_rewrite bind_ret_l.
-    iApply sim_expr_bind.
+    destruct a, x1; subst; cbn. Simp. Cut.
+    iApply sim_expr_vis.
 
     iDestruct "CI1" as "(%Hl & Hv)"; subst.
 
@@ -283,22 +338,19 @@ Section fundamental.
       [ | iApply (local_write_refl with "CI Hv")].
 
     cbn. iIntros (??) "H".
-    iDestruct "H" as (????) "CI".
-    iSpecialize ("IH" with "CI2 CI"). iMod "IH".
+    iDestruct "H" as (??->->) "CI".
+    Simp. iApply sim_expr_tau; Base.
+    iSpecialize ("IH" with "CI2 CI"). Simp.
     iPoseProof (sim_expr_fmap_inv with "IH") as "Hf".
-    rewrite H H0. rewrite !bind_ret_l.
-
-    iApply sim_expr_tau. setoid_rewrite interp_bind.
-    setoid_rewrite bind_bind.
-    setoid_rewrite interp_ret. setoid_rewrite bind_ret_l.
-    iApply sim_expr_bind.
+    Cut.
 
     iApply sim_expr_bupd_mono; [ | iApply "Hf"].
 
     iIntros (??) "H".
     iDestruct "H" as (????????) "H".
-    rewrite H1 H2. rewrite !bind_ret_l.
-    iApply sim_expr_base; iExists _, _; iFrame.
+    rewrite H H0; apply eqitree_inv_Ret in H1, H2; subst.
+    Simp. Base.
+    iExists _, _; iFrame.
     iSplitL ""; done.
   Qed.
 
@@ -324,26 +376,23 @@ Section fundamental.
   Proof.
     iIntros "#H #CI".
     iInduction e as [] "IHl".
-    { cbn. rewrite /exp_conv.
-      rewrite interp_ret. iApply sim_expr_base.
+    { cbn. Simp. Base.
       iExists _,_; do 2 (iSplitL ""; [done |]); done. }
-    { cbn. rewrite /exp_conv.
-      rewrite interp_bind. iDestruct "CI" as "[HP CI]".
+    { cbn. Simp.
+      iDestruct "CI" as "[HP CI]".
       iSpecialize ("H" with "HP").
-      iApply sim_expr_bind.
+      Cut.
       iApply sim_expr_bupd_mono; [ | iApply "H"].
       iIntros (??) "HI".
-      iDestruct "HI" as (????) "HQ";
-        rewrite H0 H !bind_ret_l; clear e_t e_s H0 H.
-      do 2 rewrite interp_bind.
-      iModIntro; iApply sim_expr_bind.
+      iDestruct "HI" as (??->->) "HQ".
+      Simp.
+      iApply sim_expr_bind.
       iSpecialize ("IHl" with "CI").
       iApply (sim_expr_bupd_mono with "[HQ]"); [ | iApply "IHl"].
       iIntros (??) "HI".
-      iDestruct "HI" as (????) "HQL";
-        rewrite H0 H !bind_ret_l; clear e_t e_s H0 H.
-      rewrite !interp_ret. iApply sim_expr_base.
-      iModIntro; do 2 iExists _; do 2 (iSplitL ""; [ done | ]).
+      iDestruct "HI" as (??->->) "HQL".
+      Simp. Base.
+      do 2 iExists _; do 2 (iSplitL ""; [ done | ]).
       iApply big_sepL2_cons; iFrame. }
   Qed.
 
@@ -360,32 +409,25 @@ Section fundamental.
   Proof.
     iIntros "#H #CI".
     iInduction e2 as [] "IHl" forall (e1).
-    { cbn. rewrite /instr_conv.
-      iDestruct (big_sepL2_nil_inv_r with "CI") as %Hx; subst; cbn.
-      rewrite interp_ret.
-      iApply sim_expr_base.
+    { iDestruct (big_sepL2_nil_inv_r with "CI") as %Hx; subst; cbn.
+      cbn. Simp. Base.
       iExists _,_; do 2 (iSplitL ""; [done |]); done. }
     { cbn.
       iDestruct (big_sepL2_cons_inv_r with "CI") as (???) "(CI1 & CI2)";
         subst; cbn.
-
-      rewrite /instr_conv.
-      do 2 rewrite interp_bind. iDestruct "CI" as "[HP CI]".
-      iSpecialize ("H" with "HP").
-      iApply sim_expr_bind.
+      Simp.
+      iDestruct "CI" as "[HP CI]".
+      iSpecialize ("H" with "HP"). Cut.
       iApply sim_expr_bupd_mono; [ | iApply "H"].
       iIntros (??) "HI".
-      iDestruct "HI" as (????) "HQ";
-        rewrite H0 H !bind_ret_l; clear e_t e_s H0 H.
-      do 2 rewrite interp_bind.
-      iModIntro; iApply sim_expr_bind.
+      iDestruct "HI" as (??->->) "HQ".
+      Simp. Cut.
       iSpecialize ("IHl" with "CI").
       iApply (sim_expr_bupd_mono with "[HQ]"); [ | iApply "IHl"].
       iIntros (??) "HI".
-      iDestruct "HI" as (????) "HQL";
-        rewrite H0 H !bind_ret_l; clear e_t e_s H0 H.
-      rewrite !interp_ret. iApply sim_expr_base.
-      iModIntro; do 2 iExists _; do 2 (iSplitL ""; [ done | ]).
+      iDestruct "HI" as (??->->) "HQL".
+      Simp. Base.
+      do 2 iExists _; do 2 (iSplitL ""; [ done | ]).
       iApply big_sepL2_cons; iFrame. }
   Qed.
 
