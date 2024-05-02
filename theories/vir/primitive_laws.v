@@ -10,15 +10,17 @@ From ITree Require Import
 From Vellvm Require Import Semantics.LLVMEvents Handlers.Handlers Handlers.MemoryTheory.
 Set Default Proof Using "Type*".
 
+
+(* TODO: Move *)
+Lemma non_void_allocate_abs:
+  forall τ σ s, non_void τ -> ~ (allocate σ τ = inl s).
+Proof.
+  intros; destruct τ; eauto.
+Qed.
+
 Section proof.
 
   Context {Σ} `{!vellirisGS Σ}.
-
-  Lemma non_void_allocate_abs:
-    forall τ σ s, non_void τ -> ~ (allocate σ τ = inl s).
-  Proof.
-    intros; destruct τ; eauto.
-  Qed.
 
   Lemma source_red_alloca τ `{non_void τ} Ψ S_s i:
     alloca_src i S_s -∗

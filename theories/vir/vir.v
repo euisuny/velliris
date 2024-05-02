@@ -438,10 +438,11 @@ Definition L0'expr_conv {R} : itree L0' R -> expr vir_lang R :=
 
 (* Properties of conversion *)
 
-Lemma instr_conv_ret {R} (x : R):
-  instr_conv (Ret x) ≅ Ret x.
+#[global] Instance eq_itree_exp_conv {R} :
+  Proper (eq_itree eq ==> eq_itree (R2 := R) eq) exp_conv.
 Proof.
-  by rewrite /instr_conv interp_ret.
+  repeat intro.
+  unfold exp_conv. rewrite H; done.
 Qed.
 
 #[global] Instance eq_itree_L0'expr_conv {R} :
@@ -458,6 +459,37 @@ Proof.
   unfold instr_conv. rewrite H; done.
 Qed.
 
+Lemma L0'expr_conv_ret {R} (x : R):
+  L0'expr_conv (Ret x) ≅ Ret x.
+Proof.
+  by rewrite /L0'expr_conv interp_ret.
+Qed.
+
+Lemma L0'expr_conv_bind {X R} (e : _ X) (k : _ -> _ R) :
+  L0'expr_conv (x <- e ;; k x) ≅ x <- L0'expr_conv e ;; L0'expr_conv (k x).
+Proof.
+  rewrite /L0'expr_conv.
+  by setoid_rewrite interp_bind.
+Qed.
+
+Lemma exp_conv_ret {R} (r : R):
+  exp_conv (Ret r) ≅ Ret r.
+Proof.
+  by setoid_rewrite interp_ret.
+Qed.
+
+Lemma exp_conv_bind {X R} (e : _ X) (k : _ -> _ R) :
+  exp_conv (x <- e ;; k x) ≅ x <- exp_conv e ;; exp_conv (k x).
+Proof.
+  by setoid_rewrite interp_bind.
+Qed.
+
+Lemma instr_conv_ret {R} (x : R):
+  instr_conv (Ret x) ≅ Ret x.
+Proof.
+  by rewrite /instr_conv interp_ret.
+Qed.
+
 Lemma instr_conv_bind {X R} (e : _ X) (k : _ -> _ R) :
   instr_conv (x <- e ;; k x) ≅ x <- instr_conv e ;; instr_conv (k x).
 Proof.
@@ -469,12 +501,6 @@ Lemma instr_conv_nil :
   instr_conv (denote_code nil) ≅ Ret tt.
 Proof.
   cbn. go.
-  by setoid_rewrite interp_ret.
-Qed.
-
-Lemma exp_conv_ret {R} (r : R):
-  exp_conv (Ret r) ≅ Ret r.
-Proof.
   by setoid_rewrite interp_ret.
 Qed.
 
@@ -501,11 +527,98 @@ Proof.
     destruct a; try destruct s; try reflexivity.
 Qed.
 
+Lemma eq2_exp_to_L0 :
+  eq_Handler
+    (λ (T : Type) (e : exp_E T), Vis (instrE_conv T (exp_to_instr e)) (λ x : T, Ret x))
+    (λ (T : Type) (x : (λ H : Type, exp_E H) T), Vis (exp_to_L0 x) Monad.ret).
+Proof.
+  repeat intro. rewrite /exp_to_L0 /exp_to_instr.
+  simp instrE_conv. rewrite /instr_to_L0.
+  destruct a as [ | [ | ] ]; done.
+Qed.
+
+Opaque exp_conv.
+Opaque instr_conv.
+Opaque L0'expr_conv.
+
+Notation "et '⪯e' es [{ Φ }]" :=
+    (sim_expr Φ (exp_conv et) (exp_conv es))
+      (at level 70, Φ at level 200,
+        format "'[hv' et  '/' '⪯e'  '/' es  '/' [{  '[ ' Φ  ']' }] ']'") : bi_scope.
+
+Notation "et '⪯i' es [{ Φ }]" :=
+    (sim_expr Φ (instr_conv et) (instr_conv es))
+      (at level 70, Φ at level 200,
+        format "'[hv' et  '/' '⪯i'  '/' es  '/' [{  '[ ' Φ  ']' }] ']'") : bi_scope.
+
+Notation "et '⪯0' es [{ Φ }]" :=
+    (sim_expr Φ (L0'expr_conv et) (L0'expr_conv es))
+      (at level 70, Φ at level 200,
+        format "'[hv' et  '/' '⪯0'  '/' es  '/' [{  '[ ' Φ  ']' }] ']'") : bi_scope.
+
 (* ------------------------------------------------------------------------ *)
 
 Ltac simp_instr :=
   rewrite /subevent /resum /ReSum_inr /cat /Cat_IFun /inr_ /Inr_sum1;
   simp instrE_conv.
+
+Ltac itree_simp e :=
+  match e with
+  (* Conversion lemmas *)
+  | exp_conv (ITree.bind _ _) => rewrite exp_conv_bind
+  | exp_conv (Ret _) => rewrite exp_conv_ret
+  | instr_conv (ITree.bind _ _) => rewrite instr_conv_bind
+  | instr_conv (Ret _) => rewrite instr_conv_ret
+  | L0'expr_conv (ITree.bind _ _) => rewrite L0'expr_conv_bind
+  | L0'expr_conv (Ret _) => rewrite L0'expr_conv_ret
+
+  (* Basic rewrite *)
+  | ITree.bind _ (fun x => Ret x) => rewrite bind_ret_r
+  | ITree.bind (Ret ?r) ?k => rewrite (bind_ret_l r k)
+  | ITree.bind (Ret _) _ => rewrite bind_ret_l
+  | ITree.bind (ITree.bind _ _) _ => rewrite bind_bind
+
+  (* Interp-related laws *)
+  | interp ?f (Ret ?x) => rewrite (interp_ret f x)
+  | interp _ (Ret _) => rewrite interp_ret
+  | interp ?f (ITree.bind ?t ?k) => rewrite (interp_bind f t k)
+  | interp ?f (translate ?t ?k) => rewrite (interp_translate f t k)
+  | interp _ (translate _ _) => rewrite interp_translate
+
+  (* Specific to level translations *)
+  | interp (λ T e, Vis (instrE_conv T (exp_to_instr e)) (λ x : T , Ret x)) _ =>
+      rewrite (eq_itree_interp _ _ eq2_exp_to_L0); last done
+  end.
+
+Ltac Base :=
+  match goal with
+  (* Base case *)
+  | |- environments.envs_entails _
+      (sim_expr _ (Ret _) (Ret _)) =>
+      iApply sim_expr_base
+  end.
+
+Ltac sim_expr_simp e :=
+  match e with
+  (* Some symbolic execution under ITree rewrites *)
+  | sim_expr _ ?l ?r =>
+    (* Try doing ITree rewriting on both sides if possible *)
+    itree_simp l;
+    itree_simp r
+  (* Cut rule *)
+  | sim_expr _ (bind _ _) (bind _ _) =>
+    iApply sim_expr_bind
+  | sim_expr _ (ITree.bind _ _) (ITree.bind _ _) =>
+    iApply sim_expr_bind
+  end.
+
+Ltac Simp := repeat
+  match goal with
+  | |- environments.envs_entails _ (bupd ?e) =>
+      iModIntro; sim_expr_simp e
+  | |- environments.envs_entails _ ?e =>
+      sim_expr_simp e
+  end.
 
 (* ------------------------------------------------------------------------ *)
 

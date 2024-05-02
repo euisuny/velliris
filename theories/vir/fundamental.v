@@ -37,17 +37,6 @@ Section fundamental.
     iIntros (??) "Hexp";
     iDestruct "Hexp" as (??->->) "[Hu HC]"; do 2 rewrite bind_ret_l.
 
-  (* TODO: Move *)
-  Lemma eq2_exp_to_L0 :
-    eq_Handler
-      (λ (T : Type) (e : exp_E T), Vis (instrE_conv T (exp_to_instr e)) (λ x : T, Ret x))
-      (λ (T : Type) (x : (λ H : Type, exp_E H) T), Vis (exp_to_L0 x) Monad.ret).
-  Proof.
-    repeat intro. rewrite /exp_to_L0 /exp_to_instr.
-    simp instrE_conv. rewrite /instr_to_L0.
-    destruct a as [ | [ | ] ]; done.
-  Qed.
-
   (* Local write reflexivity *)
   Lemma local_write_refl C x v_t v_s i_t i_s A_t A_s:
     ⊢ code_inv C i_t i_s A_t A_s -∗ uval_rel v_t v_s -∗
@@ -169,9 +158,10 @@ Section fundamental.
     rename t0 into t', args0 into args'.
 
     destruct (Util.assoc bid' args') eqn: H; [ | iApply exp_conv_raise].
-    rewrite /exp_conv.
     destruct (Util.assoc bid args) eqn: H'; last done.
-    rewrite !interp_bind; iApply sim_expr_bind.
+
+    Simp.
+
     iAssert (code_inv C i_t i_s A_t A_s) with
       "[Hdt Hds Hv HC Hat Has Hs_t Hs_s Ha_t Ha_s]" as "HI".
     { rewrite /code_inv; repeat iExists _; iFrame.
@@ -179,8 +169,10 @@ Section fundamental.
       by iFrame "Hl". }
     iApply sim_expr_mono; [ | iApply "He"]; [ | done].
     iIntros (??) "H".
-    iDestruct "H" as (????) "(Hv & CI)". rewrite H0 H1.
-    do 2 rewrite bind_ret_l interp_ret.
+    iDestruct "H" as (????) "(Hv & CI)".
+    rewrite H0 H1.
+
+    Simp.
     iApply sim_update_si.
     rewrite /update_si.
 
@@ -188,8 +180,7 @@ Section fundamental.
     iDestruct "CI" as (??)
       "(Hd_t & Hd_s & Hs_t & Hs_s & HA & %Hc & Ha_t & Ha_s)".
 
-    iFrame.
-    iApply sim_expr_base; eauto.
+    iFrame. iModIntro. Base.
 
     iExists _,_,_. do 2 (iSplitL ""; [ try done | ]); iFrame; eauto.
     repeat iExists _; by iFrame.
@@ -228,11 +219,9 @@ Section fundamental.
     destruct x2 as (l' & []).
     rename t0 into t', args0 into args', l2' into Φ'.
     iSpecialize ("IH" with "HΦ").
+    cbn -[denote_phi].
+    Simp.
 
-    do 2 rewrite interp_bind.
-    iApply sim_expr_bind.
-    do 2 rewrite interp_translate.
-    do 2 (rewrite (eq_itree_interp _ _ eq2_exp_to_L0); last done).
     iDestruct "CI" as (??)
         "(Hd_t & Hd_s & Hat & Has & #HWF &
         %Hargs & Hs_t & Hs_s & Hv & HC & Ha_t & Ha_s & %Hnd_t & %Hnd_s & #Hl)".
@@ -242,16 +231,13 @@ Section fundamental.
 
     cbn. iIntros (??) "H".
     iDestruct "H" as (?????) "(H & CI)".
-    rewrite H H0 !bind_ret_l !interp_bind.
-    setoid_rewrite interp_ret.
+    rewrite H H0. Simp.
 
     iSpecialize ("IH" with "CI"). subst.
-    iApply sim_expr_bind.
     iApply (sim_expr_bupd_mono with "[H]"); [ | iApply "IH"].
     cbn. iIntros (??) "H'".
     iDestruct "H'" as (????) "(H' & CI)". rewrite H H0.
-    rewrite !bind_ret_l.
-    iApply sim_expr_base.
+    Simp. Base.
     iExists ((l0,v_t) :: r_t), ((l0, v_s) :: r_s); iFrame.
     iSplitL ""; done.
   Qed.
@@ -263,18 +249,19 @@ Section fundamental.
   Proof.
     iIntros "HΦ" (??) "CI".
     iPoseProof (phi_list_compat with "HΦ CI") as "H".
-    rewrite /instr_conv; cbn.
-    rewrite !interp_bind. setoid_rewrite interp_bind.
-    iApply sim_expr_bind.
+    rewrite /denote_phis.
+    rewrite !instr_conv_bind.
+    Simp.
     iApply sim_expr_bupd_mono ; [ | iApply "H"]; eauto; try iFrame.
 
     cbn. iIntros (??) "H".
     iDestruct "H" as (????) "(H & CI)".
-    rewrite H H0 !bind_ret_l; clear H H0; setoid_rewrite interp_ret.
+    rewrite H H0; clear H H0.
+    Simp.
 
     iInduction r_s as [] "IH" forall (r_t).
     { iDestruct (big_sepL2_nil_inv_r with "H") as %Hx; subst; cbn.
-      cbn; rewrite !interp_ret !bind_ret_l; cbn.
+      cbn; rewrite !bind_ret_l instr_conv_ret; cbn.
       iApply sim_expr_base; iExists _, _; iFrame; iSplitL ""; done. }
 
     iDestruct (big_sepL2_cons_inv_r with "H") as (???) "(CI1 & CI2)";

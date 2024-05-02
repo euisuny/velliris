@@ -34,11 +34,11 @@ theories/vir/globalbij.v
 theories/vir/heapbij.v
 
 theories/vir/spec.v
-theories/vir/interp_properties.v
 theories/vir/primitive_laws.v
 theories/vir/bij_laws.v
 theories/vir/frame_laws.v
 theories/vir/instr_laws.v
+theories/vir/interp_properties.v
 
 theories/vir/logical_relations.v
 theories/vir/fundamental_exp.v
