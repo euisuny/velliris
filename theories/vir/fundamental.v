@@ -37,39 +37,7 @@ Section fundamental.
     iIntros (??) "Hexp";
     iDestruct "Hexp" as (??->->) "[Hu HC]"; do 2 rewrite bind_ret_l.
 
-  Theorem phi_logrel_refl bid id ϕ C A_t A_s:
-    ⊢ (phi_logrel (denote_phi bid (id, ϕ)) (denote_phi bid (id, ϕ)) C A_t A_s)%I.
-  Proof.
-    iIntros (????) "H".
-    iDestruct "H" as (Harg Hnd_t Hnd_s)
-      "(Hdt&Hds&Hat&Has&Hv&Hs_t&Hs_s&#HWF&HC&Ha_t&Ha_s & #Hl)"; destruct ϕ; cbn.
-    destruct (Util.assoc bid args) eqn: H; [ | iApply exp_conv_raise].
-    rewrite /exp_conv.
-    rewrite interp_bind; iApply sim_expr_bind.
-    iAssert (code_inv C i_t i_s A_t A_s) with
-      "[Hdt Hds Hv HC Hat Has Hs_t Hs_s Ha_t Ha_s]" as "HI".
-    { rewrite /code_inv; repeat iExists _; iFrame.
-      iFrame "HWF".
-      by iFrame "Hl". }
-
-    iPoseProof (expr_logrel_refl (Some t) with "HI") as "H".
-    rewrite /exp_conv.
-    iApply sim_expr_mono; [ | iApply "H"].
-    iIntros (??) "H".
-    iDestruct "H" as (????) "(Hv & CI)". rewrite H0 H1.
-    do 2 rewrite bind_ret_l interp_ret.
-    iApply sim_update_si.
-    rewrite /update_si.
-
-    iIntros (??) "SI".
-    iDestruct "CI" as (??) "(Hd_t & Hd_s & Hs_t & Hs_s & HA & Hc & Ha_t & Ha_s)".
-
-    iFrame.
-    iApply sim_expr_base; eauto.
-    iExists _,_,_. do 2 (iSplitL ""; [ done | ]); iFrame; eauto.
-    repeat iExists _; by iFrame.
-  Qed.
-
+  (* TODO: Move *)
   Lemma eq2_exp_to_L0 :
     eq_Handler
       (λ (T : Type) (e : exp_E T), Vis (instrE_conv T (exp_to_instr e)) (λ x : T, Ret x))
@@ -80,48 +48,7 @@ Section fundamental.
     destruct a as [ | [ | ] ]; done.
   Qed.
 
-  Theorem phi_list_refl bid (Φ : list (local_id * phi dtyp)) C i_t i_s A_t A_s:
-    code_inv C i_t i_s A_t A_s -∗
-    instr_conv (map_monad (λ x : local_id * phi dtyp, translate exp_to_instr ⟦ x ⟧Φ (bid)) Φ) ⪯
-      instr_conv (map_monad (λ x : local_id * phi dtyp, translate exp_to_instr ⟦ x ⟧Φ (bid)) Φ)
-    [{ (r_t, r_s),
-        ([∗ list] v_t; v_s ∈ r_t; r_s, ⌜v_t.1 = v_s.1⌝ ∗ uval_rel v_t.2 v_s.2)
-          ∗ code_inv C i_t i_s A_t A_s }].
-  Proof.
-    iIntros "HI".
-    rewrite /instr_conv; cbn.
-
-    iInduction Φ as [] "IH".
-    { cbn. rewrite interp_ret; cbn.
-      iApply sim_expr_base; iExists _, _; iFrame; repeat (iSplitL ""; try done). }
-
-    cbn; rewrite interp_bind.
-    iApply sim_expr_bind.
-    destruct a. rewrite interp_translate.
-    rewrite (eq_itree_interp _ _ eq2_exp_to_L0); last done.
-
-    iDestruct "HI" as (??)
-        "(Hd_t & Hd_s & Hat & Has & #HWF &
-        %Hargs & Hs_t & Hs_s & Hv & HC & Ha_t & Ha_s & %Hnd_t & %Hnd_s & #Hl)".
-    iApply sim_expr_bupd_mono ; [ | iApply phi_logrel_refl];
-      try iFrame; eauto; cycle 1.
-
-    cbn. iIntros (??) "H".
-    iDestruct "H" as (?????) "(H & CI)".
-    rewrite H H0 !bind_ret_l !interp_bind.
-    setoid_rewrite interp_ret.
-
-    iSpecialize ("IH" with "CI"). subst.
-    iApply sim_expr_bind.
-    iApply (sim_expr_bupd_mono with "[H]"); [ | iApply "IH"].
-    cbn. iIntros (??) "H'".
-    iDestruct "H'" as (????) "(H' & CI)". rewrite H H0.
-    rewrite !bind_ret_l.
-    iApply sim_expr_base.
-    iExists ((l0,v_t) :: r_t), ((l0, v_s) :: r_s); iFrame.
-    iSplitL ""; done.
-  Qed.
-
+  (* Local write reflexivity *)
   Lemma local_write_refl C x v_t v_s i_t i_s A_t A_s:
     ⊢ code_inv C i_t i_s A_t A_s -∗ uval_rel v_t v_s -∗
     trigger (LocalWrite x v_t) ⪯ trigger (LocalWrite x v_s)
@@ -217,14 +144,129 @@ Section fundamental.
       by iFrame "Hrel Ha_v". }
   Qed.
 
-  Theorem phis_logrel_refl C bid (Φ : list (local_id * phi dtyp)) A_t A_s:
-    (⊢ phis_logrel (denote_phis bid Φ) (denote_phis bid Φ) C A_t A_s)%I.
+  (* Compatibility lemma *)
+  (* LATER: See if the [id] generalization is also possible *)
+  Theorem phi_compat bid bid' id ϕ ϕ' C A_t A_s:
+    (let '(Phi dt  args )  := ϕ in
+     let '(Phi dt' args')  := ϕ' in
+     match Util.assoc bid args, Util.assoc bid' args' with
+     | Some op, Some op' =>
+         expr_logrel C
+           (denote_exp (Some dt) op)
+           (denote_exp (Some dt') op')
+           A_t A_s
+     | None, None => True
+     | _ , _ => False
+     end) -∗
+    phi_logrel
+       (denote_phi bid (id, ϕ))
+       (denote_phi bid' (id, ϕ')) C A_t A_s.
   Proof.
-    iIntros (? ?) "HI".
+    iIntros "He" (????) "H".
+    iDestruct "H" as (Harg Hnd_t Hnd_s)
+      "(Hdt&Hds&Hat&Has&Hv&Hs_t&Hs_s&#HWF&HC&Ha_t&Ha_s & #Hl)";
+      destruct ϕ, ϕ'; cbn.
+    rename t0 into t', args0 into args'.
+
+    destruct (Util.assoc bid' args') eqn: H; [ | iApply exp_conv_raise].
+    rewrite /exp_conv.
+    destruct (Util.assoc bid args) eqn: H'; last done.
+    rewrite !interp_bind; iApply sim_expr_bind.
+    iAssert (code_inv C i_t i_s A_t A_s) with
+      "[Hdt Hds Hv HC Hat Has Hs_t Hs_s Ha_t Ha_s]" as "HI".
+    { rewrite /code_inv; repeat iExists _; iFrame.
+      iFrame "HWF".
+      by iFrame "Hl". }
+    iApply sim_expr_mono; [ | iApply "He"]; [ | done].
+    iIntros (??) "H".
+    iDestruct "H" as (????) "(Hv & CI)". rewrite H0 H1.
+    do 2 rewrite bind_ret_l interp_ret.
+    iApply sim_update_si.
+    rewrite /update_si.
+
+    iIntros (??) "SI".
+    iDestruct "CI" as (??)
+      "(Hd_t & Hd_s & Hs_t & Hs_s & HA & %Hc & Ha_t & Ha_s)".
+
+    iFrame.
+    iApply sim_expr_base; eauto.
+
+    iExists _,_,_. do 2 (iSplitL ""; [ try done | ]); iFrame; eauto.
+    repeat iExists _; by iFrame.
+  Qed.
+
+  Theorem phi_logrel_refl bid id ϕ C A_t A_s:
+    ⊢ (phi_logrel (denote_phi bid (id, ϕ)) (denote_phi bid (id, ϕ)) C A_t A_s)%I.
+  Proof.
+    iApply phi_compat; destruct ϕ.
+    destruct (Util.assoc bid args); try done.
+    iApply expr_logrel_refl.
+  Qed.
+
+  Lemma phi_list_compat bid (Φ Φ' : list (local_id * phi dtyp)) C i_t i_s A_t A_s:
+    ([∗ list] ϕ;ϕ' ∈ Φ; Φ',
+        phi_logrel (denote_phi bid ϕ) (denote_phi bid ϕ') C A_t A_s) -∗
+    code_inv C i_t i_s A_t A_s -∗
+    instr_conv (map_monad (λ x, translate exp_to_instr ⟦ x ⟧Φ (bid)) Φ) ⪯
+      instr_conv (map_monad (λ x, translate exp_to_instr ⟦ x ⟧Φ (bid)) Φ')
+    [{ (r_t, r_s),
+        ([∗ list] v_t; v_s ∈ r_t; r_s,
+           ⌜v_t.1 = v_s.1⌝ ∗ uval_rel v_t.2 v_s.2)
+            ∗ code_inv C i_t i_s A_t A_s }].
+  Proof.
+    iIntros "HΦ CI".
+    rewrite /instr_conv; cbn.
+
+    iInduction Φ as [] "IH" forall (Φ').
+    { cbn.
+      iPoseProof (big_sepL2_nil_inv_l with "HΦ") as "%Heq"; subst.
+      rewrite interp_ret; cbn.
+      iApply sim_expr_base; iExists _, _; iFrame; repeat (iSplitL ""; try done). }
+
+    destruct a as (?&[]).
+    iPoseProof (big_sepL2_cons_inv_l with "HΦ") as (???) "(He & HΦ)"; subst.
+    destruct x2 as (l' & []).
+    rename t0 into t', args0 into args', l2' into Φ'.
+    iSpecialize ("IH" with "HΦ").
+
+    do 2 rewrite interp_bind.
+    iApply sim_expr_bind.
+    do 2 rewrite interp_translate.
+    do 2 (rewrite (eq_itree_interp _ _ eq2_exp_to_L0); last done).
+    iDestruct "CI" as (??)
+        "(Hd_t & Hd_s & Hat & Has & #HWF &
+        %Hargs & Hs_t & Hs_s & Hv & HC & Ha_t & Ha_s & %Hnd_t & %Hnd_s & #Hl)".
+
+    iApply (sim_expr_bupd_mono with "[IH]"); [ | iApply "He"];
+      try iFrame; eauto; cycle 1.
+
+    cbn. iIntros (??) "H".
+    iDestruct "H" as (?????) "(H & CI)".
+    rewrite H H0 !bind_ret_l !interp_bind.
+    setoid_rewrite interp_ret.
+
+    iSpecialize ("IH" with "CI"). subst.
+    iApply sim_expr_bind.
+    iApply (sim_expr_bupd_mono with "[H]"); [ | iApply "IH"].
+    cbn. iIntros (??) "H'".
+    iDestruct "H'" as (????) "(H' & CI)". rewrite H H0.
+    rewrite !bind_ret_l.
+    iApply sim_expr_base.
+    iExists ((l0,v_t) :: r_t), ((l0, v_s) :: r_s); iFrame.
+    iSplitL ""; done.
+  Qed.
+
+  Theorem phis_compat C bid (Φ Φ' : list (local_id * phi dtyp)) A_t A_s:
+    ([∗ list] ϕ;ϕ' ∈ Φ; Φ',
+        phi_logrel (denote_phi bid ϕ) (denote_phi bid ϕ') C A_t A_s) -∗
+    phis_logrel (denote_phis bid Φ) (denote_phis bid Φ') C A_t A_s.
+  Proof.
+    iIntros "HΦ" (??) "CI".
+    iPoseProof (phi_list_compat with "HΦ CI") as "H".
     rewrite /instr_conv; cbn.
     rewrite !interp_bind. setoid_rewrite interp_bind.
     iApply sim_expr_bind.
-    iApply sim_expr_bupd_mono ; [ | iApply phi_list_refl]; eauto; try iFrame.
+    iApply sim_expr_bupd_mono ; [ | iApply "H"]; eauto; try iFrame.
 
     cbn. iIntros (??) "H".
     iDestruct "H" as (????) "(H & CI)".
@@ -271,6 +313,14 @@ Section fundamental.
     rewrite H1 H2. rewrite !bind_ret_l.
     iApply sim_expr_base; iExists _, _; iFrame.
     iSplitL ""; done.
+  Qed.
+
+  Theorem phis_logrel_refl C bid (Φ : list (local_id * phi dtyp)) A_t A_s:
+    (⊢ phis_logrel (denote_phis bid Φ) (denote_phis bid Φ) C A_t A_s)%I.
+  Proof.
+    iApply phis_compat.
+    iInduction Φ as [ | ] "IH"; first done.
+    cbn; iSplitL; [ destruct a; iApply phi_logrel_refl | done ].
   Qed.
 
   (* Useful facts for instr reflexivity  *)

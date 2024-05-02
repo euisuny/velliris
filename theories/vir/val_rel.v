@@ -1,14 +1,13 @@
-From velliris.utils Require Export tactics.
-From velliris.vir Require Export vir vir_state tactics vir_util.
-From velliris.program_logic Require Import program_logic.
+From velliris.vir Require Export vir_state.
 
-From iris.algebra.lib Require Import gset_bij.
-From iris.bi Require Import fixpoint.
 From iris.prelude Require Import options.
-From iris.proofmode Require Import proofmode.
-From iris.base_logic.lib Require Import gset_bij.
 
-From Vellvm Require Import Syntax.DynamicTypes Handlers.Handlers Utils.Util.
+From iris.bi Require Import fixpoint.
+From iris.algebra.lib Require Import gset_bij.
+From iris.base_logic.lib Require Import gset_bij.
+(* From iris.proofmode Require Import proofmode. *)
+
+(* From Vellvm Require Import Syntax.DynamicTypes Handlers.Handlers Utils.Util. *)
 
 Set Default Proof Using "Type*".
 
@@ -1738,7 +1737,7 @@ Section val_rel_properties.
   Lemma dval_rel_lookup_none {A} fn1 fn2 (r_t r_s : list (_ * A)):
     dval_rel fn1 fn2 -∗
     ([∗ list] v_t;v_s ∈ r_t.*1;r_s.*1, dval_rel v_t v_s) -∗
-    ⌜assoc fn2 r_s = None -> assoc fn1 r_t = None⌝.
+    ⌜ Util.assoc fn2 r_s = None -> Util.assoc fn1 r_t = None⌝.
   Proof.
     iInduction r_t as [] "IH" forall (r_s fn1 fn2).
     { cbn; iIntros "#Hdv Hrel". done. }
@@ -1761,7 +1760,7 @@ Section val_rel_properties.
   Lemma dval_rel_lookup_some {A} fn1 fn2 (r_t r_s : list (_ * A)):
     dval_rel fn1 fn2 -∗
     ([∗ list] v_t;v_s ∈ r_t.*1;r_s.*1, dval_rel v_t v_s) -∗
-    ⌜∀ v, assoc fn2 r_s = Some v -> ∃ v', assoc fn1 r_t = Some v'⌝.
+    ⌜∀ v, Util.assoc fn2 r_s = Some v -> ∃ v', Util.assoc fn1 r_t = Some v'⌝.
   Proof.
     iInduction r_t as [] "IH" forall (r_s fn1 fn2).
     { cbn; iIntros "#Hdv Hrel".
