@@ -104,6 +104,59 @@ Section WF.
     NoDup_codomain (filter_keys g_t (CFG_names defs)) /\
     NoDup_codomain (filter_keys g_s (CFG_names defs)).
 
+End WF.
+
+Arguments defs_names : simpl never.
+Arguments CFG_names /.
+
+(* ------------------------------------------------------------------------ *)
+(* Auxiliary definitions for stating invariants for logical relation. *)
+
+(* Collect the local ids that occur in an expression [e]. *)
+Fixpoint exp_local_ids_ {T} (e : exp T) (acc : list raw_id) : list raw_id :=
+  match e with
+  | EXP_Ident (ID_Local i) => i :: acc
+  | EXP_Cstring l | EXP_Struct l | EXP_Array l =>
+      List.concat (List.map (fun x => exp_local_ids_ x.2 nil) l) ++ acc
+  | OP_IBinop _ _ v1 v2 | OP_ICmp _ _ v1 v2 =>
+      exp_local_ids_ v1 (exp_local_ids_ v2 acc)
+  | OP_Conversion _ _ v _ =>
+      exp_local_ids_ v acc
+  | OP_GetElementPtr _ (_, e) l =>
+      exp_local_ids_ e nil ++
+      List.concat (List.map (fun x => exp_local_ids_ x.2 nil) l) ++ acc
+  | _ => acc
+  end.
+
+Definition exp_local_ids {T} (e : exp T) := exp_local_ids_ e nil.
+
+Definition empty_WF :
+  gmap (loc * loc) Qp → gmap raw_id uvalue → gmap raw_id uvalue → Prop :=
+  fun _ _ _ => True.
+
+(* Given expressions, get the intersection of their local ids. *)
+Definition intersection_local_ids {T} (e_t e_s : exp T) :=
+  list_intersection (exp_local_ids e_t) (exp_local_ids e_s).
+
+(* Helper functions for [mcfg]. *)
+Definition address_one_function (df : definition dtyp (CFG.cfg dtyp)) :
+  itree LLVMEvents.L0 (dvalue * definition dtyp (CFG.cfg dtyp)) :=
+  let fid := (dc_name (df_prototype df)) in
+  fv <- trigger (GlobalRead fid) ;;
+  Ret (fv, df).
+
+Definition mcfg_definitions (mcfg : CFG.mcfg dtyp) :
+  itree LLVMEvents.L0 (list (dvalue * _)) :=
+    (Util.map_monad address_one_function (CFG.m_definitions mcfg)).
+
+
+(* ------------------------------------------------------------------------ *)
+(** *Logical relations *)
+Section logical_relations_def.
+
+  Context {Σ} `{!vellirisGS Σ}.
+
+  (* Well-formedness for function definitions *)
   Definition fundefs_rel_WF
     (F_t F_s : list (dvalue * _)) (Attr_t Attr_s : list (list fn_attr)) :=
     ((∀ i fn_s v_s,
@@ -115,55 +168,6 @@ Section WF.
           ⌜Attr_s !! i = Some nil⌝ ∗
           ⌜fun_WF v_t⌝ ∗ ⌜fun_WF v_s⌝) ∗
       (∀ i, ⌜F_s !! i = None -> F_t !! i = None⌝))%I.
-
-End WF.
-
-Arguments defs_names : simpl never.
-Arguments CFG_names /.
-
-Section logical_relations_def.
-
-  Context {Σ} `{!vellirisGS Σ}.
-
-(* ------------------------------------------------------------------------ *)
-  (* Auxiliary definitions for stating invariants for logical relation. *)
-
-  (* Collect the local ids that occur in an expression [e]. *)
-  Fixpoint exp_local_ids_ {T} (e : exp T) (acc : list raw_id) : list raw_id :=
-    match e with
-    | EXP_Ident (ID_Local i) => i :: acc
-    | EXP_Cstring l | EXP_Struct l | EXP_Array l =>
-       List.concat (List.map (fun x => exp_local_ids_ x.2 nil) l) ++ acc
-    | OP_IBinop _ _ v1 v2 | OP_ICmp _ _ v1 v2 =>
-        exp_local_ids_ v1 (exp_local_ids_ v2 acc)
-    | OP_Conversion _ _ v _ =>
-        exp_local_ids_ v acc
-    | OP_GetElementPtr _ (_, e) l =>
-        exp_local_ids_ e nil ++
-        List.concat (List.map (fun x => exp_local_ids_ x.2 nil) l) ++ acc
-    | _ => acc
-    end.
-
-  Definition exp_local_ids {T} (e : exp T) := exp_local_ids_ e nil.
-
-  Definition empty_WF :
-    gmap (loc * loc) Qp → gmap raw_id uvalue → gmap raw_id uvalue → Prop :=
-    fun _ _ _ => True.
-
-  (* Given expressions, get the intersection of their local ids. *)
-  Definition intersection_local_ids {T} (e_t e_s : exp T) :=
-    list_intersection (exp_local_ids e_t) (exp_local_ids e_s).
-
-  (* Helper functions for [mcfg]. *)
-  Definition address_one_function (df : definition dtyp (CFG.cfg dtyp)) :
-    itree LLVMEvents.L0 (dvalue * definition dtyp (CFG.cfg dtyp)) :=
-    let fid := (dc_name (df_prototype df)) in
-    fv <- trigger (GlobalRead fid) ;;
-    Ret (fv, df).
-
-  Definition mcfg_definitions (mcfg : CFG.mcfg dtyp) :
-    itree LLVMEvents.L0 (list (dvalue * _)) :=
-     (Util.map_monad address_one_function (CFG.m_definitions mcfg)).
 
   (* ------------------------------------------------------------------------ *)
   (** *Invariants *)
@@ -310,7 +314,7 @@ Section logical_relations_def.
         code_inv C i_t i_s A_t A_s -∗
       instr_conv (denote_ocfg o_t (b1, b2)) ⪯
       instr_conv (denote_ocfg o_s (b1, b2))
-      [[ fun e_t e_s =>
+      ⦉ fun e_t e_s =>
            code_inv_post C i_t i_s A_t A_s ∗
             ∃ v_t v_s, ⌜e_t = Ret v_t⌝ ∗ ⌜e_s = Ret v_s⌝ ∗
                         match v_t, v_s with
@@ -318,15 +322,15 @@ Section logical_relations_def.
                               ⌜id_s = id_t⌝ ∗ ⌜id_s' = id_t'⌝
                           | inr v_t, inr v_s => uval_rel v_t v_s
                           | _,_ => False
-                      end]])%I.
+                      end⦊)%I.
 
    Definition cfg_logrel c_t c_s C A_t A_s: iPropI Σ :=
     (∀ i_t i_s,
       code_inv C i_t i_s A_t A_s -∗
       instr_conv (denote_cfg c_t) ⪯ instr_conv (denote_cfg c_s)
-      [[ fun v_t v_s =>
+      ⦉ fun v_t v_s =>
           ∃ r_t r_s, ⌜v_t = Ret r_t⌝ ∗ ⌜v_s = Ret r_s⌝ ∗ uval_rel r_t r_s ∗
-            code_inv_post C i_t i_s A_t A_s ]])%I.
+            code_inv_post C i_t i_s A_t A_s ⦊)%I.
 
   Definition fun_logrel f_t f_s C: iPropI Σ :=
     ∀ i_t i_s args_t args_s,
@@ -336,9 +340,9 @@ Section logical_relations_def.
      val_rel.Forall2 uval_rel args_t args_s -∗
      checkout C -∗
      L0'expr_conv (denote_function f_t args_t) ⪯ L0'expr_conv (denote_function f_s args_s)
-     [[ fun v_t v_s =>
+     ⦉ fun v_t v_s =>
          ∃ r_t r_s, ⌜v_t = Ret r_t⌝ ∗ ⌜v_s = Ret r_s⌝ ∗
-             stack_tgt i_t ∗ stack_src i_s ∗ checkout C ∗ uval_rel r_t r_s ]].
+             stack_tgt i_t ∗ stack_src i_s ∗ checkout C ∗ uval_rel r_t r_s ⦊.
 
   Definition fundefs_logrel
       (F_t F_s: list (dvalue * _))
@@ -357,9 +361,9 @@ Section logical_relations_def.
           checkout C -∗
           L0'expr_conv (denote_function f_t args_t) ⪯
           L0'expr_conv (denote_function f_s args_s)
-        [[ fun v_t v_s =>
+        ⦉ fun v_t v_s =>
               ∃ r_t r_s, ⌜v_t = Ret r_t⌝ ∗ ⌜v_s = Ret r_s⌝ ∗
-                stack_tgt i_t ∗ stack_src i_s ∗ checkout C ∗ uval_rel r_t r_s]])%I.
+                stack_tgt i_t ∗ stack_src i_s ∗ checkout C ∗ uval_rel r_t r_s ⦊)%I.
 
 End logical_relations_def.
 
@@ -380,7 +384,8 @@ Section WF_def_properties.
     contains_keys g (defs_names (x :: l)) ->
     dc_name (df_prototype x) ∈ dom g /\ contains_keys g (defs_names l).
   Proof.
-    intros. unfold contains_keys in H. cbn in H.
+    intros. unfold contains_keys in H.
+    rewrite /defs_names in H. cbn in H.
     apply union_subseteq in H.
     destruct H; split; eauto.
     set_solver.
