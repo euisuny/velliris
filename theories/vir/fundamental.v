@@ -432,6 +432,57 @@ Section fundamental.
     by rewrite !app_assoc.
   Qed.
 
+  Theorem block_compat b b' bid A_t A_s:
+    block_WF b ->
+    block_WF b' ->
+    phis_logrel
+      (denote_phis bid (blk_phis b))
+      (denote_phis bid (blk_phis b'))
+      ∅ A_t A_s -∗
+    code_logrel
+      (blk_code b)
+      (blk_code b')
+      ∅ A_t A_s -∗
+    term_logrel
+       (blk_term b)
+       (blk_term b')
+       ∅ -∗
+    block_logrel b b' bid ∅ A_t A_s.
+  Proof with vsimp.
+    iIntros (WF_b WF_b') "HΦ Hc Ht".
+    iIntros (??) "CI".
+    cbn -[denote_phis]...
+    setoid_rewrite instr_conv_bind at 3. Cut...
+
+    (* Phis *)
+    mono: (iApply ("HΦ" with "CI")) with "[Hc Ht]"...
+    rewrite instr_conv_bind... Cut...
+
+    (* Code block *)
+    iSpecialize ("Hc" with "HΦ").
+    rewrite /denote_code /map_monad_.
+    rewrite !instr_conv_bind ; setoid_rewrite instr_conv_ret.
+    iPoseProof (sim_expr_fmap_inv with "Hc") as "Hc".
+    mono: (iApply "Hc") with "[Ht]"...
+    iDestruct "HΦ" as ([][] _ _ ??) "HI".
+
+    (* Well-formedness of block *)
+    apply andb_prop_elim in WF_b, WF_b';
+      destruct WF_b, WF_b'.
+
+    (* Terminator *)
+    mono: iApply "Ht"...
+
+    iIntros (??) "H".
+    iDestruct "H" as (????) "(Hi & H)".
+    iExists _,_. rewrite H3 H4.
+    do 2 (iSplitL ""; [ done | ]). iFrame.
+    by iExists _, _.
+  Qed.
+
+(* ------------------------------------------------------------------------ *)
+
+(** *Fundamental theorems *)
   Theorem phi_logrel_refl bid id ϕ C A_t A_s:
     ⊢ (phi_logrel (denote_phi bid (id, ϕ)) (denote_phi bid (id, ϕ)) C A_t A_s)%I.
   Proof with vsimp.
@@ -535,36 +586,193 @@ Section fundamental.
       vfinal. }
   Qed.
 
-  Theorem block_logrel_refl b A_t A_s:
+  Theorem block_logrel_refl b bid A_t A_s:
     block_WF b ->
-    (⊢ block_logrel b b ∅ A_t A_s)%I.
+    (⊢ block_logrel b b bid ∅ A_t A_s)%I.
   Proof with vsimp.
-    iIntros (WF ???) "HI".
-    rewrite /denote_block /instr_conv interp_bind.
-    iApply sim_expr_bind; iApply sim_expr_mono;
-      [ | by iApply phis_logrel_refl].
-    iIntros (??) "H".
-    iDestruct "H" as (????) "HI".
-    rewrite H H0; do 2 rewrite bind_ret_l; clear H H0.
-    rewrite interp_bind.
-    unfold block_WF in WF.
-    apply andb_prop_elim in WF. destruct WF.
-    iApply sim_expr_bind; iApply sim_expr_mono;
-      [ | iApply code_logrel_refl ]; eauto.
-
-    iIntros (??) "H".
-    iDestruct "H" as (??????) "Hi".
-    rewrite H1 H2; do 2 rewrite bind_ret_l; clear H1 H2.
-    iApply sim_expr_mono; cycle 1.
-    { rewrite interp_translate.
-      rewrite (eq_itree_interp _ _ eq2_exp_to_L0); last done.
-      iApply term_logrel_refl; auto. }
-    iIntros (??) "H".
-    iDestruct "H" as (????) "(HI & H)".
-    iExists _,_. rewrite H1 H2.
-    do 2 (iSplitL ""; [ done | ]). iFrame.
-    by iExists _, _.
+    iIntros (WF). pose proof (WF' := WF).
+    apply andb_prop_elim in WF; destruct WF.
+    iApply block_compat; eauto.
+    { iApply phis_logrel_refl. }
+    { by iApply code_logrel_refl. }
+    { by iApply term_logrel_refl. }
   Qed.
+
+  (* From Vellvm Require Import Syntax.ScopeTheory. *)
+
+  (* (* TODO : move to Utils *) *)
+  (* Lemma code_same_block_ids_find_block {T} c c': *)
+  (*   (([∗ list] y1;y2 ∈ c;c', ⌜blk_id y1 = blk_id (T := T) y2⌝) -∗ *)
+  (*     ⌜forall b, *)
+  (*     find_block c b = *)
+  (*     find_block (T := T) c' b⌝ : iPropI Σ). *)
+  (* Proof. *)
+  (*   revert c'. *)
+  (*   induction c; iIntros (c') "H"; eauto. *)
+  (*   { iPoseProof (big_sepL2_nil_inv_l with "H") as "%Heq"; *)
+  (*       subst; done. } *)
+  (*   { iPoseProof (big_sepL2_cons_inv_l with "H") as (????) "H"; subst. *)
+  (*     iPoseProof (IHc with "H") as "%H". *)
+  (*     iPureIntro. intros. *)
+  (*     cbn. rewrite H0. *)
+  (*     destruct (Eqv.eqv_dec_p (blk_id x2) b) eqn: Heq; eauto. *)
+  (*     f_equiv. decide equality. *)
+  (*   reflexivity. *)
+  (*   contradiction n; reflexivity. *)
+  (*     rewrite find_block_cons. *)
+  (*     unfold find_block. *)
+  (*     cbn. *)
+  (*     Search find_block. *)
+  (*       subst; done. } *)
+
+  Theorem ocfg_compat (c c' : CFG.ocfg dtyp) b1 b2 A_t A_s:
+    ocfg_WF c ->
+    ocfg_WF c' ->
+    □ ([∗ list] b; b' ∈ c; c',
+        (* The blocks have the same block ids, in order  *)
+        ⌜blk_id b = blk_id b'⌝ ∗
+        (* and are logically related *)
+        ∀ A_t A_s, block_logrel b b' (blk_id b) ∅ A_t A_s) -∗
+    ocfg_logrel c c' ∅ A_t A_s b1 b2.
+  Proof with vsimp.
+    iIntros (WF WF') "#Hb"; iIntros (??) "CI".
+    rewrite /ocfg_WF in WF.
+    rewrite /denote_ocfg.
+    unfold CategoryOps.iter, CategoryKleisli.Iter_Kleisli,
+      Basics.iter, MonadIter_itree.
+
+    (* That's really ugly... TODO: Fix *)
+    epose proof
+      (@interp_iter' _ _ instrE_conv_h _ _
+      (λ '(bid_from, bid_src),
+        match CFG.find_block c bid_src with
+        | Some block_src =>
+            Monad.bind (denote_block block_src bid_from)
+              (λ bd : block_id + uvalue,
+                  match bd with
+                  | inl bid_target => Monad.ret (inl (bid_src, bid_target))
+                  | inr dv => Monad.ret (inr (inr dv))
+                  end)
+        | None => Monad.ret (inr (inl (bid_from, bid_src)))
+        end)
+      (λ i, interp instrE_conv_h
+      (let
+       '(bid_from, bid_src) := i in
+        match CFG.find_block c bid_src with
+        | Some block_src =>
+            Monad.bind (denote_block block_src bid_from)
+              (λ bd : block_id + uvalue,
+                 match bd with
+                 | inl bid_target => Monad.ret (inl (bid_src, bid_target))
+                 | inr dv => Monad.ret (inr (inr dv))
+                 end)
+        | None => Monad.ret (inr (inl (bid_from, bid_src)))
+        end)) _ (b1, b2)).
+    Unshelve. 2 : intros; reflexivity.
+    eapply EqAxiom.bisimulation_is_eq in H.
+    rewrite /instr_conv. rewrite H; clear H.
+
+    epose proof
+      (@interp_iter' _ _ instrE_conv_h _ _
+      (λ '(bid_from, bid_src),
+        match CFG.find_block c' bid_src with
+        | Some block_src =>
+            Monad.bind (denote_block block_src bid_from)
+              (λ bd : block_id + uvalue,
+                  match bd with
+                  | inl bid_target => Monad.ret (inl (bid_src, bid_target))
+                  | inr dv => Monad.ret (inr (inr dv))
+                  end)
+        | None => Monad.ret (inr (inl (bid_from, bid_src)))
+        end)
+      (λ i, interp instrE_conv_h
+      (let
+       '(bid_from, bid_src) := i in
+        match CFG.find_block c' bid_src with
+        | Some block_src =>
+            Monad.bind (denote_block block_src bid_from)
+              (λ bd : block_id + uvalue,
+                 match bd with
+                 | inl bid_target => Monad.ret (inl (bid_src, bid_target))
+                 | inr dv => Monad.ret (inr (inr dv))
+                 end)
+        | None => Monad.ret (inr (inl (bid_from, bid_src)))
+        end)) _ (b1, b2)).
+    Unshelve. 2 : intros; reflexivity.
+    eapply EqAxiom.bisimulation_is_eq in H.
+    rewrite /instr_conv. rewrite H.
+
+    iApply sim_expr'_tau_inv.
+    { iModIntro. iIntros (??). iSplitL.
+      - iIntros "(Hb' & H & H')"; iFrame.
+      - iIntros "(H & H')".
+        iDestruct "H'" as (????) "H''".
+        iFrame.
+        iSplitL "".
+        { rewrite /base. eauto. }
+        eauto. }
+
+    match goal with
+    | |- context[sim_expr' _
+          (Tau (ITree.iter ?body1 ?index1)) (Tau (ITree.iter ?body2 ?index2))] =>
+        change (Tau (ITree.iter body1 index1)) with (guarded_iter' _ _ _ body1 index1);
+        change (Tau (ITree.iter body2 index2)) with (guarded_iter' _ _ _ body2 index2)
+    end.
+
+    iApply (sim_expr_guarded_iter' _ _ (fun x y => ⌜x = y⌝
+       ∗ code_inv_post ∅ i_t i_s A_t A_s)%I
+             with "[Hb] [CI]"); cycle 1.
+    { iSplitL ""; first done.
+      by iExists ∅, ∅. }
+    iModIntro.
+    iIntros (??) "(%Heq & CI)"; rewrite Heq. destruct i_s0; clear Heq.
+    iDestruct "CI" as (??) "CI".
+    iApply sim_expr_lift.
+
+    rewrite big_sepL2_sep.
+
+    (* TODO Bookmark *)
+    destruct (CFG.find_block c b0) eqn: Hb0.
+    { rewrite interp_bind.
+      iApply sim_expr_bind.
+      iApply sim_expr_bupd_mono; [ | iApply block_logrel_refl]; eauto; cycle 1.
+      { unfold CFG.find_block in Hb0.
+        apply find_some in Hb0. destruct Hb0.
+        destruct (forallb block_WF c) eqn: HWF; try done.
+        rewrite forallb_forall in HWF.
+        specialize (HWF _ H0). destruct (block_WF b3); try done. }
+
+      iIntros (??) "H".
+      iDestruct "H" as (????) "(H & l)".
+      iDestruct "H" as (??) "H".
+      rewrite H0 H1; do 2 rewrite bind_ret_l.
+      destruct r_t, r_s; try (iDestruct "l" as %Heq; inversion Heq).
+      - rewrite !interp_ret.
+        iApply sim_expr_base; iLeft. iModIntro; subst.
+        iExists (b0, b5), (b0, b5); iFrame; eauto.
+        do 3 (iSplitL ""; first done).
+        rewrite !app_assoc.
+        by iExists (nA_t0 ++ nA_t), (nA_s0 ++ nA_s).
+      - do 2 rewrite interp_ret.
+        iApply sim_expr_base; iRight.
+        iDestruct "l" as "#l".
+        iModIntro; subst. iFrame.
+        repeat iExists _; do 2 (iSplitL ""; eauto).
+        iSplitL.
+        { iExists (nA_t0 ++ nA_t), (nA_s0 ++ nA_s).
+          by rewrite !app_assoc. }
+
+        repeat iExists _; do 2 (iSplitL ""; eauto); done. }
+
+    rewrite interp_ret.
+    iApply sim_expr_base; iRight. iFrame.
+    do 2 iExists _; do 2 (iSplitL ""; eauto).
+    iSplitL "CI".
+    { iExists nA_t, nA_s; by iFrame. }
+
+    repeat iExists _; do 2 (iSplitL ""; eauto); done.
+  Qed.
+
 
   Theorem ocfg_logrel_refl (c : CFG.ocfg dtyp) b1 b2 A_t A_s:
     ocfg_WF c ->

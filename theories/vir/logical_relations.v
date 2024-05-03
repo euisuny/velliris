@@ -297,11 +297,11 @@ Section logical_relations_def.
         [{ (r_t, r_s),
             code_inv_post C i_t i_s A_t A_s }])%I.
 
-   Definition block_logrel b_t b_s C A_t A_s : iPropI Σ :=
-    (∀ i_t i_s (bid_from : block_id),
+   Definition block_logrel b_t b_s bid C A_t A_s : iPropI Σ :=
+    (∀ i_t i_s,
        code_inv C i_t i_s A_t A_s -∗
-       instr_conv ((denote_block b_t) bid_from) ⪯
-       instr_conv ((denote_block b_s) bid_from)
+       instr_conv ((denote_block b_t) bid) ⪯
+       instr_conv ((denote_block b_s) bid)
        [{ (r_t, r_s), code_inv_post C i_t i_s A_t A_s ∗
                       match r_t, r_s with
                       | inl b_t, inl b_s => ⌜b_t = b_s⌝
