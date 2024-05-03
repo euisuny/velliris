@@ -213,8 +213,6 @@ Section fundamental.
     vfinal.
   Qed.
 
-(* ------------------------------------------------------------------------ *)
-  (* TODO: WIP repair *)
   Lemma instr_store_refl n volatile val ptr align i_t i_s A_t A_s:
     instr_WF (INSTR_Store volatile val ptr align) ->
     code_inv ∅ i_t i_s A_t A_s -∗
@@ -224,76 +222,45 @@ Section fundamental.
     [{ (r_t, r_s), code_inv ∅ i_t i_s A_t A_s }].
   Proof with vsimp.
     iIntros (WF) "CI".
-    cbn in WF. destruct ptr, d, val; try solve [inversion WF].
-    rewrite /instr_conv; rewrite !interp_bind.
+    cbn in WF; destruct ptr, d, val; try solve [inversion WF]; cbn...
 
-    iApply sim_expr_bind; iApply sim_expr_mono; cycle 1.
-    { iPoseProof with  (expr_logrel_refl (Some d) e0 with "CI") as "He"; eauto.
-      iApply exp_conv_to_instr.
-      iApply "He". }
+    Cut... mono: iApply (expr_logrel_refl with "CI")...
+    iDestruct "HΦ" as "(H & HL)"...
 
-    iIntros (??) "H".
-    iDestruct "H" as (????) "(H & HL)".
-    rewrite H H0 !bind_ret_l !interp_bind; clear H H0.
+    Cut...
+    mono: (iApply (instr_conv_concretize_or_pick_strong with "H")) with "[HL]"...
 
-    iApply sim_expr_bind.
-    iApply (sim_expr_bupd_mono with "[HL] [H]") ;
-      [ | by iApply instr_conv_concretize_or_pick_strong ].
-
-    cbn; iIntros (??) "H".
-    iDestruct "H" as (????) "(#Hv' & %Hc & %Hc')";
-      rewrite H H0; clear H H0; rewrite !bind_ret_l.
+    iDestruct "HΦ" as "(#Hv' & %Hc & %Hc')";
     destruct (dvalue_has_dtyp_fun dv_s d) eqn :Hτ; cycle 1.
-    { rewrite interp_bind interp_vis bind_bind.
-      rewrite -bind_ret_l. iApply sim_expr_bind.
-      iApply sim_expr_exception. }
+    { iApply instr_conv_raise. } (* TODO: Add to [sim_expr_vsimp]? *)
 
     apply dvalue_has_dtyp_fun_sound in Hτ.
     iDestruct (dval_rel_dvalue_has_dtyp with "Hv'") as %Hτ'.
     specialize (Hτ' Hτ). rewrite -dvalue_has_dtyp_eq in Hτ'.
-    rewrite Hτ'; cbn.
+    rewrite Hτ'; cbn...
 
-    rewrite !interp_bind.
-    iApply sim_expr_bind; iApply sim_expr_mono; cycle 1.
-    { iPoseProof with  (expr_logrel_refl (Some DTYPE_Pointer) e with "HL") as "He"; eauto.
-      iApply exp_conv_to_instr.
-      iApply "He". }
+    Cut... mono: iApply (expr_logrel_refl with "HL")...
+    iDestruct "HΦ" as "(H & HL)".
+    Cut...
+    mono: (iApply instr_conv_concretize_or_pick_strong) with "[HL]"...
 
-    iIntros (??) "H".
-    iDestruct "H" as (????) "(H & HL)".
-    rewrite H H0 !bind_ret_l !interp_bind; clear H H0.
-    iApply sim_expr_bind.
-    iApply (sim_expr_bupd_mono with "[HL] [H]") ;
-      [ | by iApply instr_conv_concretize_or_pick_strong ].
-
-    cbn; iIntros (??) "H"; iDestruct "H" as (????) "(#Hv''' & %Hc'' & %Hc''')";
-      rewrite H H0; clear H H0; rewrite !bind_ret_l.
+    iDestruct "HΦ" as "(#Hv''' & %Hc'' & %Hc''')"...
 
     destruct (@dvalue_eq_dec dv_s0 DVALUE_Poison);
       [ iApply instr_conv_raiseUB | ].
     iDestruct (dval_rel_poison_neg_inv with "Hv'''") as "%Hv".
     specialize (Hv n0).
     destruct (@dvalue_eq_dec dv_t0 DVALUE_Poison) eqn: Hb; [ done | ].
-    setoid_rewrite interp_vis; cbn.
-    simp_instr. rewrite !bind_trigger.
-    iApply sim_expr_vis.
 
-    iApply (sim_expr_bupd_mono with "[] [HL]"); cycle 1.
-    { iApply store_must_be_addr; [ done | ].
-      iIntros (????). rewrite H in Hc'''; rewrite H0 in Hc''.
-      cbn in WF; apply andb_prop_elim in WF.
-      destruct WF.
+    assert (Hwf_t : dtyp_WF d).
+    { cbn in WF. apply andb_prop_elim in WF; destruct WF.
+      destruct (dtyp_WF_b d) eqn: Ht; try done.
+      apply dtyp_WF_b_dtyp_WF in Ht. done. }
 
-      iApply (store_refl with "HL"); eauto.
-      { rewrite -dtyp_WF_b_dtyp_WF. destruct (dtyp_WF_b d); auto. }
-      rewrite dvalue_has_dtyp_eq in Hτ'; auto. }
-
-    cbn. iIntros (??) "H".
-    iDestruct "H" as (????) "CI".
-    rewrite H H0; setoid_rewrite bind_ret_l.
-    do 2 rewrite interp_ret.
-    iApply sim_expr_tau.
-    iApply sim_expr_base. iExists _, _; by iFrame.
+    vsimp. rewrite !subevent_subevent.
+    mono: iApply (store_refl with "HL Hv''' Hv'")...
+    2 : rewrite dvalue_has_dtyp_eq in Hτ'; auto.
+    vfinal.
   Qed.
 
 (* ------------------------------------------------------------------------ *)
