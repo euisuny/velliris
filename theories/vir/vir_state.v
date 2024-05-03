@@ -484,6 +484,76 @@ Section local_properties.
       by iPoseProof (ghost_map_elem_ne with "H H'") as "%H'". }
   Qed.
 
+  Lemma lmapsto_lookup_list (i : list frame_names) L (args : local_env) :
+    (list_to_set args.*1 : gset _) = list_to_set L.*1 ->
+    ghost_map_auth (local_name (current_frame i)) 1 (list_to_map L) -∗
+    ([∗ list] '(l, v) ∈ args, lmapsto γ (current_frame i) l v)  ==∗
+    ⌜list_to_map args = (list_to_map L : gmap _ _)⌝ ∗
+    ghost_map_auth (local_name (current_frame i)) 1 (list_to_map L) ∗
+    ([∗ list] '(l, v) ∈ args, lmapsto γ (current_frame i) l v).
+  Proof.
+    iIntros (Hdom) "Hauth Hmap".
+    iDestruct (lmapsto_no_dup with "Hmap") as %Hmap_nd.
+    rewrite -!dom_list_to_map_L in Hdom.
+    iInduction args as [ | ] "IH" forall (L i Hdom).
+    { cbn in *; destruct L; set_solver. }
+
+    cbn in *. rewrite dom_insert_L in Hdom.
+    assert (a.1 ∈ dom (list_to_map L : gmap _ _)) by set_solver.
+    rewrite (union_difference_singleton_L a.1 (dom (list_to_map L)))
+      in Hdom; [ | set_solver ].
+
+    apply elem_of_dom in H. destruct H.
+
+    rewrite -(insert_delete (list_to_map L) a.1 x); auto.
+    destruct a; cbn.
+    iDestruct "Hmap" as "(H & Hmap)".
+    iDestruct (lmapsto_lookup with "Hauth H") as %Hlu.
+    rewrite lookup_insert in Hlu; inv Hlu.
+    apply NoDup_cons in Hmap_nd; destruct Hmap_nd.
+    cbn in *.
+    assert (dom (list_to_map args : gmap _ _) = (dom (list_to_map L : gmap _ _) ∖ {[ r ]} : gset _)).
+    { assert (r ∉ dom (list_to_map args : gmap _ _)).
+      { rewrite dom_list_to_map; set_solver. }
+      eapply union_cancel_l_L; set_solver. }
+    rewrite -dom_delete_L in H2.
+    rewrite -list_to_map_delete_alist in H2.
+    iSpecialize ("IH" $! H1 _ _ H2).
+    rewrite {3} lmapsto_eq /lmapsto_def.
+    iDestruct (ghost_map_delete with "Hauth H") as ">H".
+    rewrite delete_insert; last by rewrite lookup_delete.
+    rewrite -{1} list_to_map_delete_alist.
+    iSpecialize ("IH" with "H Hmap").
+    iDestruct "IH" as ">(%Heq & H & Hv)"; iFrame.
+    rewrite Heq. rewrite list_to_map_delete_alist; iFrame.
+    iSplitL ""; first done.
+
+    iDestruct (ghost_map_insert with "H") as ">(H & Hv)".
+    { by setoid_rewrite lookup_delete. }
+    iFrame. rewrite lmapsto_eq; done.
+  Qed.
+
+  Lemma list_to_map_insert_nodup (i : nat) x v (l : local_env):
+    NoDup l.*1 ->
+    (∃ v', l !! i = Some (x, v')) ->
+    list_to_map (<[i := (x, v)]> l) = <[ x := v ]> (list_to_map l : gmap _ _).
+  Proof.
+    revert i x v.
+    induction l; cbn; intros.
+    { inversion H0. set_solver. }
+    destruct H0 as (?&?).
+    apply NoDup_cons in H; destruct H.
+    destruct i; cbn; inv H0.
+    { cbn; by rewrite insert_insert. }
+    rewrite IHl; eauto.
+
+    destruct (decide (x = a.1)).
+    { subst. exfalso. apply H.
+      eapply list_some_elem_of_fst; eauto. }
+    { rewrite insert_commute; auto. }
+  Qed.
+
+
   Lemma ldomain_ctx h mf G L LS LD i:
     heap_ctx γ h mf G L LS -∗
     stack γ i -∗

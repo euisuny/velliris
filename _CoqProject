@@ -25,15 +25,16 @@ theories/program_logic/program_logic.v
 theories/vir/base.v
 theories/vir/util.v
 theories/vir/vir_util.v
-theories/vir/tactics.v
 
 theories/vir/vir.v
 theories/vir/vir_state.v
 theories/vir/val_rel.v
 theories/vir/globalbij.v
 theories/vir/heapbij.v
-
 theories/vir/spec.v
+theories/vir/vir_sim_properties.v
+theories/vir/tactics.v
+
 theories/vir/primitive_laws.v
 theories/vir/bij_laws.v
 theories/vir/frame_laws.v

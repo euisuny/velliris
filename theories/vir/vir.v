@@ -434,6 +434,85 @@ Definition L0'expr_conv {R} : itree L0' R -> expr vir_lang R :=
     interp (M := itree (language.L0 vir_lang))
       (fun _ x => Vis (call_conv _ x) ret) X.
 
+Definition instrE_conv_h : forall T, instr_E T -> expr vir_lang T :=
+    (λ (T : Type) x, Vis (instrE_conv T x) Monad.ret).
+
+(* ------------------------------------------------------------------------ *)
+(* Unfold all the sum injections used by [subevent ]*)
+Ltac unwrap_event e :=
+  repeat
+    match goal with
+    | |- context[?f e] => rewrite /f
+    end;
+  repeat
+    match goal with
+    | |- context[?f (@inl1 ?E1 ?E2 ?X e)] =>
+        progress
+          unwrap_event (@inl1 E1 E2 X e)
+    | |- context[?f (@inr1 ?E1 ?E2 ?X e)] =>
+        progress
+          unwrap_event (@inr1 E1 E2 X e)
+    end.
+
+Ltac simp_subevent :=
+  match goal with
+    | |- context [subevent _ ?e] =>
+        unwrap_event e;
+        try simp instrE_conv
+  end.
+
+Lemma instr_conv_call :
+  forall d dv e attrs,
+    instr_conv (trigger (Call d dv e attrs)) ≅
+      vis (ExternalCall d dv e (FNATTR_Internal :: attrs)) (fun x => Tau (Ret x)).
+Proof.
+  intros. rewrite /instr_conv.
+  rewrite interp_vis. setoid_rewrite interp_ret.
+  rewrite {1}/subevent /resum /ReSum_inl /cat /Cat_IFun /inl_ /Inl_sum1.
+  rewrite /resum /ReSum_id /id_ /Id_IFun.
+  simp instrE_conv. rewrite bind_trigger.
+  reflexivity.
+Qed.
+
+Lemma instr_conv_noncall:
+  forall X (e : exp_E X),
+    instr_conv (trigger e) ≅ vis e (fun x => Tau (Ret x)).
+Proof.
+  intros. rewrite /instr_conv.
+  rewrite interp_vis. setoid_rewrite interp_ret.
+  rewrite bind_vis.
+  unwrap_event e;
+    destruct_match_goal;
+    [ unwrap_event l |
+      unwrap_event s; destruct_match_goal] ;
+    match goal with
+      | [ H : _ X |- _ ] => rename H into e
+    end; unwrap_event e;
+    simp instrE_conv;
+    rewrite /instr_to_L0;
+    by setoid_rewrite bind_ret_l.
+Qed.
+
+Instance subev_expE_L0 Ev `{Ev -< exp_E} : Ev -< language.L0 vir_lang.
+Proof.
+  repeat red in H.
+  repeat intro.
+  specialize (H _ X).
+  pose (exp_to_L0 H) as H'. exact H'.
+Defined.
+
+Lemma instr_conv_noncall':
+  forall X Ev (e : Ev X) `{Ev -< exp_E},
+    instr_conv (trigger e) ≅ vis e (fun x => Tau (Ret x)).
+Proof.
+  intros. rewrite /instr_conv.
+  rewrite interp_vis. setoid_rewrite interp_ret.
+  rewrite bind_vis.
+  simp_subevent. unwrap_event (H X e).
+  destruct_match_goal;
+    by setoid_rewrite bind_ret_l.
+Qed.
+
 (* ------------------------------------------------------------------------ *)
 
 (* Properties of conversion *)
@@ -557,26 +636,17 @@ Notation "et '⪯0' es [{ Φ }]" :=
         format "'[hv' et  '/' '⪯0'  '/' es  '/' [{  '[ ' Φ  ']' }] ']'") : bi_scope.
 
 (* ------------------------------------------------------------------------ *)
-
-Ltac simp_instr :=
-  rewrite /subevent /resum /ReSum_inr /cat /Cat_IFun /inr_ /Inr_sum1;
-  simp instrE_conv.
+(* Some useful tactics *)
+(* TODO Move to [program_logic] for the proofs there. *)
 
 Ltac itree_simp e :=
-  match e with
-  (* Conversion lemmas *)
-  | exp_conv (ITree.bind _ _) => rewrite exp_conv_bind
-  | exp_conv (Ret _) => rewrite exp_conv_ret
-  | instr_conv (ITree.bind _ _) => rewrite instr_conv_bind
-  | instr_conv (Ret _) => rewrite instr_conv_ret
-  | L0'expr_conv (ITree.bind _ _) => rewrite L0'expr_conv_bind
-  | L0'expr_conv (Ret _) => rewrite L0'expr_conv_ret
-
+  lazymatch e with
   (* Basic rewrite *)
   | ITree.bind _ (fun x => Ret x) => rewrite bind_ret_r
   | ITree.bind (Ret ?r) ?k => rewrite (bind_ret_l r k)
   | ITree.bind (Ret _) _ => rewrite bind_ret_l
   | ITree.bind (ITree.bind _ _) _ => rewrite bind_bind
+  | ITree.bind ?e _ => progress itree_simp e
 
   (* Interp-related laws *)
   | interp ?f (Ret ?x) => rewrite (interp_ret f x)
@@ -584,40 +654,41 @@ Ltac itree_simp e :=
   | interp ?f (ITree.bind ?t ?k) => rewrite (interp_bind f t k)
   | interp ?f (translate ?t ?k) => rewrite (interp_translate f t k)
   | interp _ (translate _ _) => rewrite interp_translate
+  end.
 
-  (* Specific to level translations *)
-  | interp (λ T e, Vis (instrE_conv T (exp_to_instr e)) (λ x : T , Ret x)) _ =>
-      rewrite (eq_itree_interp _ _ eq2_exp_to_L0); last done
+Ltac Tau := iApply sim_expr_tau.
+
+Ltac Cut := iApply sim_expr_bind.
+
+Ltac sim_expr_simp e :=
+  match e with
+  (* Vis to [trigger] *)
+  | sim_expr _ (Vis _ _) (Vis _ _ ) =>
+      iApply sim_expr_vis
+  | sim_expr _ (vis _ _) (vis _ _ ) =>
+      iApply sim_expr_vis
+  (* Some symbolic execution under ITree rewrites *)
+  | sim_expr _ ?l ?r =>
+    (* Try doing ITree rewriting on both sides if possible *)
+    itree_simp l + itree_simp r
+  end.
+
+Ltac Simp := repeat
+  lazymatch goal with
+  | |- environments.envs_entails _ (bupd ?e) =>
+      iModIntro
+  | |- environments.envs_entails _ ?e =>
+      sim_expr_simp e
   end.
 
 Ltac Base :=
+  Simp;
+  repeat Tau;
   match goal with
   (* Base case *)
   | |- environments.envs_entails _
       (sim_expr _ (Ret _) (Ret _)) =>
       iApply sim_expr_base
-  end.
-
-Ltac sim_expr_simp e :=
-  match e with
-  (* Some symbolic execution under ITree rewrites *)
-  | sim_expr _ ?l ?r =>
-    (* Try doing ITree rewriting on both sides if possible *)
-    itree_simp l;
-    itree_simp r
-  (* Cut rule *)
-  | sim_expr _ (bind _ _) (bind _ _) =>
-    iApply sim_expr_bind
-  | sim_expr _ (ITree.bind _ _) (ITree.bind _ _) =>
-    iApply sim_expr_bind
-  end.
-
-Ltac Simp := repeat
-  match goal with
-  | |- environments.envs_entails _ (bupd ?e) =>
-      iModIntro; sim_expr_simp e
-  | |- environments.envs_entails _ ?e =>
-      sim_expr_simp e
   end.
 
 (* ------------------------------------------------------------------------ *)

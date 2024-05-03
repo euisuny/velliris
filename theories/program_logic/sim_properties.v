@@ -1230,6 +1230,69 @@ Section sim_expr_properties.
       iDestruct "H" as (???) "%H". inv H.
   Qed.
 
+(* ------------------------------------------------------------------------ *)
+(* Utility about [sim_expr'] *)
+
+  Definition base {R1 R2} :
+    exprO (Λ := Λ) R1 -d> exprO (Λ := Λ) R2 -d> PROP :=
+    fun e_t e_s =>
+    (∃ (v_t : R1) (v_s : R2), ⌜e_t = Ret v_t⌝ ∗ ⌜e_s = Ret v_s⌝)%I.
+
+  Lemma contains_base_tauL {R1 R2} Ψ :
+    □ (∀ x y, (base (R1 := R1) (R2 := R2) (go x) (go y) ∗ Ψ x y) ∗-∗ Ψ x y) -∗
+    □ (∀ x y, Ψ (TauF x) y -∗ Ψ (observe x) y).
+  Proof.
+    iIntros "#H".
+    iModIntro. iIntros (??) "HΨ".
+    iSpecialize ("H" $! (TauF x) y).
+    iDestruct "H" as "(H1 & H2)".
+    iSpecialize ("H2" with "HΨ").
+    iDestruct "H2" as "(H2 & _)".
+    iDestruct "H2" as (???) "H2".
+    inversion H.
+  Qed.
+
+  Lemma contains_base_tauR {R1 R2} Ψ :
+    □ (∀ x y, (base (R1 := R1) (R2 := R2) (go x) (go y) ∗ Ψ x y) ∗-∗ Ψ x y) -∗
+    □ (∀ x y, Ψ x (TauF y) -∗ Ψ x (observe y)).
+  Proof.
+    iIntros "#H".
+    iModIntro. iIntros (??) "HΨ".
+    iSpecialize ("H" $! x (TauF y)).
+    iDestruct "H" as "(H1 & H2)".
+    iSpecialize ("H2" with "HΨ").
+    iDestruct "H2" as "(H2 & _)".
+    iDestruct "H2" as (???) "%H2".
+    inversion H2.
+  Qed.
+
+  Lemma sim_expr'_tau_inv {R1 R2} (e_t:exprO R1) (e_s:exprO R2)
+      (Φ : exprO R1 -d> exprO R2 -d> PROP) :
+      □ (∀ x y, (base x y ∗ Φ x y) ∗-∗ Φ x y) -∗
+      Tau e_t ⪯ Tau e_s [[ Φ ]] -∗ e_t ⪯ e_s [[ Φ ]].
+  Proof.
+    iIntros "#Hl H".
+    rewrite /sim_expr' /sim_coind'.
+    iIntros (??) "SI".
+    iSpecialize ("H" with "SI"). iMod "H".
+    iApply sim_indF_tau_invR.
+    { iIntros (??) "H". rewrite /lift_rel.
+      iDestruct "H" as (????) "(SI & %Ht & %Hs & H)".
+      iSpecialize ("Hl" with "H"). iDestruct "Hl" as "(Hl & _)".
+      iDestruct "Hl" as (???) "%H2".
+      subst. apply simpobs in Hs.
+      setoid_rewrite interp_state_ret in Hs. by apply eqit_inv in Hs. }
+    iApply sim_indF_tau_invL.
+    { iIntros (??) "H". rewrite /lift_rel.
+      iDestruct "H" as (????) "(SI & %Ht & %Hs & H)".
+      iSpecialize ("Hl" with "H"). iDestruct "Hl" as "(Hl & _)".
+      iDestruct "Hl" as (???) "%H2".
+      subst. apply simpobs in Ht.
+      setoid_rewrite interp_state_ret in Ht. by apply eqit_inv in Ht. }
+    eauto.
+  Qed.
+
+
   (* The trigger for [state_events] should be stated as primitive laws for the
     specific language: it is not possible in advance to know how the
     [state_handler] will deal with certain events. *)

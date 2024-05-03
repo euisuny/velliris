@@ -3,7 +3,8 @@ From iris.prelude Require Import options.
 From velliris.base_logic Require Export gen_sim_prog.
 From velliris.program_logic Require Import program_logic.
 From velliris.vir Require Export
-  vir vir_state spec util frame_laws primitive_laws tactics vir_util.
+  vir vir_state spec util frame_laws primitive_laws tactics
+  vir_util vir_sim_properties tactics.
 
 From ITree Require Import
   ITree Eq.Eqit Eq.EqAxiom Events.State Events.StateFacts.
@@ -100,10 +101,80 @@ Ltac cont :=
 Ltac unary_post :=
   rewrite /lift_unary_post; iExists _; iSplitL ""; first done.
 
+(* ------------------------------------------------------------------------ *)
+  (* Utilities later useful for proving properties about [map_monad] over
+    expressions and instructions *)
 
-Section instruction_laws.
+Section instr_properties.
 
   Context {Σ} `{!vellirisGS Σ}.
+
+  Lemma lift_exp_conv_map_monad {A B}
+    (f : A -> _ B) (e : list A) P Q :
+    □ (∀ x, P x x -∗
+          exp_conv (f x) ⪯ exp_conv (f x)
+          [{ (x_t, x_s), Q x_t x_s }]) -∗
+    □ ([∗ list] _ ↦x ∈ e, P x x) -∗
+    exp_conv (map_monad f e) ⪯
+    exp_conv (map_monad f e)
+    [{ (r_t, r_s),
+      ([∗ list] _ ↦x_t;x_s ∈ r_t;r_s, Q x_t x_s)}].
+  Proof.
+    iIntros "#H #CI".
+    iInduction e as [] "IHl".
+    { cbn. vsimp. final.
+      iExists _,_; do 2 (iSplitL ""; [done |]); done. }
+    { cbn. vsimp.
+      iDestruct "CI" as "[HP CI]".
+      iSpecialize ("H" with "HP").
+      Cut.
+      iApply sim_expr_bupd_mono; [ | iApply "H"].
+      iIntros (??) "HI".
+      iDestruct "HI" as (??->->) "HQ".
+      vsimp. Cut.
+      iSpecialize ("IHl" with "CI").
+      iApply (sim_expr_bupd_mono with "[HQ]"); [ | iApply "IHl"].
+      iIntros (??) "HI".
+      iDestruct "HI" as (??->->) "HQL".
+      vsimp. final.
+      do 2 iExists _; do 2 (iSplitL ""; [ done | ]).
+      iApply big_sepL2_cons; iFrame. }
+  Qed.
+
+  Lemma lift_instr_conv_map_monad {A B}
+    (f : A -> _ B) (e1 e2 : list A) P Q :
+    □ (∀ x y, P x y -∗
+          instr_conv (f x) ⪯ instr_conv (f y)
+          [{ (x_t, x_s), Q x_t x_s }]) -∗
+    □ ([∗ list] x;y ∈ e1;e2, P x y) -∗
+    instr_conv (map_monad f e1) ⪯
+    instr_conv (map_monad f e2)
+    [{ (r_t, r_s),
+      ([∗ list] x_t;x_s ∈ r_t;r_s, Q x_t x_s)}].
+  Proof.
+    iIntros "#H #CI".
+    iInduction e2 as [] "IHl" forall (e1).
+    { iDestruct (big_sepL2_nil_inv_r with "CI") as %Hx; subst; cbn.
+      cbn. vsimp. final.
+      iExists _,_; do 2 (iSplitL ""; [done |]); done. }
+    { cbn.
+      iDestruct (big_sepL2_cons_inv_r with "CI") as (???) "(CI1 & CI2)";
+        subst; cbn.
+      vsimp.
+      iDestruct "CI" as "[HP CI]".
+      iSpecialize ("H" with "HP"). Cut.
+      iApply sim_expr_bupd_mono; [ | iApply "H"].
+      iIntros (??) "HI".
+      iDestruct "HI" as (??->->) "HQ".
+      vsimp. Cut.
+      iSpecialize ("IHl" with "CI").
+      iApply (sim_expr_bupd_mono with "[HQ]"); [ | iApply "IHl"].
+      iIntros (??) "HI".
+      iDestruct "HI" as (??->->) "HQL".
+      final.
+      do 2 iExists _; do 2 (iSplitL ""; [ done | ]).
+      iApply big_sepL2_cons; iFrame. }
+  Qed.
 
   Lemma sim_instr_pure1
     (x_t x_s : LLVMAst.raw_id) (v_t v_s v_t' v_s' : uvalue) o_t o_s i_t i_s:
@@ -1421,9 +1492,7 @@ Section instruction_laws.
     by iSpecialize ("HP" with "Hd Hf Hl Hp").
   Qed.
 
-  From velliris.vir Require Import bij_laws.
-
-End instruction_laws.
+End instr_properties.
 
 
 Ltac resolve_l := repeat (iSplitL ""; first done).

@@ -9,6 +9,12 @@ From velliris Require Import vir.util utils.tactics.
 
 (* Misc. Utilities for vir *)
 
+Lemma non_void_allocate_abs:
+  forall τ σ s, non_void τ -> ~ (allocate σ τ = inl s).
+Proof.
+  intros; destruct τ; eauto.
+Qed.
+
 Definition new_lb := make_empty_logical_block.
 
 Lemma CFG_find_block_in {A} c i b :
@@ -27,7 +33,34 @@ Definition lb_mem (b : logical_block) : mem_block :=
   end.
 
 (* ------------------------------------------------------------------------ *)
-(* Utilities for [dtyp] *)
+(** *Utilities for [dtyp] *)
+
+(* Computable function for [dvalue_has_dtyp] is logically equivalent to
+ the propositional definition. *)
+Lemma dvalue_has_dtyp_eq :
+  forall dv dt,
+    dvalue_has_dtyp_fun dv dt = true <-> dvalue_has_dtyp dv dt.
+Proof.
+  split; first apply dvalue_has_dtyp_fun_sound.
+  intros.
+  induction H; eauto.
+  - induction H; auto.
+    cbn; apply andb_true_intro; split; auto.
+  - cbn. revert sz H; induction xs; auto.
+    { cbn. intros; subst. by compute. }
+    { cbn. intros; subst.
+    forward IHxs.
+    { intros; apply IH; apply in_cons; auto. }
+    forward IHxs.
+    { intros; apply IHdtyp; apply in_cons; auto. }
+    specialize (IHxs _ eq_refl).
+    apply andb_true_iff in IHxs. destruct IHxs; auto.
+    cbn; apply andb_true_intro; split; auto.
+    - cbn; apply andb_true_intro; split; auto.
+      apply IH; auto. by constructor.
+    - rewrite Nat2N.id.
+      apply Nat.eqb_refl. }
+Qed.
 
 (* Well-formedness for dynamic types. *)
 
@@ -147,7 +180,7 @@ Proof.
 Qed.
 
 (* ------------------------------------------------------------------------ *)
-(* Utilities for [raw_id] *)
+(** *Utilities for [raw_id] *)
 
 Definition raw_id_eqb (x y : raw_id) : bool :=
   match x, y with
@@ -157,8 +190,24 @@ Definition raw_id_eqb (x y : raw_id) : bool :=
   | _, _ => false
   end.
 
+Lemma raw_id_eqb_eq id id' :
+  raw_id_eqb id id' <-> id = id'.
+Proof.
+  split; intros; destruct id, id'; try inversion H;
+    cbn in H; try f_equiv.
+  - apply String.eqb_eq. destruct (s =? s0)%string; auto.
+  - apply Z.eqb_eq. destruct (n =? n0)%Z; auto.
+  - apply Z.eqb_eq. destruct (n =? n0)%Z; auto.
+  - subst. rewrite /raw_id_eqb.
+    rewrite String.eqb_refl; done.
+  - subst. rewrite /raw_id_eqb.
+    rewrite Z.eqb_refl; done.
+  - subst. rewrite /raw_id_eqb.
+    rewrite Z.eqb_refl; done.
+Qed.
+
 (* ------------------------------------------------------------------------ *)
-(* Utilities for frame manipulation *)
+(** *Utilities for frame manipulation *)
 
 Fixpoint frame_at (i : nat) (F : frame_stack) : mem_frame :=
   match i with
@@ -665,3 +714,94 @@ Proof.
   destruct IHfields as (?&?&?&?&?).
   eexists _, _; eauto.
 Qed.
+
+(* ------------------------------------------------------------------------ *)
+(* Utility about [lookup_defn] *)
+
+Lemma lookup_defn_cons_None {B} fn x (v : B) tl:
+  lookup_defn fn ((x,v) :: tl) = None <->
+  fn <> x /\ lookup_defn fn tl = None.
+Proof.
+  split; revert fn x v; induction tl; cbn; intros; eauto;
+    destruct_if.
+  { split; eauto;
+    by apply RelDec.neg_rel_dec_correct in H0. }
+  { destruct a; destruct_if.
+    apply RelDec.neg_rel_dec_correct in H0, H1; split; eauto. }
+  { destruct H.
+    rewrite RelDec.neg_rel_dec_correct in H; by rewrite H. }
+  { destruct H, a; destruct_if.
+    rewrite RelDec.neg_rel_dec_correct in H; by rewrite H. }
+Qed.
+
+Lemma lookup_defn_cons_Some {B} fn x (v : B) tl y:
+  lookup_defn fn ((x,v) :: tl) = Some y <->
+  (fn = x /\ v = y) \/ (fn <> x /\ lookup_defn fn tl = Some y).
+Proof.
+  split; revert fn x v; induction tl; cbn; intros; eauto;
+    destruct_if.
+  { left.
+    rewrite RelDec.rel_dec_correct in H0; auto. }
+  { left.
+    rewrite RelDec.rel_dec_correct in H0; auto. }
+  { destruct a.
+    destruct_if.
+    - rewrite RelDec.rel_dec_correct in H1; auto.
+      apply RelDec.neg_rel_dec_correct in H0; auto.
+    - apply RelDec.neg_rel_dec_correct in H1; auto.
+      apply RelDec.neg_rel_dec_correct in H0; auto. }
+  { destruct H; [ destruct H | ].
+    - rewrite -RelDec.rel_dec_correct in H; rewrite H; subst; auto.
+    - inv H; inv H1. }
+  { destruct H; [ destruct H | destruct a ].
+    - rewrite -RelDec.rel_dec_correct in H; rewrite H; subst; auto.
+    - destruct H. destruct_if.
+      + apply RelDec.neg_rel_dec_correct in H; by rewrite H.
+      + apply RelDec.neg_rel_dec_correct in H; by rewrite H. }
+Qed.
+
+Lemma lookup_defn_Some_In {B} f fn (v : B) :
+  lookup_defn f fn = Some v -> In (f, v) fn.
+Proof.
+  revert f v.
+  induction fn; cbn; intros;
+    intros; try solve [inv H]; eauto.
+  destruct a. destruct_if.
+  - reldec; eauto.
+  - right; by apply IHfn.
+Qed.
+
+Lemma lookup_defn_None_In {B} f fn :
+  lookup_defn f fn = None -> not (∃ (v : B), In (f, v) fn).
+Proof.
+  revert f.
+  induction fn; cbn; intros;
+    repeat intro; try solve [inv H]; eauto; destruct H0; auto.
+  destruct a. destruct_if.
+  reldec; eauto. destruct H0.
+  - inv H0. apply H1; auto.
+  - eapply IHfn; eauto.
+Qed.
+
+Lemma lookup_defn_None_elem {B} f (fn : list (_ * B)) :
+  lookup_defn f fn = None <-> f ∉ fn.*1.
+Proof.
+  revert f.
+  split.
+  { induction fn; cbn; intros;
+    repeat intro; try solve [inv H]; eauto; try set_solver.
+    destruct a. destruct_if.
+    reldec; eauto.
+    apply elem_of_cons in H0.
+    destruct H0; try done.
+    eapply IHfn; eauto. }
+
+  { induction fn; cbn; intros;
+    repeat intro; try solve [inv H]; eauto; try set_solver.
+    destruct a. cbn in H.
+    apply not_elem_of_cons in H. destruct H.
+    destruct_if_goal; reldec; try done.
+    by eapply IHfn. }
+Qed.
+
+(* ------------------------------------------------------------------------ *)

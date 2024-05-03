@@ -83,7 +83,43 @@ Section WF.
     split; repeat (apply andb_prop_intro; eauto).
   Qed.
 
+  Definition CFG_attributes (defs : CFG.mcfg dtyp) :=
+    dc_attrs <$> (CFG.m_declarations defs).
+
+  Definition defs_names {T FnBody} (defs : list (definition T FnBody)) :=
+    (fun f => dc_name (df_prototype f)) <$> defs.
+
+  Definition CFG_names (defs : CFG.mcfg dtyp) :=
+    defs_names (CFG.m_definitions defs).
+
+  Definition CFG_WF (defs: CFG.mcfg dtyp) (g_t g_s : global_env) :=
+    let funs := CFG.m_definitions defs in
+    (length (CFG.m_declarations defs) = length (CFG.m_definitions defs)) /\
+    NoDup (CFG_names defs) /\
+    Forall fun_WF funs /\
+    Forall (fun x => dc_attrs x = nil) (CFG.m_declarations defs) /\
+    contains_keys g_t (CFG_names defs) /\
+    contains_keys g_s (CFG_names defs) /\
+    (* No aliasing or duplicated function address storing in globals *)
+    NoDup_codomain (filter_keys g_t (CFG_names defs)) /\
+    NoDup_codomain (filter_keys g_s (CFG_names defs)).
+
+  Definition fundefs_rel_WF
+    (F_t F_s : list (dvalue * _)) (Attr_t Attr_s : list (list fn_attr)) :=
+    ((∀ i fn_s v_s,
+        ⌜F_s !! i = Some (fn_s, v_s)⌝ -∗
+        ∃ fn_t v_t,
+          ⌜F_t !! i = Some (fn_t, v_t)⌝ ∗
+          dval_rel fn_t fn_s ∗
+          ⌜Attr_t !! i = Some nil⌝ ∗
+          ⌜Attr_s !! i = Some nil⌝ ∗
+          ⌜fun_WF v_t⌝ ∗ ⌜fun_WF v_s⌝) ∗
+      (∀ i, ⌜F_s !! i = None -> F_t !! i = None⌝))%I.
+
 End WF.
+
+Arguments defs_names : simpl never.
+Arguments CFG_names /.
 
 Section logical_relations_def.
 
@@ -326,6 +362,77 @@ Section logical_relations_def.
                 stack_tgt i_t ∗ stack_src i_s ∗ checkout C ∗ uval_rel r_t r_s]])%I.
 
 End logical_relations_def.
+
+Section WF_def_properties.
+
+  Lemma global_names_cons_lookup {T FnBody}
+    f (l : list (definition T FnBody)) (g : global_env):
+    contains_keys g (defs_names (f :: l)) ->
+    is_Some (g !! dc_name (df_prototype f)).
+  Proof.
+    intros.
+    setoid_rewrite fmap_cons in H; cbn in H.
+    apply elem_of_dom. set_solver.
+  Qed.
+
+  Lemma contains_keys_cons_inv {T FnBody}
+    (l : list (definition T FnBody)) (g : global_env) x:
+    contains_keys g (defs_names (x :: l)) ->
+    dc_name (df_prototype x) ∈ dom g /\ contains_keys g (defs_names l).
+  Proof.
+    intros. unfold contains_keys in H. cbn in H.
+    apply union_subseteq in H.
+    destruct H; split; eauto.
+    set_solver.
+  Qed.
+
+  Lemma mcfg_defs_keys_extend:
+    ∀ (f : definition dtyp (CFG.cfg dtyp))
+      (l : list (definition dtyp (CFG.cfg dtyp)))
+      (g : global_env) (x : dvalue) (r : list dvalue),
+      g !! dc_name (df_prototype f) = Some x ->
+      dc_name (df_prototype f) ∉ defs_names l ->
+      Permutation r (codomain (filter_keys g (defs_names l))) →
+      Permutation (x :: r) (codomain (filter_keys g (defs_names (f :: l)))).
+  Proof.
+    intros.
+    rewrite (filter_keys_cons_insert _ _ _ x); eauto.
+    rewrite /codomain.
+    rewrite map_to_list_insert; first rewrite H1; eauto.
+    apply filter_keys_None; set_solver.
+  Qed.
+
+  Lemma NoDup_mcfg_extend:
+    ∀ f (l : list (definition dtyp (CFG.cfg dtyp)))
+      (g : global_env) (x : dvalue) r,
+      g !! f = Some x ->
+      NoDup_codomain (filter_keys g (f :: defs_names l)) ->
+      f ∉ (defs_names l) ->
+      Permutation r (codomain (filter_keys g (defs_names l))) →
+      NoDup r → NoDup (x :: r).
+  Proof.
+    intros * Hin Hnd_l Hf Hc Hnd.
+    apply NoDup_cons; split; auto.
+    revert g x r Hin Hf Hc Hnd_l Hnd; induction l.
+    { intros.
+      rewrite filter_keys_nil in Hc.
+      rewrite /codomain in Hc.
+      rewrite map_to_list_empty in Hc.
+      apply Permutation_nil_r in Hc.
+      set_solver. }
+    intros.
+    erewrite filter_keys_cons_insert in Hnd_l; eauto.
+    rewrite /NoDup_codomain /codomain in Hnd_l.
+    rewrite map_to_list_insert in Hnd_l; cycle 1.
+    { apply filter_keys_None.
+      intro. apply elem_of_list_fmap in H.
+      destruct H as (?&?&?). set_solver. }
+    cbn in *.
+    nodup. rewrite /codomain in Hc.
+    rewrite Hc; auto.
+  Qed.
+
+End WF_def_properties.
 
 Section logical_relations_properties.
 

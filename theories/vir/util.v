@@ -10,6 +10,8 @@ Set Default Proof Using "Type*".
 
 Open Scope nat_scope.
 
+
+(* ------------------------------------------------------------------------ *)
 (* Lemmas about [Qp] *)
 Lemma add_le_sub_r_Some qr q qa:
   (qr + q ≤ qa)%Qp ->
@@ -56,6 +58,7 @@ Proof.
   by apply Qp.lt_le_incl.
 Qed.
 
+(* ------------------------------------------------------------------------ *)
 (* Some equivalent computable functions for standard list manipulation *)
 
 Fixpoint In_b {A} `{EQ: EqDecision A} (a:A) (l:list A) : bool :=
@@ -151,6 +154,37 @@ Proof.
     destruct (dvalue_eq_dec (d1:=d) (d2:=d)) eqn: Hd; eauto. }
 Qed.
 
+(* ------------------------------------------------------------------------ *)
+(* Some util tactics *)
+
+
+Ltac destructb :=
+  repeat match goal with
+  | [H : Is_true (forallb _ _) |- _] =>
+      rewrite forallb_True in H
+  | [H : Is_true (_ && _) |- _] =>
+      apply andb_prop_elim in H; destruct H
+  | [H : Is_true _ |- _] =>
+      apply Is_true_true_1 in H
+  | [H : _ /\ _ |- _] => destruct H
+  end.
+
+Ltac nodup :=
+  repeat match goal with
+  | [H : NoDup (_ :: _) |- _] =>
+      apply NoDup_cons in H; destructb
+  end.
+
+Ltac reflectb :=
+  repeat match goal with
+  | [ H : NoDup_b _ = true |- _] => apply NoDup_b_NoDup in H
+  | [ H : Nat.eqb _ _ = true |- _] => apply Nat.eqb_eq in H
+  | [ H : forallb _ _ = true |- _] => rewrite forallb_True in H
+  end.
+
+Ltac resolveb := destructb; reflectb.
+
+Ltac base := repeat (iSplitL ""; first done).
 
 (* ========================================================================== *)
 
@@ -208,6 +242,100 @@ Lemma list_intersection_eq {A} `{EqDecision A} (l : list A):
   list_intersection l l = l.
 Proof.
   apply list_intersection_subset; set_solver.
+Qed.
+
+(* ------------------------------------------------------------------------ *)
+(* Utility about operators over [list] *)
+
+Lemma eq_fmap {A B} (r_t r_s : list (A * B)) :
+  r_t.*1 = r_s.*1 ->
+  r_t.*2 = r_s.*2 ->
+  r_t = r_s.
+Proof.
+  revert r_s; induction r_t; intros.
+  { destruct r_s; by inv H. }
+  destruct r_s; inv H.
+  destruct a, p; inv H2; cbn in *; subst.
+  inv H0. f_equiv. by apply IHr_t.
+Qed.
+
+Lemma list_not_elem_of_remove {A eq_dec} (l : list A) x i:
+  x ∉ l ->
+  x ∉ (remove eq_dec i l).
+Proof.
+  revert x i.
+  induction l; eauto.
+  intros. apply not_elem_of_cons in H. destruct H.
+  cbn. destruct (eq_dec i a); auto.
+  apply not_elem_of_cons; split; auto.
+Qed.
+
+Lemma list_elem_of_remove {A eq_dec} (l : list A) x i:
+  i <> x ->
+  x ∈ l <->
+  x ∈ (remove eq_dec i l).
+Proof.
+  split; revert x i H; induction l; eauto.
+  { intros. apply elem_of_cons in H0. destruct H0; subst.
+    { cbn. destruct (eq_dec i a); auto; try done.
+      apply elem_of_cons; auto. }
+    { cbn. destruct (eq_dec i a); auto; try done.
+      apply elem_of_cons; auto. } }
+  { intros. cbn in H0.
+    destruct (eq_dec i a); auto; subst; try done.
+    { apply elem_of_cons; right; eapply IHl; eauto. }
+    { apply elem_of_cons in H0.
+      destruct H0; subst; apply elem_of_cons; auto.
+      right; eapply IHl; eauto. } }
+Qed.
+
+
+Lemma elem_of_snd {A B} `{EqDecision B} l (L : list (A * B)):
+  l ∈ L.*2 <-> exists v, (v, l) ∈ L.
+Proof.
+  split.
+  { induction L; cbn; intros; eauto.
+    { by apply elem_of_nil in H. }
+    { destruct a. cbn in *.
+      destruct (decide (l = b)); subst.
+      { setoid_rewrite elem_of_cons. eauto. }
+      { apply elem_of_cons in H. destruct H; [ done | ].
+        specialize (IHL H). destruct IHL.
+        setoid_rewrite elem_of_cons; eauto. } } }
+  { induction L; cbn; intros; eauto; destruct H.
+    { by apply elem_of_nil in H. }
+    { destruct a. cbn in *.
+      destruct (decide (l = b)); subst.
+      { setoid_rewrite elem_of_cons. eauto. }
+      { apply elem_of_cons in H.
+        destruct H; inv H; try done.
+        - cbn in *. apply elem_of_cons; right;
+            eapply IHL; eauto.
+          exists x; apply elem_of_cons; auto.
+        - cbn in *. apply elem_of_cons; right.
+          apply IHL; eauto.
+          exists x; apply elem_of_cons; auto. } } }
+Qed.
+
+Lemma NoDup_remove {A eq_dec} (l : list A) i:
+  NoDup l ->
+  NoDup (remove eq_dec i l).
+Proof.
+  revert i.
+  induction l; eauto.
+  intros; nodup.
+  cbn. destruct (eq_dec i a); auto.
+  apply NoDup_cons; split; auto.
+  by apply list_not_elem_of_remove.
+Qed.
+
+Lemma map_Forall_nil {A B} `{EqDecision A} `{Countable A} (m : gmap A B):
+  map_Forall (λ (i : A) (_ : B), i ∉ nil) m.
+Proof.
+  induction m using map_ind; auto.
+  - apply map_Forall_empty.
+  - apply map_Forall_insert; auto.
+    split; eauto. set_solver.
 Qed.
 
 (* ========================================================================== *)
@@ -1034,28 +1162,6 @@ Proof.
     cbn. rewrite IHx; eauto. set_solver. }
 Qed.
 
-Lemma NoDup_remove:
-  ∀ (a : Z) (mf' : list Z),
-    NoDup mf' → a ∈ mf' → NoDup (remove Z.eq_dec a mf').
-Proof.
-  intros a mf' H0 H2.
-  revert a H0 H2.
-  induction mf'; first set_solver.
-  intros. apply NoDup_cons in H0. destruct H0.
-  apply elem_of_cons in H2.
-  destruct H2.
-  { subst. rewrite remove_cons.
-    rewrite notin_remove; auto.
-    intro; apply H. by apply elem_of_list_In. }
-  { cbn. destruct (Z.eq_dec a0 a); first set_solver.
-    apply NoDup_cons.
-    split; eauto.
-    intro. apply H.
-    apply elem_of_list_In.
-    apply elem_of_list_In in H2.
-    apply in_remove in H2. destruct H2; auto. }
-Qed.
-
 (* Properties about [list_to_map] and [list_to_set] used for local env *)
 Lemma list_to_map_insert x v (l : local_env) :
   list_to_map (alist_add x v l) =
@@ -1468,36 +1574,6 @@ Proof.
         rewrite RelDec.rel_dec_correct in Hk; done. } }
 Qed.
 
-(* Some util tactics *)
-
-Ltac reflectb :=
-  repeat match goal with
-  | [ H : NoDup_b _ = true |- _] => apply NoDup_b_NoDup in H
-  | [ H : Nat.eqb _ _ = true |- _] => apply Nat.eqb_eq in H
-  | [ H : forallb _ _ = true |- _] => rewrite forallb_True in H
-  end.
-
-Ltac destructb :=
-  repeat match goal with
-  | [H : Is_true (forallb _ _) |- _] =>
-      rewrite forallb_True in H
-  | [H : Is_true (_ && _) |- _] =>
-      apply andb_prop_elim in H; destruct H
-  | [H : Is_true _ |- _] =>
-      apply Is_true_true_1 in H
-  | [H : _ /\ _ |- _] => destruct H
-  end.
-
-Ltac resolveb := destructb; reflectb.
-
-Ltac nodup :=
-  repeat match goal with
-  | [H : NoDup (_ :: _) |- _] =>
-      apply NoDup_cons in H; destructb
-  end.
-
-Ltac base := repeat (iSplitL ""; first done).
-
 Lemma lookup_defn_Some_lookup {B} (f : dvalue) fn (v : B) :
   Util.assoc f fn = Some v -> ∃ i, fn !! i = Some (f, v).
 Proof.
@@ -1528,6 +1604,332 @@ Proof.
     - destruct H1. by inv H5.
     - destruct H1.
       eapply IHr; eauto. }
+Qed.
+
+(* ------------------------------------------------------------------------ *)
+(** *Defintions useful for manipulating finite maps and their properties *)
+
+(* Codomain of a finite map *)
+Definition codomain {A B} `{Countable A} `{EqDecision A}
+  (m : gmap A B) := (map_to_list m).*2.
+
+Lemma codomain_empty {A B} `{Countable A} `{EqDecision A}:
+  codomain (∅ : gmap A B) = ∅.
+Proof.
+  rewrite /codomain. by rewrite map_to_list_empty.
+Qed.
+
+(* ------------------------------------------------------------------------ *)
+
+(* Filter a finite map given a list of keys [l]. *)
+Definition filter_keys {A B} `{Countable A} `{EqDecision A}
+  (m : gmap A B) (l : list A) :=
+  (filter (fun '(x, _) => x ∈ l) m).
+
+Lemma filter_keys_nil {A B} `{EqDecision A} `{Countable A} (m : gmap A B):
+  filter_keys m nil = ∅.
+Proof.
+  pose proof (map_filter_empty_iff (fun '(x, _) => x ∈ nil) m).
+  destruct H0.
+  by specialize (H1 (map_Forall_nil m)).
+Qed.
+
+Lemma filter_keys_None {A B} `{EqDecision A} `{Countable A}
+  (m : gmap A B) l i:
+  i ∉ l ->
+  filter_keys m l !! i = None.
+Proof.
+  revert i l.
+  induction m using map_ind;
+  intros; first set_solver.
+  rewrite /filter_keys.
+  destruct (decide (i ∈ l)).
+  - rewrite map_filter_insert_True ; [ | set_solver].
+    rewrite lookup_insert_ne; [ | set_solver].
+    eapply IHm; eauto.
+  - rewrite map_filter_insert_False ; [ | set_solver].
+    rewrite delete_notin; auto.
+    eapply IHm; eauto.
+Qed.
+
+Lemma filter_keys_Some {A B} `{EqDecision A} `{Countable A}
+  (m : gmap A B) l i y:
+  m !! i = Some y ->
+  i ∈ l ->
+  filter_keys m l !! i = Some y.
+Proof.
+  revert i y m.
+  induction m using map_ind;
+  intros; first set_solver.
+  rewrite /filter_keys.
+  apply lookup_insert_Some in H1. destruct H1.
+  - destruct H1; subst.
+    rewrite map_filter_insert_True ; [ | set_solver].
+    by rewrite lookup_insert.
+  - destruct H1.
+    destruct (decide (i0 ∉ l)).
+    { rewrite map_filter_insert_False; [ | set_solver].
+      rewrite delete_notin; auto. }
+    { assert (i0 ∈ l) by set_solver.
+      clear n.
+      rewrite map_filter_insert_True; [ | set_solver].
+      rewrite lookup_insert_ne; auto. }
+Qed.
+
+Lemma filter_keys_Some_inv {A B} `{EqDecision A} `{Countable A}
+  l (m : gmap A B) i y:
+  filter_keys m l !! i = Some y ->
+  m !! i = Some y ∧ i ∈ l.
+Proof.
+  revert i y l.
+  induction m using map_ind;
+  rewrite /filter_keys;
+  intros; first set_solver.
+  destruct (decide (i ∈ l)).
+  { rewrite map_filter_insert_True in H1; [ | done].
+    apply lookup_insert_Some in H1. destruct H1.
+    - destruct H1; subst.
+      rewrite lookup_insert; split; eauto.
+    - destruct H1; subst.
+      rewrite lookup_insert_ne; eauto; split; eauto. }
+  { rewrite map_filter_insert_False in H1; [ | set_solver].
+    rewrite delete_notin in H1; auto.
+    specialize (IHm _ _ _ H1). destruct IHm.
+    split; eauto.
+    assert (i <> i0) by set_solver.
+    rewrite lookup_insert_ne; eauto. }
+Qed.
+
+Lemma filter_keys_cons_insert {A B} `{EqDecision A} `{Countable A}
+  v l (m : gmap A B) x:
+  m !! v = Some x ->
+  filter_keys m (v :: l) = <[v := x]> (filter_keys m l).
+Proof.
+  intros. apply map_eq. intros.
+  apply option_eq; intros y.
+  rewrite map_lookup_filter_Some.
+  split; intros; eauto.
+  { destruct H1. apply elem_of_cons in H2.
+    destruct H2; subst; eauto.
+    - rewrite H0 in H1; inv H1. by rewrite lookup_insert.
+    - destruct (decide (i = v)); subst.
+      + rewrite H0 in H1; inv H1. by rewrite lookup_insert.
+      + rewrite lookup_insert_ne; auto.
+        by apply filter_keys_Some. }
+
+  { apply lookup_insert_Some in H1.
+    destruct H1; destruct H1; subst; first set_solver.
+    apply filter_keys_Some_inv in H2; destruct H2; split; auto.
+    set_solver. }
+Qed.
+
+Lemma filter_keys_cons_notin {A B} `{EqDecision A} `{Countable A}
+  v l (m : gmap A B):
+  m !! v = None ->
+  filter_keys m (v :: l) = (filter_keys m l).
+Proof.
+  intros. apply map_eq. intros.
+  apply option_eq; intros y.
+  rewrite map_lookup_filter_Some.
+  split; intros; eauto.
+  { destruct H1. apply elem_of_cons in H2.
+    destruct H2; subst; eauto.
+    - rewrite H0 in H1; inv H1.
+    - destruct (decide (i = v)); subst.
+      + rewrite H0 in H1; inv H1.
+      + apply filter_keys_Some; auto. }
+
+  { apply filter_keys_Some_inv in H1. destruct H1.
+    split; auto. set_solver. }
+Qed.
+
+Lemma filter_keys_cons_is_Some {A B} `{EqDecision A} `{Countable A}
+  v l (m : gmap A B) x:
+  is_Some (filter_keys m l !! x) ->
+  is_Some (filter_keys m (v :: l) !! x).
+Proof.
+  revert m x v.
+  induction l.
+  { intros. rewrite filter_keys_nil in H0.
+    destruct H0. set_solver. }
+
+  intros. destruct H0.
+  apply filter_keys_Some_inv in H0. destruct H0 as (?&?).
+  exists x0.
+  apply filter_keys_Some; try done. set_solver.
+Qed.
+
+Lemma filter_keys_cons {A B} `{EqDecision A} `{Countable A}
+  (m : gmap A B) v l a b:
+  filter_keys m l !! a = Some b ->
+  filter_keys m (v :: l) !! a = Some b.
+Proof.
+  intros.
+  apply filter_keys_Some_inv in H0.
+  destruct H0.
+  apply filter_keys_Some; eauto. set_solver.
+Qed.
+
+Lemma elem_map_to_list_filter_keys_cons {A B} `{EqDecision A} `{Countable A} v l (m : gmap A B) x:
+  x ∈ map_to_list (filter_keys m l) ->
+  x ∈ map_to_list (filter_keys m (v :: l)).
+Proof.
+  intros.
+  destruct x.
+  rewrite elem_of_map_to_list.
+  apply elem_of_map_to_list in H0.
+  by apply filter_keys_cons.
+Qed.
+
+Lemma codomain_filter_keys_cons {A B} `{EqDecision A} `{Countable A}
+  `{EqDecision B}
+  v l (m : gmap A B) x:
+  x ∈ codomain (filter_keys m l) ->
+  x ∈ codomain (filter_keys m (v :: l)).
+Proof.
+  intros.
+  apply elem_of_snd in H0.
+  destruct H0.
+  apply (elem_map_to_list_filter_keys_cons v) in H0.
+  apply elem_of_snd.
+  exists x0; eauto.
+Qed.
+
+(* ------------------------------------------------------------------------ *)
+
+(* List of keys [l] is contained in the finite map [m] *)
+Definition contains_keys {A B} `{Countable A} `{EqDecision A}
+  (m : gmap A B) (l : list A) :=
+  list_to_set l ⊆ dom m.
+
+(* There is no duplication in the codomain of the finite map [m].  *)
+Definition NoDup_codomain {A B} `{Countable A} `{EqDecision A}
+  (m : gmap A B) := NoDup (codomain m).
+
+Lemma nodup_codomain_cons_inv {A B} `{EqDecision A} `{Countable A}
+  `{EqDecision B} v l (g : gmap A B):
+  NoDup (v :: l) ->
+  contains_keys g (v :: l) ->
+  NoDup_codomain (filter_keys g (v :: l)) ->
+  NoDup_codomain (filter_keys g l).
+Proof.
+  rewrite /contains_keys /NoDup_codomain /filter_keys /codomain.
+  revert v l.
+  induction g using map_ind; first set_solver.
+  cbn; intros.
+  rewrite dom_insert in H2. nodup.
+  destruct (decide (v = i)); subst.
+  { rewrite map_filter_insert_False; auto.
+    rewrite delete_notin; auto.
+    rewrite map_filter_insert in H3; auto.
+    destruct (decide (i ∈ i :: l)); last set_solver.
+    rewrite map_to_list_insert in H3; cycle 1.
+    { apply map_lookup_filter_None; by left. }
+    cbn in H3. nodup.
+    erewrite map_filter_strong_ext_1 in H5; eauto.
+    { split; intros; destructb; eauto; try set_solver. } }
+  { rewrite map_filter_insert in H3; auto.
+    rewrite map_filter_insert.
+    destruct (decide (i ∈ l)).
+    { assert (v ∈ dom m).
+      { clear -H2 n.
+        apply (difference_mono_r _ _ {[i]}) in H2.
+        do 2 rewrite difference_union_distr_l_L in H2.
+        rewrite difference_disjoint in H2; [ | set_solver].
+        rewrite difference_diag_L in H2.
+        rewrite union_empty_l in H2. set_solver. }
+
+      specialize (IHg v (List.remove (decide_rel eq) i l)).
+      destruct (decide (i ∈ v :: l)); last set_solver.
+      rewrite map_to_list_insert; cycle 1.
+      { apply map_lookup_filter_None; by left. }
+      rewrite map_to_list_insert in H3; cycle 1.
+      { apply map_lookup_filter_None; by left. }
+      cbn in *.
+      clear H5 e0. nodup.
+
+      assert ({[v]} = ({[v]} ∖ {[i]} : gset _)) by set_solver.
+      apply not_elem_of_dom in H0.
+      assert (dom m = ({[i]} ∪ dom m) ∖ {[i]}) by set_solver.
+
+      apply NoDup_cons; split; cycle 1.
+      { erewrite map_filter_strong_ext_1;
+          first eapply IHg; eauto.
+        { apply NoDup_cons; eauto. split.
+          { by apply list_not_elem_of_remove. }
+          { by apply NoDup_remove. } }
+        { rewrite list_to_set_remove; auto.
+          rewrite H6; clear H6.
+          rewrite -difference_union_distr_l_L.
+          rewrite H7. set_solver. }
+        { erewrite map_filter_strong_ext_1 in H5; eauto.
+          split; intros; destructb.
+          - split; eauto.
+            apply elem_of_cons in H8; destructb; destruct H8; subst;
+              auto; first set_solver.
+            apply elem_of_cons; right.
+            apply list_elem_of_remove; eauto.
+            intro; subst.
+            assert (is_Some (m !! i0)) by eauto.
+            rewrite -elem_of_dom in H10. done.
+          - split; eauto.
+            apply elem_of_cons in H8; destructb; destruct H8; subst;
+              auto; first set_solver.
+            apply elem_of_cons; right.
+            rewrite list_elem_of_remove; eauto.
+            intro; subst.
+            assert (is_Some (m !! i0)) by eauto.
+            rewrite -elem_of_dom in H10. done. }
+        { split; intros; destructb; split; eauto.
+          - assert (is_Some (m !! i0)) by eauto.
+            rewrite -list_elem_of_remove; eauto.
+            rewrite -elem_of_dom in H10.
+            intro; subst; set_solver.
+          - assert (is_Some (m !! i0)) by eauto.
+            rewrite list_elem_of_remove; eauto.
+            rewrite -elem_of_dom in H10.
+            intro; subst; set_solver. } }
+
+      intro; apply H3; eauto.
+
+      by apply codomain_filter_keys_cons. }
+    { destruct (decide (i ∈ v :: l)); first set_solver.
+
+      rewrite delete_notin; eauto.
+      rewrite delete_notin in H3; eauto.
+      specialize (IHg v (List.remove (decide_rel eq) i l)).
+      apply not_elem_of_dom in H0.
+      erewrite map_filter_strong_ext_1;
+          first eapply IHg; eauto.
+      { apply NoDup_cons; eauto. split.
+        { by apply list_not_elem_of_remove. }
+        { by apply NoDup_remove. } }
+      { cbn. rewrite list_to_set_remove; auto.
+        set_solver. }
+      { erewrite map_filter_strong_ext_1 in H3; eauto.
+        split; intros; destructb.
+        - split; eauto.
+          apply elem_of_cons in H5; destructb; destruct H5; subst;
+            auto; first set_solver.
+          apply elem_of_cons; right.
+          apply list_elem_of_remove; eauto.
+          intro; subst.
+          assert (is_Some (m !! i0)) by eauto.
+          rewrite -elem_of_dom in H7. done.
+        - split; eauto.
+          apply elem_of_cons in H5; destructb; destruct H5; subst;
+            auto; first set_solver.
+          apply elem_of_cons; right.
+          rewrite list_elem_of_remove; eauto.
+          intro; subst.
+          assert (is_Some (m !! i0)) by eauto.
+          by rewrite -elem_of_dom in H7. }
+      { split; intros; destructb; split; eauto.
+        - assert (is_Some (m !! i0)) by eauto.
+          apply list_elem_of_remove; set_solver.
+        - assert (is_Some (m !! i0)) by eauto.
+          rewrite list_elem_of_remove; eauto.
+          apply elem_of_dom in H7. intro; set_solver. } } }
 Qed.
 
 (* ========================================================================== *)
