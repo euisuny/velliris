@@ -1785,6 +1785,55 @@ Section val_rel_properties.
         - iDestruct ("IH" with "Hdv Hrel") as %Hlu'. specialize (Hlu' _ a0); eauto. } }
   Qed.
 
+  Lemma dval_rel_dvalue_has_dtyp dv_t dv_s τ:
+    dval_rel dv_t dv_s -∗
+    ⌜dvalue_has_dtyp dv_s τ⌝ -∗
+    ⌜dvalue_has_dtyp dv_t τ⌝.
+  Proof.
+    iIntros "H %Hv_s".
+    pose (F :=
+      (fun dv_t dv_s =>
+         ∀ τ,
+          ⌜dvalue_has_dtyp dv_s τ⌝ -∗ ⌜dvalue_has_dtyp dv_t τ⌝ : iPropI Σ)%I).
+    assert (NonExpansive (F : dvalue -d> dvalue -d> iPropI Σ)).
+    { solve_proper_prepare; by repeat f_equiv. }
+    iApply (dval_rel_strong_ind F with "[] [H]"); auto.
+    iModIntro.
+    iIntros (v_t v_s) "H".
+    rewrite /F.
+    iIntros (??).
+    destruct v_t, v_s; try done; cbn.
+    all: try solve [inversion H0; iPureIntro; constructor].
+    { rewrite /val_rel.Forall2.
+      inversion H0; subst; clear H0.
+      iInduction fields as [] "IH" forall (fields0 dts H2).
+      - iDestruct (big_sepL2_nil_inv_l with "H") as %Hnil; subst.
+        inversion H2; subst.
+        iPureIntro; constructor; auto.
+      - iDestruct (big_sepL2_cons_inv_l with "H") as (???) "((H1 & _) & Hl)";
+          subst.
+        destruct dts; try solve [inversion H2].
+        apply Forall2_cons in H2; destruct H2.
+        iDestruct ("H1" $! _ H0) as %Ha.
+        iDestruct ("IH" $! _ _ H1 with "Hl") as %Hl.
+        iPureIntro; constructor; constructor; auto.
+        inversion Hl; auto. }
+    { rewrite /val_rel.Forall2.
+      inversion H0; subst; clear H0.
+      iInduction elts as [] "IH" forall (elts0 H2).
+      - iDestruct (big_sepL2_nil_inv_l with "H") as %Hnil; subst.
+        inversion H2; subst.
+        iPureIntro; constructor; auto.
+      - iDestruct (big_sepL2_cons_inv_l with "H") as (???) "((H1 & _) & Hl)";
+          subst.
+        apply Forall_cons in H2; destruct H2.
+        iDestruct ("H1" $! _ H0) as %Ha.
+        iDestruct ("IH" $! _ H1 with "Hl") as %Hl.
+        iPureIntro; constructor; auto.
+        { inversion Hl; auto. }
+        cbn. f_equiv; auto. inversion Hl; subst; eauto. lia. }
+  Qed.
+
 End val_rel_properties.
 
 

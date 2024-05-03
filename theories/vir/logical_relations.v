@@ -1020,10 +1020,11 @@ Section logical_relations_properties.
     repeat iExists _; iFrame. cbn; done.
   Qed.
 
-  Lemma local_write_refl x v_t v_s i_t i_s A_t A_s:
-    ⊢ code_inv ∅ i_t i_s A_t A_s -∗ uval_rel v_t v_s -∗
+  (* Local write reflexivity *)
+  Lemma local_write_refl C x v_t v_s i_t i_s A_t A_s:
+    ⊢ code_inv C i_t i_s A_t A_s -∗ uval_rel v_t v_s -∗
     trigger (LocalWrite x v_t) ⪯ trigger (LocalWrite x v_s)
-      [{ (v1, v2), code_inv ∅ i_t i_s A_t A_s }].
+      [{ (v1, v2), code_inv C i_t i_s A_t A_s }].
   Proof.
     iIntros "CI #Hrel".
     iApply sim_update_si.
@@ -1376,6 +1377,58 @@ Section logical_relations_properties.
     { iApply (sim_local_read_not_in_domain with "Hf_s Hs_s").
       rewrite -Hs -Hdom Ht. set_solver. }
   Qed.
+
+  Lemma call_refl v_t v_s e_t e_s d i_t i_s l A_t A_s C:
+    code_inv C i_t i_s A_t A_s -∗
+    dval_rel v_t v_s -∗
+    ([∗ list] x_t; x_s ∈ e_t;e_s, uval_rel x_t x_s) -∗
+    (trigger (ExternalCall d v_t e_t l))
+    ⪯
+    (trigger (ExternalCall d v_s e_s l))
+    [{ (v_t, v_s), uval_rel v_t v_s ∗
+                     code_inv C i_t i_s A_t A_s }].
+  Proof.
+    iIntros "CI #Hv #He".
+
+    rewrite /instr_conv.
+
+    rewrite sim_expr_eq.
+
+    iIntros (σ_t σ_s) "SI".
+    unfold interp_L2.
+    rewrite /subevent /resum /ReSum_inl /cat /Cat_IFun /inl_ /Inl_sum1
+      /resum /ReSum_id /id_ /Id_IFun.
+    simp instrE_conv.
+    rewrite !interp_state_vis.
+    setoid_rewrite interp_state_ret.
+    cbn -[state_interp].
+    rewrite /handle_stateEff.
+    rewrite !bind_vis.
+
+    iApply sim_coindF_vis. iRight.
+    iModIntro.
+    rewrite /handle_event; cbn -[state_interp].
+    rewrite /resum /ReSum_id /id_ /Id_IFun.
+    simp handle_call_events. iLeft.
+    iFrame.
+    iDestruct "CI" as (??) "(?&?&Hs_t&Hs_s&#HWF&?&?&?&?&HC&?)".
+    iExists (C, i_t, i_s).
+    iSplitL "Hs_t Hs_s HC".
+    { rewrite /call_args_eq / arg_val_rel; cbn; iFrame.
+      iFrame "HWF".
+      iSplitL ""; last done; iSplitL "Hv"; done. }
+
+    iIntros (??) "(SI & V)".
+    iDestruct "V" as "(?&?&?&?)".
+    cbn -[state_interp].
+    iApply sim_coindF_tau; iApply sim_coindF_base.
+    rewrite /lift_expr_rel. iModIntro.
+    iExists v_t0.1, v_t0.2, v_s0.1, v_s0.2; iFrame.
+    rewrite -!itree_eta; do 2 (iSplitL ""; [done |]).
+    iExists _,_; do 2 (iSplitL ""; [done |]); iFrame.
+    iExists _,_; iFrame. done.
+  Qed.
+
 
   Lemma load_must_be_addr_src τ x_t x_s Φ:
     ⊢ (∀ ptr, ⌜x_s = DVALUE_Addr ptr⌝ -∗

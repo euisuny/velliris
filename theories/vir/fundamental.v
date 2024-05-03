@@ -1,195 +1,79 @@
-From Coq Require Import String List Program.Equality.
+(* From Coq Require Import String List Program.Equality. *)
 From iris.prelude Require Import options.
-From iris.base_logic.lib Require Export gen_heap ghost_map.
-From iris.base_logic Require Import gset_bij.
+(* From iris.base_logic.lib Require Export gen_heap ghost_map. *)
+(* From iris.base_logic Require Import gset_bij. *)
 
-From ITree Require Import
-  ITree Eq
-  Interp.InterpFacts Interp.RecursionFacts Events.StateFacts TranslateFacts.
-
-From Vellvm Require Import Syntax.LLVMAst Syntax.DynamicTypes
-  Semantics.InterpretationStack Handlers Utils.Util Semantics.LLVMEvents.
+(* From Vellvm Require Import Syntax.LLVMAst Syntax.DynamicTypes *)
+(*   Semantics.InterpretationStack Handlers Utils.Util Semantics.LLVMEvents. *)
 
 From Equations Require Import Equations.
 
 From Paco Require Import paco.
 
-From velliris.logic Require Import satisfiable.
+(* From velliris.logic Require Import satisfiable. *)
 From velliris.program_logic Require Import program_logic.
 From velliris.vir Require Import
-  vir spec globalbij heapbij frame_laws primitive_laws bij_laws logical_relations
-  fundamental_exp.
-From velliris.utils Require Import no_event.
+  (* vir spec globalbij heapbij frame_laws primitive_laws bij_laws *)
+  vir_sim_properties
+  vir spec logical_relations fundamental_exp tactics.
+(* From velliris.utils Require Import no_event. *)
 
 Set Default Proof Using "Type*".
 
 Import ListNotations.
-Import SemNotations.
 
-Ltac step_expr :=
-  iApply sim_expr_mono;
-  [ | by iApply expr_logrel_refl];
-  iIntros (??) "Hexp";
-  iDestruct "Hexp" as (??->->) "[Hu HC]"; do 2 rewrite bind_ret_l.
+Tactic Notation "mono:" tactic(tac) :=
+  iApply sim_expr_bupd_mono; [ | tac; eauto ].
+
+Tactic Notation "mono:" tactic(tac) "with" constr(hyps) :=
+  iApply (sim_expr_bupd_mono with hyps); [ | tac; eauto ].
 
 (** *Reflexivity theorems for logical relations *)
 Section fundamental.
 
   Context {Σ : gFunctors} `{!vellirisGS Σ}.
 
-  (* ------------------------------------------------------------------------ *)
-  (* Event-level reflexivity lemmas *)
-
-  (* Local write reflexivity *)
-  Lemma local_write_refl C x v_t v_s i_t i_s A_t A_s:
-    ⊢ code_inv C i_t i_s A_t A_s -∗ uval_rel v_t v_s -∗
-    trigger (LocalWrite x v_t) ⪯ trigger (LocalWrite x v_s)
-      [{ (v1, v2), code_inv C i_t i_s A_t A_s }].
-  Proof.
-    iIntros "CI #Hrel".
-    iApply sim_update_si.
-
-    iIntros "%σ_t %σ_s SI".
-    iDestruct (local_code_inv with "CI SI") as ">H".
-    iDestruct "H" as (?????)
-        "(%Hnd_t & %Hnd_s & Hlt & Hls & Hv & #Ha_v & SI & Hd_t & Hd_s
-          & HC & Hf_t & Hf_s & #WF & Ha_t & Ha_s)".
-    iFrame.
-
-    destruct (decide (x ∈ (vlocal σ_t).1.*1)).
-    {
-      assert (exists n v, args_t !! n = Some (x, v)).
-      { clear -H0 e.
-        eapply (@elem_of_list_to_set raw_id
-                  (@gset raw_id _ _)) in e; last typeclasses eauto.
-        Unshelve. all : try typeclasses eauto.
-        setoid_rewrite <-H0 in e. clear -e.
-        rewrite elem_of_list_to_set in e.
-        by apply elem_of_fst_list_some. }
-
-      assert (exists n v, args_s !! n = Some (x, v)).
-      { rewrite H in H0. clear -H0 e.
-        eapply (@elem_of_list_to_set raw_id
-                  (@gset raw_id _ _)) in e; last typeclasses eauto.
-        Unshelve. all : try typeclasses eauto.
-        setoid_rewrite <-H0 in e. clear -e.
-        rewrite elem_of_list_to_set in e.
-        by apply elem_of_fst_list_some. }
-      destruct H2 as (?&?&?).
-      destruct H3 as (?&?&?).
-
-      iDestruct (lmapsto_no_dup with "Hlt") as "%Hdup_t".
-      iDestruct (lmapsto_no_dup with "Hls") as "%Hdup_s".
-
-      iDestruct (big_sepL_delete with "Hlt") as "(Helemt & Hl_t)"; eauto; cbn.
-      iDestruct (big_sepL_delete with "Hls") as "(Helems & Hl_s)"; eauto; cbn.
-
-      iApply (sim_expr_bupd_mono with "[Hl_t Hl_s Hd_t Hd_s HC Hv Ha_t Ha_s]");
-        [ | iApply (sim_local_write with "Hf_t Hf_s Helemt Helems")].
-      iIntros (??) "Hp".
-      iDestruct "Hp" as (????) "(Ht & Hs & Hf_t & Hf_s)".
-
-      iModIntro. iExists _,_.
-      do 2 (iSplitL ""; [ done | ]); rewrite /CFG_inv.
-
-      pose proof (no_dup_fst_list_some _ _ _ _ _ _ _ Hdup_t Hdup_s H H2 H3); subst.
-      iExists (<[x2 := (x, v_t)]> args_t),
-              (<[x2 := (x, v_s)]> args_s). iFrame.
-
-      setoid_rewrite (big_sepL_delete (fun i '(l_t, v_t1)=> [ l_t := v_t1 ]t i_t) _ x2 (x, v_t))%I; cycle 1.
-      { rewrite list_lookup_insert; eauto.
-        by apply lookup_lt_is_Some. }
-      setoid_rewrite (big_sepL_delete (fun i '(l_t, v_t1)=> [ l_t := v_t1 ]s i_s) _ x2 (x, v_s))%I; cycle 1.
-      { rewrite list_lookup_insert; eauto.
-        by apply lookup_lt_is_Some. }
-      iFrame.
-
-      do 2 (erewrite list_lookup_insert_list_to_set; eauto);
-      rewrite H0 H1; iFrame.
-      iFrame "WF".
-      cbn; rewrite !list_insert_fst.
-      iSplitL ""; first ( iPureIntro; by f_equiv ).
-
-      iSplitL "Hl_t".
-      { by iApply big_sepL_delete_insert. }
-      iSplitL "Hl_s".
-      { by iApply big_sepL_delete_insert. }
-
-      rewrite !list_insert_snd.
-      iSplitR ""; last by iFrame "Ha_v".
-      iApply (big_sepL2_insert args_t.*2 args_s.*2 uval_rel with "Hrel Hv"). }
-
-    { assert (Hn : x ∉ (list_to_set (vlocal σ_t).1.*1 : gset _)) by set_solver.
-      assert (Hn1 : x ∉ (list_to_set (vlocal σ_s).1.*1 : gset _)).
-      { rewrite -H1 -H H0; set_solver. }
-      iApply (sim_expr_bupd_mono with "[HC Ha_t Ha_s Hv Hlt Hls]");
-        [ | iApply (sim_local_write_alloc _ _ _ _ _ _ _ _ Hn Hn1 with "Hd_t Hd_s Hf_t Hf_s")].
-      iIntros (??) "Hp".
-      iDestruct "Hp" as (????) "(Ht & Hs & Hd_t & Hd_s & Hf_t & Hf_s)".
-      iModIntro. iExists _,_.
-      do 2 (iSplitL ""; [ done | ]). rewrite /CFG_inv.
-      iExists ((x, v_t) :: args_t), ((x, v_s) :: args_s); iFrame.
-      cbn. rewrite H0 H1; iFrame.
-      iFrame "WF".
-      iSplitL "".
-      { rewrite H; done. }
-      by iFrame "Hrel Ha_v". }
-  Qed.
-
-  Lemma call_refl v_t v_s e_t e_s d i_t i_s l A_t A_s C:
+ (* ------------------------------------------------------------------------ *)
+  (* Utility *)
+  (* LATER: Generalize this helper lemma to any triple that is lifted with *)
+  (*   [map_monad] *)
+  Lemma denote_exp_map_monad (e: list (texp dtyp)) C i_t i_s A_t A_s :
     code_inv C i_t i_s A_t A_s -∗
-    dval_rel v_t v_s -∗
-    ([∗ list] x_t; x_s ∈ e_t;e_s, uval_rel x_t x_s) -∗
-    (trigger (ExternalCall d v_t e_t l))
-    ⪯
-    (trigger (ExternalCall d v_s e_s l))
-    [{ (v_t, v_s), uval_rel v_t v_s ∗
-                     code_inv C i_t i_s A_t A_s }].
+    instr_conv
+      (map_monad (λ '(t, op), translate exp_to_instr (denote_exp (Some t) op)) e)
+      ⪯
+    instr_conv
+      (map_monad (λ '(t, op), translate exp_to_instr (denote_exp (Some t) op)) e)
+      [{ (e_t, e_s), code_inv C i_t i_s A_t A_s
+                       ∗ [∗ list] _↦x_t;x_s ∈ e_t;e_s, uval_rel x_t x_s }].
   Proof.
-    iIntros "CI #Hv #He".
+    iIntros "CI".
+    iInduction e as [] "IHl".
+    { cbn. vsimp. Base.
+      iExists _,_; do 2 (iSplitL ""; [done |]); iFrame; done. }
+    { cbn. vsimp.
+      destruct a.
+      Cut. vsimp.
 
-    rewrite /instr_conv.
+      mono: iApply (expr_logrel_refl with "CI").
 
-    rewrite sim_expr_eq.
+      iIntros (??) "H";
+      iDestruct "H" as (??->->) "(Hv & CI)".
 
-    iIntros (σ_t σ_s) "SI".
-    unfold interp_L2.
-    rewrite /subevent /resum /ReSum_inl /cat /Cat_IFun /inl_ /Inl_sum1
-      /resum /ReSum_id /id_ /Id_IFun.
-    simp instrE_conv.
-    rewrite !interp_state_vis.
-    setoid_rewrite interp_state_ret.
-    cbn -[state_interp].
-    rewrite /handle_stateEff.
-    rewrite !bind_vis.
+      vsimp. Cut.
+      iSpecialize ("IHl" with "CI").
 
-    iApply sim_coindF_vis. iRight.
-    iModIntro.
-    rewrite /handle_event; cbn -[state_interp].
-    rewrite /resum /ReSum_id /id_ /Id_IFun.
-    simp handle_call_events. iLeft.
-    iFrame.
-    iDestruct "CI" as (??) "(?&?&Hs_t&Hs_s&#HWF&?&?&?&?&HC&?)".
-    iExists (C, i_t, i_s).
-    iSplitL "Hs_t Hs_s HC".
-    { rewrite /call_args_eq / arg_val_rel; cbn; iFrame.
-      iFrame "HWF".
-      iSplitL ""; last done; iSplitL "Hv"; done. }
+      mono: iApply "IHl" with "[Hv]".
 
-    iIntros (??) "(SI & V)".
-    iDestruct "V" as "(?&?&?&?)".
-    cbn -[state_interp].
-    iApply sim_coindF_tau; iApply sim_coindF_base.
-    rewrite /lift_expr_rel. iModIntro.
-    iExists v_t0.1, v_t0.2, v_s0.1, v_s0.2; iFrame.
-    rewrite -!itree_eta; do 2 (iSplitL ""; [done |]).
-    iExists _,_; do 2 (iSplitL ""; [done |]); iFrame.
-    iExists _,_; iFrame. done.
+      clear e_t e_s; iIntros (e_t e_s) "H".
+      iDestruct "H" as (?? -> ->) "(CI & H)".
+      final.
+      iExists _, _; do 2 (iSplitL ""; [ done | ]).
+      rewrite big_sepL2_cons; iFrame. }
   Qed.
 
-
   (* ------------------------------------------------------------------------ *)
-  (* Event-level reflexivity lemmas *)
+  (* Instr-level reflexivity lemmas *)
 
   Lemma instr_call_refl C fn attrs args id  i_t i_s A_t A_s:
     ⊢ (code_inv C i_t i_s A_t A_s -∗
@@ -203,8 +87,7 @@ Section fundamental.
     iIntros "CI".
     cbn; destruct fn.
     vsimp. Cut.
-    iApply sim_expr_bupd_mono;
-      [ | iApply (denote_exp_map_monad args _ with "CI") ]; auto.
+    mono: iApply (denote_exp_map_monad args _ with "CI").
     iIntros (??) "H".
     iDestruct "H" as (??->->) "(CI & #H)";
     vsimp.
@@ -218,14 +101,13 @@ Section fundamental.
     (* 2. Call simulation *)
     Cut.
 
-    iApply (sim_expr_bupd_mono with "[CI]");
-      last (iApply (instr_conv_concretize_or_pick_strong with "Hv")).
+    mono: (iApply (instr_conv_concretize_or_pick_strong with "Hv")) with "[CI]".
 
     iIntros (??) "H'".
     iDestruct "H'" as (??->->) "(Hdv & %Hdu_t & %Hdu_s)".
     vsimp. Cut. vsimp.
 
-    iApply sim_expr_bupd_mono ; [ | iApply (call_refl with "CI Hdv H")].
+    mono: iApply (call_refl with "CI Hdv H").
     cbn. clear e_t e_s.
     iIntros (??) "Hp".
     iDestruct "Hp" as (??->->) "(#Hv2 & CI)".
@@ -234,8 +116,7 @@ Section fundamental.
 
     (* 3. Local write simulation *)
     final; vsimp.
-    iApply sim_expr_bupd_mono ;
-      [ | iApply (local_write_refl with "CI Hv2")].
+    mono: iApply (local_write_refl with "CI Hv2").
 
     iIntros (??) "Hp".
     iDestruct "Hp" as (??->->) "CI".
@@ -267,14 +148,13 @@ Section fundamental.
 
     (* 2. Call simulation *)
     Cut.
-    iApply (sim_expr_bupd_mono with "[CI]");
-      last (iApply (instr_conv_concretize_or_pick_strong with "Hv")).
+    mono: (iApply (instr_conv_concretize_or_pick_strong with "Hv")) with "[CI]".
 
     iIntros (??) "H'".
     iDestruct "H'" as (??->->) "(Hdv & %Hdu_t & %Hdu_s)".
     vsimp; Cut; vsimp.
 
-    iApply sim_expr_bupd_mono ; [ | iApply (call_refl with "CI Hdv H")].
+    mono: iApply (call_refl with "CI Hdv H").
     cbn. clear e_t e_s.
     iIntros (??) "Hp".
     iDestruct "Hp" as (??->->) "(#Hv2 & CI)".
@@ -305,8 +185,7 @@ Section fundamental.
     vsimp. final. vsimp.
     iDestruct (dval_rel_lift with "Hv") as "Hdv".
 
-    iApply sim_expr_bupd_mono ;
-      [ | iApply (local_write_refl with "CI Hdv")].
+    mono: iApply (local_write_refl with "CI Hdv").
 
     iIntros (??) "Hp".
     iDestruct "Hp" as (??->->) "CI".
@@ -324,120 +203,53 @@ Section fundamental.
     [{ (r_t, r_s), code_inv ∅ i_t i_s A_t A_s }].
   Proof.
     iIntros (WF) "CI".
-    destruct ptr; rewrite /instr_conv; rewrite !interp_bind.
+    destruct ptr.
+
+    cbn. vsimp. Cut.
 
     (* Process the value *)
-    iApply sim_expr_bind; iApply sim_expr_mono; cycle 1.
+    iApply sim_expr_mono; cycle 1.
     { iApply exp_conv_to_instr.
       iPoseProof (expr_logrel_refl (Some d) with "CI") as "He".
       iApply "He". }
 
     iIntros (??) "H".
-    iDestruct "H" as (????) "(Hv & CI)".
-    rewrite H H0 !bind_ret_l !interp_bind; clear H H0.
-    iApply sim_expr_bind.
-    iApply (sim_expr_bupd_mono with "[CI] [Hv]") ;
-      [ | by iApply instr_conv_concretize_or_pick_strong ].
+    iDestruct "H" as (??->->) "(Hv & CI)".
+    vsimp. Cut.
 
-    iIntros (??) "H"; iDestruct "H" as (????) "(#Hv' & %Hc & %Hc')";
-      rewrite H H0; clear H H0; rewrite !bind_ret_l.
+    mono: (iApply instr_conv_concretize_or_pick_strong) with "[CI]".
+
+    iIntros (??) "H";
+      iDestruct "H" as (??->->) "(#Hv' & %Hc & %Hc')".
+    Simp.
     destruct (@dvalue_eq_dec dv_s DVALUE_Poison);
       [ iApply instr_conv_raiseUB | ].
 
     iDestruct (dval_rel_poison_neg_inv with "Hv'") as "%Hv".
     specialize (Hv n).
     destruct (@dvalue_eq_dec dv_t DVALUE_Poison) eqn: Hb; [ done | ].
-    do 2 rewrite interp_bind.
-    iApply sim_expr_bind.
 
-    (* Process the ptr *)
-    rewrite !interp_vis; cbn -[instr_WF].
-    simp_instr.
-    setoid_rewrite interp_ret; rewrite !bind_trigger.
-    iApply sim_expr_vis.
-    iApply (sim_expr_bupd_mono with "[] [CI Hv']"); cycle 1.
-    { iApply load_must_be_addr; [ done | ].
-      iIntros (????). rewrite H in Hc'; rewrite H0 in Hc.
-      cbn in WF. apply andb_prop_elim in WF; destruct WF.
+    vsimp. Cut. vsimp.
+
+    assert (Hwf_t : dtyp_WF t).
+    { cbn in WF. apply andb_prop_elim in WF; destruct WF.
       destruct (dtyp_WF_b t) eqn: Ht; try done.
-      apply dtyp_WF_b_dtyp_WF in Ht.
-      iApply (load_refl with "CI Hv'"); eauto. }
+      apply dtyp_WF_b_dtyp_WF in Ht. done. }
 
-    cbn -[instr_WF].
+    mono: iApply (load_refl with "CI Hv'").
     iIntros (??) "H".
-    iDestruct "H" as (????) "(#Hv'' & CI)".
-    rewrite H H0; rewrite !bind_ret_l ; clear H H0.
-    iApply sim_expr_tau.
-    iApply sim_expr_base.
+    iDestruct "H" as (??->->) "(#Hv'' & CI)".
+    final. vsimp.
 
-    rewrite !bind_ret_l.
-
-    rewrite !interp_vis; cbn -[instr_WF].
-    simp_instr. cbn -[instr_WF].
-
-    rewrite !bind_trigger.
-    iApply sim_expr_vis.
-
-    iApply (sim_expr_bupd_mono with "[] [CI]");
-      [ | iApply (local_write_refl with "CI")]; eauto; cycle 1.
+    mono: iApply (local_write_refl with "CI").
     iIntros (??) "H".
-    iDestruct "H" as (????) "CI".
-    rewrite H H0; setoid_rewrite bind_ret_l.
-    rewrite !interp_ret.
-    iApply sim_expr_tau.
-    iApply sim_expr_base.
+    iDestruct "H" as (??->->) "CI".
+    final.
     iExists _, _; do 2 (iSplitL ""; first done); by iFrame.
   Qed.
 
-  Lemma dval_rel_dvalue_has_dtyp dv_t dv_s τ:
-    dval_rel dv_t dv_s -∗
-    ⌜dvalue_has_dtyp dv_s τ⌝ -∗
-    ⌜dvalue_has_dtyp dv_t τ⌝.
-  Proof.
-    iIntros "H %Hv_s".
-    pose (F :=
-      (fun dv_t dv_s =>
-         ∀ τ,
-          ⌜dvalue_has_dtyp dv_s τ⌝ -∗ ⌜dvalue_has_dtyp dv_t τ⌝ : iPropI Σ)%I).
-    assert (NonExpansive (F : dvalue -d> dvalue -d> iPropI Σ)).
-    { solve_proper_prepare; by repeat f_equiv. }
-    iApply (dval_rel_strong_ind F with "[] [H]"); auto.
-    iModIntro.
-    iIntros (v_t v_s) "H".
-    rewrite /F.
-    iIntros (??).
-    destruct v_t, v_s; try done; cbn.
-    all: try solve [inversion H0; iPureIntro; constructor].
-    { rewrite /val_rel.Forall2.
-      inversion H0; subst; clear H0.
-      iInduction fields as [] "IH" forall (fields0 dts H2).
-      - iDestruct (big_sepL2_nil_inv_l with "H") as %Hnil; subst.
-        inversion H2; subst.
-        iPureIntro; constructor; auto.
-      - iDestruct (big_sepL2_cons_inv_l with "H") as (???) "((H1 & _) & Hl)";
-          subst.
-        destruct dts; try solve [inversion H2].
-        apply Forall2_cons in H2; destruct H2.
-        iDestruct ("H1" $! _ H0) as %Ha.
-        iDestruct ("IH" $! _ _ H1 with "Hl") as %Hl.
-        iPureIntro; constructor; constructor; auto.
-        inversion Hl; auto. }
-    { rewrite /val_rel.Forall2.
-      inversion H0; subst; clear H0.
-      iInduction elts as [] "IH" forall (elts0 H2).
-      - iDestruct (big_sepL2_nil_inv_l with "H") as %Hnil; subst.
-        inversion H2; subst.
-        iPureIntro; constructor; auto.
-      - iDestruct (big_sepL2_cons_inv_l with "H") as (???) "((H1 & _) & Hl)";
-          subst.
-        apply Forall_cons in H2; destruct H2.
-        iDestruct ("H1" $! _ H0) as %Ha.
-        iDestruct ("IH" $! _ H1 with "Hl") as %Hl.
-        iPureIntro; constructor; auto.
-        { inversion Hl; auto. }
-        cbn. f_equiv; auto. inversion Hl; subst; eauto. lia. }
-  Qed.
-
+(* ------------------------------------------------------------------------ *)
+  (* TODO: WIP repair *)
   Lemma instr_store_refl n volatile val ptr align i_t i_s A_t A_s:
     instr_WF (INSTR_Store volatile val ptr align) ->
     code_inv ∅ i_t i_s A_t A_s -∗
@@ -521,47 +333,8 @@ Section fundamental.
 
 (* ------------------------------------------------------------------------ *)
 
-  (* LATER: Generalize this helper lemma to any triple that is lifted with *)
-  (*   [map_monad] *)
-  Lemma denote_exp_map_monad (e: list (texp dtyp)) C i_t i_s A_t A_s :
-    code_inv C i_t i_s A_t A_s -∗
-    instr_conv
-      (map_monad (λ '(t, op), translate exp_to_instr (denote_exp (Some t) op)) e)
-      ⪯
-    instr_conv
-      (map_monad (λ '(t, op), translate exp_to_instr (denote_exp (Some t) op)) e)
-      [{ (e_t, e_s), code_inv C i_t i_s A_t A_s
-                       ∗ [∗ list] _↦x_t;x_s ∈ e_t;e_s, uval_rel x_t x_s }].
-  Proof.
-    iIntros "CI".
-    iInduction e as [] "IHl".
-    { cbn. rewrite /instr_conv.
-      rewrite interp_ret. iApply sim_expr_base.
-      iExists _,_; do 2 (iSplitL ""; [done |]); iFrame; done. }
-    { cbn. rewrite /instr_conv.
-      rewrite interp_bind.
-      destruct a; cbn; iApply sim_expr_bind.
-      iApply exp_conv_to_instr.
-      iApply sim_expr_bupd_mono; cycle 1.
-      { iApply (expr_logrel_refl with "CI"); eapply H. }
-      iIntros (??) "H".
-      iDestruct "H" as (????) "(Hv & CI)".
-      rewrite H H0 !bind_ret_l; clear e_t e_s H H0.
-      do 2 rewrite interp_bind.
-      iModIntro; iApply sim_expr_bind.
-      iSpecialize ("IHl" with "CI").
-      iApply (sim_expr_bupd_mono with "[Hv]"); [ | iApply "IHl"].
-      cbn. iIntros (e_t e_s) "H".
-      iDestruct "H" as (?? Ht Hs) "(CI & H)";
-        rewrite Ht Hs !bind_ret_l !interp_ret.
-      iApply sim_expr_base. iModIntro.
-      iExists _, _; do 2 (iSplitL ""; [ done | ]).
-      rewrite big_sepL2_cons; iFrame. }
-  Qed.
+(** *Compatibility lemmas *)
 
-(* ------------------------------------------------------------------------ *)
-
-  (* Compatibility lemma *)
   (* LATER: See if the [id] generalization is also possible *)
   Theorem phi_compat bid bid' id ϕ ϕ' C A_t A_s:
     (let '(Phi dt  args )  := ϕ in
