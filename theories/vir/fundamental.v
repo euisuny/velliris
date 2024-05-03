@@ -242,10 +242,84 @@ Section fundamental.
     iSplitL ""; done.
   Qed.
 
+  (* TODO Move to [vir.v] *)
+  Lemma instr_conv_call :
+    forall d dv e attrs,
+      instr_conv (trigger (Call d dv e attrs)) ≅
+        vis (ExternalCall d dv e (FNATTR_Internal :: attrs)) (fun x => Tau (Ret x)).
+  Proof.
+    intros. rewrite /instr_conv.
+    rewrite interp_vis. setoid_rewrite interp_ret.
+    rewrite {1}/subevent /resum /ReSum_inl /cat /Cat_IFun /inl_ /Inl_sum1.
+    rewrite /resum /ReSum_id /id_ /Id_IFun.
+    simp instrE_conv. rewrite bind_trigger.
+    reflexivity.
+  Qed.
+
+  (* Unfold all the sum injections used by [subevent ]*)
+  Ltac unwrap_event e :=
+    repeat
+      match goal with
+      | |- context[?f e] => rewrite /f
+      end;
+    repeat
+      match goal with
+      | |- context[?f (@inl1 ?E1 ?E2 ?X e)] =>
+          progress
+            unwrap_event (@inl1 E1 E2 X e)
+      | |- context[?f (@inr1 ?E1 ?E2 ?X e)] =>
+          progress
+            unwrap_event (@inr1 E1 E2 X e)
+      end.
+
   (* TODO WIP : Move after working on these *)
-  Ltac simp_instr :=
-    rewrite /subevent /resum /ReSum_inr /cat /Cat_IFun /inr_ /Inr_sum1;
-    simp instrE_conv.
+  Ltac simp_subevent :=
+    match goal with
+      | |- context [subevent _ ?e] =>
+          unwrap_event e;
+          try simp instrE_conv
+    end.
+
+
+  Lemma instr_conv_noncall:
+    forall X (e : exp_E X),
+      instr_conv (trigger e) ≅ vis e (fun x => Tau (Ret x)).
+  Proof.
+    intros. rewrite /instr_conv.
+    rewrite interp_vis. setoid_rewrite interp_ret.
+    rewrite bind_vis.
+    unwrap_event e;
+      destruct_match_goal;
+      [ unwrap_event l |
+        unwrap_event s; destruct_match_goal] ;
+      match goal with
+        | [ H : _ X |- _ ] => rename H into e
+      end; unwrap_event e;
+      simp instrE_conv;
+      rewrite /instr_to_L0;
+      by setoid_rewrite bind_ret_l.
+  Qed.
+
+  (* TODO: Move *)
+  Instance subev_expE_L0 Ev `{Ev -< exp_E} : Ev -< language.L0 vir_lang.
+  Proof.
+    repeat red in H.
+    repeat intro.
+    specialize (H _ X).
+    pose (exp_to_L0 H) as H'. exact H'.
+  Defined.
+
+  Lemma instr_conv_noncall':
+    forall X Ev (e : Ev X) `{Ev -< exp_E},
+      instr_conv (trigger e) ≅ vis e (fun x => Tau (Ret x)).
+  Proof.
+    intros. rewrite /instr_conv.
+    rewrite interp_vis. setoid_rewrite interp_ret.
+    rewrite bind_vis.
+    simp_subevent. unwrap_event (H X e).
+    destruct_match_goal;
+      by setoid_rewrite bind_ret_l.
+  Qed.
 
   Ltac itree_simp e :=
     lazymatch e with
@@ -253,7 +327,11 @@ Section fundamental.
     | exp_conv (Ret _) => rewrite exp_conv_ret
     | exp_conv (bind _ _) => rewrite exp_conv_bind
     | exp_conv (ITree.bind _ _) => rewrite exp_conv_bind
-    | instr_conv (trigger (LocalWrite _ _)) => rewrite instr_conv_localwrite
+    | instr_conv (trigger (Call _ _ _ _)) =>
+        rewrite instr_conv_call
+    | instr_conv (trigger _) =>
+        rewrite instr_conv_noncall +
+        rewrite instr_conv_noncall'
     | instr_conv (Ret ?x) => rewrite (instr_conv_ret x)
     | instr_conv (Ret _) => rewrite instr_conv_ret
     | instr_conv (bind _ _) => rewrite instr_conv_bind
@@ -281,7 +359,10 @@ Section fundamental.
         rewrite (eq_itree_interp _ _ eq2_exp_to_L0); last done
     end.
 
+  Ltac Tau := iApply sim_expr_tau.
+
   Ltac Base :=
+    repeat Tau;
     match goal with
     (* Base case *)
     | |- environments.envs_entails _
@@ -291,6 +372,18 @@ Section fundamental.
 
   Ltac sim_expr_simp e :=
     match e with
+    (* Event translation adjustment *)
+    | sim_expr _ (L0'expr_conv (translate instr_to_L0' _))
+               (L0'expr_conv (translate instr_to_L0' _)) =>
+        iApply instr_to_L0'
+    | sim_expr _ (instr_conv (translate exp_to_instr _))
+               (instr_conv (translate exp_to_instr _)) =>
+        iApply exp_conv_to_instr
+    (* Vis to [trigger] *)
+    | sim_expr _ (Vis _ _) (Vis _ _ ) =>
+        iApply sim_expr_vis
+    | sim_expr _ (vis _ _) (vis _ _ ) =>
+        iApply sim_expr_vis
     (* Some symbolic execution under ITree rewrites *)
     | sim_expr _ ?l ?r =>
       (* Try doing ITree rewriting on both sides if possible *)
@@ -306,7 +399,6 @@ Section fundamental.
     | |- environments.envs_entails _ ?e =>
         sim_expr_simp e
     end.
-
 
   Theorem phis_compat C bid (Φ Φ' : list (local_id * phi dtyp)) A_t A_s:
     ([∗ list] ϕ;ϕ' ∈ Φ; Φ',
@@ -329,8 +421,8 @@ Section fundamental.
       iExists _, _; iFrame; iSplitL ""; done. }
 
     iDestruct (big_sepL2_cons_inv_r with "H") as (???) "(CI1 & CI2)";
-    destruct a, x1; subst; cbn. Simp. Cut.
-    iApply sim_expr_vis.
+    destruct a, x1; subst; cbn.
+    Simp; Cut. Simp.
 
     iDestruct "CI1" as "(%Hl & Hv)"; subst.
 
@@ -339,7 +431,7 @@ Section fundamental.
 
     cbn. iIntros (??) "H".
     iDestruct "H" as (??->->) "CI".
-    Simp. iApply sim_expr_tau; Base.
+    Simp. Base.
     iSpecialize ("IH" with "CI2 CI"). Simp.
     iPoseProof (sim_expr_fmap_inv with "IH") as "Hf".
     Cut.
@@ -483,35 +575,23 @@ Section fundamental.
 
     rewrite /instr_conv.
 
-    rewrite sim_expr_eq /sim_expr_.
+    rewrite sim_expr_eq.
 
     iIntros (σ_t σ_s) "SI".
     unfold interp_L2.
     rewrite /subevent /resum /ReSum_inl /cat /Cat_IFun /inl_ /Inl_sum1
       /resum /ReSum_id /id_ /Id_IFun.
     simp instrE_conv.
-    iApply sim_coind_Proper.
-
-    { setoid_rewrite interp_state_vis.
-      setoid_rewrite interp_state_ret.
-      cbn.
-      rewrite /handle_stateEff; cbn.
-      rewrite /resum.
-      unfold ReSum_id, ReSum_inl, cat, Cat_IFun, inl_, Inl_sum1, id_,
-        Id_IFun, resum.
-      rewrite bind_vis; reflexivity. }
-    { setoid_rewrite interp_state_vis.
-      setoid_rewrite interp_state_ret.
-      rewrite /handle_stateEff; cbn.
-      rewrite /resum.
-      unfold ReSum_id, ReSum_inl, cat, Cat_IFun, inl_, Inl_sum1, id_,
-        Id_IFun, resum.
-      rewrite bind_vis; reflexivity. }
+    rewrite !interp_state_vis.
+    setoid_rewrite interp_state_ret.
+    cbn -[state_interp].
+    rewrite /handle_stateEff.
+    rewrite !bind_vis.
 
     iApply sim_coindF_vis. iRight.
     iModIntro.
+    rewrite /handle_event; cbn -[state_interp].
     rewrite /resum /ReSum_id /id_ /Id_IFun.
-    rewrite /handle_event; cbn.
     simp handle_call_events. iLeft.
     iFrame.
     iDestruct "CI" as (??) "(?&?&Hs_t&Hs_s&#HWF&?&?&?&?&HC&?)".
@@ -532,6 +612,8 @@ Section fundamental.
     iExists _,_; iFrame. done.
   Qed.
 
+
+  (* TODO: Move *)
   Lemma instr_call_refl C fn attrs args id  i_t i_s A_t A_s:
     ⊢ (code_inv C i_t i_s A_t A_s -∗
       instr_conv
@@ -543,59 +625,44 @@ Section fundamental.
   Proof.
     iIntros "CI".
     cbn; destruct fn.
-    rewrite /instr_conv; rewrite interp_bind.
-    iApply sim_expr_bind; rewrite /instr_conv.
+    Simp. Cut.
     iApply sim_expr_bupd_mono;
       [ | iApply (denote_exp_map_monad args _ with "CI") ]; auto.
-    cbn. iIntros (??) "H".
-    iDestruct "H" as (????) "(CI & #H)";
-      rewrite H H0 !bind_ret_l; clear H H0 e_t e_s.
+    iIntros (??) "H".
+    iDestruct "H" as (??->->) "(CI & #H)";
+    Simp.
 
     (* 1. expression refl *)
-    repeat setoid_rewrite interp_bind.
-    iApply sim_expr_bind; iApply exp_conv_to_instr.
+    Cut. Simp.
     iApply sim_expr_bupd_mono; [ | by iApply expr_logrel_refl].
-    cbn. iIntros (??) "Hp".
-    iDestruct "Hp" as (????) "(#Hv & CI)"; rewrite H H0; clear H H0.
-    do 2 rewrite bind_ret_l.
+    iIntros (??) "Hp"; iDestruct "Hp" as (??->->) "(#Hv & CI)".
+    Simp.
 
     (* 2. Call simulation *)
-    iApply sim_expr_bind.
+    Cut.
 
-    rewrite /instr_conv.
     iApply (sim_expr_bupd_mono with "[CI]");
       last (iApply (instr_conv_concretize_or_pick_strong with "Hv")).
 
     iIntros (??) "H'".
-    iDestruct "H'" as (????) "(Hdv & %Hdu_t & %Hdu_s)".
-    rewrite H H0 !bind_ret_l; clear H H0.
-    rewrite !interp_vis.
-    setoid_rewrite interp_ret.
-    iApply sim_expr_bind.
-    rewrite /subevent; unfold_cat.
-    simp instrE_conv.
-    iApply sim_expr_bind.
+    iDestruct "H'" as (??->->) "(Hdv & %Hdu_t & %Hdu_s)".
+    Simp. Cut. Simp.
 
-    iApply sim_expr_vis.
     iApply sim_expr_bupd_mono ; [ | iApply (call_refl with "CI Hdv H")].
     cbn. clear e_t e_s.
     iIntros (??) "Hp".
-    iDestruct "Hp" as (????) "(#Hv2 & CI)"; rewrite H H0; clear H H0.
-    do 2 rewrite bind_ret_l.
+    iDestruct "Hp" as (??->->) "(#Hv2 & CI)".
+
+    Simp.
 
     (* 3. Local write simulation *)
-    iApply sim_expr_base; do 2 rewrite bind_ret_l.
-    iApply sim_expr_tau.
-    iApply sim_expr_base; do 2 rewrite bind_ret_l.
-    rewrite !interp_vis; setoid_rewrite interp_ret.
-    iApply sim_expr_bind.
+    Base; Simp.
     iApply sim_expr_bupd_mono ;
       [ | iApply (local_write_refl with "CI Hv2")].
 
     iIntros (??) "Hp".
-    iDestruct "Hp" as (????) "CI"; rewrite H H0; clear H H0.
-    rewrite !bind_ret_l. iApply sim_expr_tau.
-    iApply sim_expr_base; eauto.
+    iDestruct "Hp" as (??->->) "CI".
+    Simp. Base.
     iExists _, _; by iFrame.
   Qed.
 
@@ -609,52 +676,33 @@ Section fundamental.
   Proof.
     iIntros "CI".
     cbn; destruct fn.
-    rewrite /instr_conv; rewrite interp_bind.
-    iApply sim_expr_bind; rewrite /instr_conv.
+    Simp; Cut.
     iApply sim_expr_bupd_mono;
       [ | iApply (denote_exp_map_monad args _ with "CI") ]; auto.
     cbn. iIntros (??) "H".
-    iDestruct "H" as (????) "(CI & #H)";
-      rewrite H H0 !bind_ret_l; clear H H0 e_t e_s.
+    iDestruct "H" as (??->->) "(CI & #H)"; Simp.
     (* 1. expression refl *)
-    rewrite !interp_bind.
-    iApply sim_expr_bind; iApply exp_conv_to_instr.
+    Cut; Simp.
     iApply sim_expr_bupd_mono; [ | by iApply expr_logrel_refl].
     cbn. iIntros (??) "Hp".
-    iDestruct "Hp" as (????) "(#Hv & CI)"; rewrite H H0; clear H H0.
-    do 2 rewrite bind_ret_l.
+    iDestruct "Hp" as (??->->) "(#Hv & CI)".
+    Simp.
 
     (* 2. Call simulation *)
-    rewrite !interp_bind.
-    iApply sim_expr_bind.
-
-
-    rewrite /instr_conv.
+    Cut.
     iApply (sim_expr_bupd_mono with "[CI]");
       last (iApply (instr_conv_concretize_or_pick_strong with "Hv")).
 
     iIntros (??) "H'".
-    iDestruct "H'" as (????) "(Hdv & %Hdu_t & %Hdu_s)".
-    rewrite H H0 !bind_ret_l; clear H H0.
-    rewrite !interp_bind.
-    rewrite !interp_vis.
-    setoid_rewrite interp_ret.
-    iApply sim_expr_bind.
-    rewrite /subevent; unfold_cat.
-    simp instrE_conv.
-    iApply sim_expr_bind.
-
+    iDestruct "H'" as (??->->) "(Hdv & %Hdu_t & %Hdu_s)".
+    Simp; Cut; Simp.
 
     iApply sim_expr_bupd_mono ; [ | iApply (call_refl with "CI Hdv H")].
     cbn. clear e_t e_s.
     iIntros (??) "Hp".
-    iDestruct "Hp" as (????) "(#Hv2 & CI)"; rewrite H H0; clear H H0.
-    do 2 rewrite bind_ret_l.
-    iApply sim_expr_tau.
-    iModIntro.
+    iDestruct "Hp" as (??->->) "(#Hv2 & CI)".
+    Simp. Base. Simp. Base.
 
-    iApply sim_expr_base; do 2 rewrite bind_ret_l.
-    iApply sim_expr_base.
     iExists _, _; by iFrame.
   Qed.
 
@@ -667,8 +715,8 @@ Section fundamental.
     [{ (r_t, r_s),
         ∃ l_t l_s, code_inv C i_t i_s (l_t:: A_t) (l_s:: A_s)}].
   Proof.
-    iIntros (WF) "CI".
-    rewrite /instr_conv interp_bind.
+    iIntros (WF) "CI". cbn.
+    Simp; Cut; Simp.
 
     iApply sim_expr_bind; rewrite !interp_vis.
     iApply sim_expr_bind; cbn in *.
