@@ -16,7 +16,7 @@ From velliris.vir Require Import
   fundamental_exp
   vir_util.
 
-Import DenoteTactics.
+(* Import DenoteTactics. *)
 Import CFG.
 
 (* ------------------------------------------------------------------- *)
@@ -30,7 +30,7 @@ Section las_example.
   (* LATER: Can generalize the [v] values being stored (e.g. storing constants).
      FIXME: Generalize [v] to expressions *)
   (* TODO: Figure out if there is a normal form that can be enforced to make
-   sure expressions refer to [local_id]s. *)
+           sure expressions refer to [local_id]s. *)
   Fixpoint las_block {T} (b : code T) (a : raw_id) (v : option raw_id)
     : code T :=
     match b with
@@ -79,6 +79,7 @@ Section las_example.
              | _ => false
              end) l.
 
+  (* TODO: Generalize to [def use] for computing use information *)
   Fixpoint expr_contains_raw_id {T} (e : exp T) (i : raw_id) : bool :=
     match e with
     | EXP_Ident (ID_Local i') => bool_decide (i = i')
@@ -108,6 +109,7 @@ Section las_example.
     | _ => false
     end.
 
+  (* FUTURE WORK: Alias analysis *)
   Definition promotable_instr {T} (i : instr_id * instr T) a : bool :=
     match i.2 with
       | INSTR_Load _ _ (_, EXP_Ident (ID_Local _)) _ => true
@@ -127,6 +129,8 @@ Section las_example.
   Definition promotable_cfg {T} (c : cfg T) a :=
     promotable_ocfg (blks c) a.
 
+  (* Given a control flow graph [c], return a promotable instruction id and
+     instruction pair if one is found. *)
   Definition find_promotable_alloca {T} (c : cfg T) :=
     (* LATER: Refactor this [instrs] comptuation? *)
     let instrs := List.concat (List.map (blk_code) (blks c)) in
@@ -146,6 +150,7 @@ Section las_example.
       | _ => c
     end.
 
+  (* Load-after-store on a function definition. *)
   Definition las_fun (f : definition dtyp (cfg dtyp)) : definition _ _ :=
     {| df_prototype := df_prototype f;
        df_args := df_args f;
@@ -153,6 +158,7 @@ Section las_example.
 
 End las_example.
 
+(* For a sanity check, running some examples... *)
 Example code1 : code dtyp :=
   (IId (Name "a"), INSTR_Alloca (DTYPE_I 32%N) None None) ::
   (IId (Name "b"), INSTR_Op (EXP_Integer 42)) ::
@@ -218,7 +224,6 @@ Definition ocfg_post_inv C i_t i_s A_t A_s : iPropI Σ :=
   ⌜NoDup A_t⌝ ∗ ⌜NoDup A_s⌝)%I.
 
 (* TODO : make [logical relations] take in an invariant [I] *)
-
 Definition term_logrel ϒ_t ϒ_s I : iPropI Σ :=
 (⌜term_WF ϒ_t⌝ -∗
  ⌜term_WF ϒ_s⌝ -∗
