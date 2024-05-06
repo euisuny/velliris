@@ -842,14 +842,20 @@ Section fundamental.
     by iApply "IH".
   Qed.
 
-  Theorem cfg_logrel_refl c A_t A_s:
+  Theorem cfg_compat c c' A_t A_s:
     cfg_WF c ->
-    (⊢ cfg_logrel c c ∅ A_t A_s)%I.
+    cfg_WF c' ->
+    CFG.init c = CFG.init c' ->
+    ocfg_logrel (blks c) (blks c') ∅ A_t A_s
+      (CFG.init c) (CFG.init c) -∗
+    cfg_logrel c c' ∅ A_t A_s.
   Proof with vsimp.
-    iIntros (WF ??) "CI";
-    setoid_rewrite interp_bind. destruct c; cbn.
+    iIntros (WF WF' Heq) "Hocfg". iIntros (??) "CI".
+    setoid_rewrite interp_bind.
+    destruct c, c'; cbn in *; subst.
+    iSpecialize ("Hocfg" with "CI").
     iApply sim_expr'_bind; iApply (sim_expr'_bupd_mono); cycle 1.
-    { cbn; iApply ocfg_logrel_refl; auto. }
+    { iApply "Hocfg". }
     iIntros (??) "(H & HC)".
     iDestruct "H" as (??) "CI".
     iDestruct "HC" as (????) "HC".
@@ -870,6 +876,14 @@ Section fundamental.
     cbn. rewrite /subevent /resum /ReSum_inr /cat /Cat_IFun /inr_ /Inr_sum1.
     simp call_conv.
     iApply sim_expr_exception.
+  Qed.
+
+  Theorem cfg_logrel_refl c A_t A_s:
+    cfg_WF c ->
+    (⊢ cfg_logrel c c ∅ A_t A_s)%I.
+  Proof with vsimp.
+    iIntros (WF); iApply cfg_compat; eauto.
+    by iApply ocfg_logrel_refl.
   Qed.
 
   Theorem fun_logrel_refl f:
