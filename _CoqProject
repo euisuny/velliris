@@ -43,14 +43,14 @@ theories/vir/interp_properties.v
 
 theories/vir/logical_relations.v
 theories/vir/fundamental_exp.v
+theories/vir/fundamental_exp_relaxed.v
 theories/vir/fundamental.v
 theories/vir/adequacy.v
+
 theories/vir/contextual_mcfg.v
 theories/vir/mcfg_contextual.v
 theories/vir/contextual.v
 theories/vir/contextual_laws.v
-
-theories/vir/fundamental_exp_relaxed.v
 
 theories/vir/examples/notations.v
 theories/vir/examples/examples.v
