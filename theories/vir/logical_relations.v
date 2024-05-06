@@ -7,7 +7,8 @@ From ITree Require Import
   ITree Eq Interp.InterpFacts Interp.RecursionFacts Events.StateFacts TranslateFacts.
 
 From Vellvm Require Import Syntax.LLVMAst Syntax.DynamicTypes
-  Semantics.InterpretationStack Handlers Utils.Util Semantics.LLVMEvents.
+  Semantics.InterpretationStack Handlers Utils.Util Semantics.LLVMEvents
+  Syntax.ScopeTheory.
 
 From Equations Require Import Equations.
 
@@ -374,6 +375,7 @@ Section WF_def_properties.
     block_WF a /\ ocfg_WF c.
   Proof.
     cbn; intros WF; apply andb_prop_elim in WF; by destruct WF.
+  Qed.
 
   Lemma global_names_cons_lookup {T FnBody}
     f (l : list (definition T FnBody)) (g : global_env):

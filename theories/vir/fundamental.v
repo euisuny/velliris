@@ -1,26 +1,17 @@
-(* From Coq Require Import String List Program.Equality. *)
 From iris.prelude Require Import options.
-(* From iris.base_logic.lib Require Export gen_heap ghost_map. *)
-(* From iris.base_logic Require Import gset_bij. *)
-
-(* From Vellvm Require Import Syntax.LLVMAst Syntax.DynamicTypes *)
-(*   Semantics.InterpretationStack Handlers Utils.Util Semantics.LLVMEvents. *)
 
 From Equations Require Import Equations.
 
-From Paco Require Import paco.
+From Vellvm Require Import Syntax.ScopeTheory.
 
-(* From velliris.logic Require Import satisfiable. *)
 From velliris.program_logic Require Import program_logic.
 From velliris.vir Require Import
-  (* vir spec globalbij heapbij frame_laws primitive_laws bij_laws *)
   vir spec
   logical_relations
   fundamental_exp
   tactics
   vir_sim_properties
 .
-(* From velliris.utils Require Import no_event. *)
 
 Set Default Proof Using "Type*".
 
@@ -465,124 +456,6 @@ Section fundamental.
     by iExists _, _.
   Qed.
 
-(* ------------------------------------------------------------------------ *)
-
-(** *Fundamental theorems *)
-  Theorem phi_logrel_refl bid id ϕ C A_t A_s:
-    ⊢ (phi_logrel (denote_phi bid (id, ϕ)) (denote_phi bid (id, ϕ)) C A_t A_s)%I.
-  Proof with vsimp.
-    iApply phi_compat; destruct ϕ.
-    destruct (Util.assoc bid args); try done.
-    iApply expr_logrel_refl.
-  Qed.
-
-  Theorem phis_logrel_refl C bid (Φ : list (local_id * phi dtyp)) A_t A_s:
-    (⊢ phis_logrel (denote_phis bid Φ) (denote_phis bid Φ) C A_t A_s)%I.
-  Proof with vsimp.
-    iApply phis_compat.
-    iInduction Φ as [ | ] "IH"; first done.
-    cbn; iSplitL; [ destruct a; iApply phi_logrel_refl | done ].
-  Qed.
-
-  Theorem instr_logrel_refl id e A_t A_s:
-    instr_WF e ->
-    (⊢ instr_logrel id e id e ∅ A_t A_s)%I.
-  Proof with vsimp.
-    iIntros (WF ??) "HI".
-    destruct e eqn: He.
-    all : destruct id; try iApply instr_conv_raise.
-    { (* Comment *)
-      cbn. vfinal. }
-
-    { (* Pure operations *)
-      cbn... Cut...
-      mono: iApply (expr_logrel_refl with "HI")...
-      iDestruct "HΦ" as "(Hv & Hc)".
-      mono: iApply (local_write_refl with "Hc Hv")...
-      vfinal; by iExists ∅, ∅. }
-
-    { mono: iApply (instr_call_refl with "HI").
-      cbn. iIntros (??) "H".
-      iDestruct "H" as (????) "H".
-      iExists _, _; do 2 (iSplitL ""; first done).
-      by iExists ∅, ∅. }
-
-    { mono: iApply (instr_call_void_refl with "HI").
-      cbn. iIntros (??) "H".
-      iDestruct "H" as (????) "H".
-      iExists _, _; do 2 (iSplitL ""; first done).
-      by iExists ∅, ∅. }
-
-    { mono: iApply (instr_alloca_refl with "HI").
-      cbn. iIntros (??) "H".
-      iDestruct "H" as (??????) "H".
-      iExists _, _; do 2 (iSplitL ""; first done).
-      iExists [l_t], [l_s]; by cbn. }
-
-    { mono: iApply (instr_load_refl with "HI").
-      cbn. iIntros (??) "H".
-      iDestruct "H" as (????) "H".
-      iExists _, _; do 2 (iSplitL ""; first done).
-      by iExists ∅, ∅. }
-
-    { mono: iApply (instr_store_refl with "HI").
-      cbn. iIntros (??) "H".
-      iDestruct "H" as (????) "H".
-      iExists _, _; do 2 (iSplitL ""; first done).
-      by iExists ∅, ∅. }
-  Qed.
-
-  Theorem code_logrel_refl (c : code dtyp) A_t A_s:
-    code_WF c ->
-    ⊢ code_logrel c c ∅ A_t A_s.
-  Proof with vsimp.
-    iIntros (Hwf); iApply code_compat; eauto.
-    iInduction c as [ | ] "IH"; first done.
-    cbn in Hwf; apply andb_prop_elim in Hwf;
-      destruct Hwf as (HW1 & HW2).
-    cbn; iSplitL; [
-      destruct a; iIntros; iApply instr_logrel_refl; eauto |
-      by iApply "IH"];
-      try done.
-  Qed.
-
-  Theorem term_logrel_refl ϒ C:
-    (⊢ term_logrel ϒ ϒ C)%I.
-  Proof with vsimp.
-    iIntros (??????) "HI".
-    destruct ϒ eqn: Hϒ; try solve [iDestruct "WF" as "[]"]; cbn.
-    5-8: iApply exp_conv_raise.
-    5 : iApply exp_conv_raiseUB.
-    { (* TERM_Ret *)
-      destruct v. vsimp. Cut.
-      mono: iApply expr_logrel_refl...
-      iDestruct "HΦ" as "(Hv & HΦ)"; vfinal. }
-    { (* TERM_Ret_void *)
-      vfinal. iApply uval_rel_none. }
-    { (* TERM_Br *)
-      destruct v; vsimp...
-      Cut... mono: iApply expr_logrel_refl...
-      Cut... iDestruct "HΦ" as "(Hv & HI)".
-      mono: (iApply (exp_conv_concretize_or_pick with "Hv")) with "[HI]"...
-      destruct dv_s; try iApply exp_conv_raise; [ | iApply exp_conv_raiseUB ].
-      iDestruct (dval_rel_I1_inv with "HΦ") as %->.
-      destruct (DynamicValues.Int1.eq x DynamicValues.Int1.one); vfinal. }
-    { (* TERM_Br_1 *)
-      vfinal. }
-  Qed.
-
-  Theorem block_logrel_refl b bid A_t A_s:
-    block_WF b ->
-    (⊢ block_logrel b b bid ∅ A_t A_s)%I.
-  Proof with vsimp.
-    iIntros (WF). pose proof (WF' := WF).
-    apply andb_prop_elim in WF; destruct WF.
-    iApply block_compat; eauto.
-    { iApply phis_logrel_refl. }
-    { by iApply code_logrel_refl. }
-    { by iApply term_logrel_refl. }
-  Qed.
-
   Theorem ocfg_compat (c c' : CFG.ocfg dtyp) b1 b2 A_t A_s:
     ocfg_WF c ->
     ocfg_WF c' ->
@@ -736,21 +609,6 @@ Section fundamental.
     repeat iExists _; do 2 (iSplitL ""; eauto); done.
   Qed.
 
-  Theorem ocfg_logrel_refl (c : CFG.ocfg dtyp) b1 b2 A_t A_s:
-    ocfg_WF c ->
-    (⊢ ocfg_logrel c c ∅ A_t A_s b1 b2)%I.
-  Proof with vsimp.
-    iIntros (WF ??) "CI".
-    iApply ocfg_compat; try done; iModIntro.
-    (* Proceed by induction. *)
-    iInduction c as [ | ] "IH"; first done.
-    apply ocfg_WF_cons_inv in WF; destruct WF.
-    cbn; iSplitL "".
-    { iSplitL ""; first done; iIntros; by iApply block_logrel_refl. }
-
-    by iApply "IH".
-  Qed.
-
   Theorem cfg_compat c c' A_t A_s:
     cfg_WF c ->
     cfg_WF c' ->
@@ -786,25 +644,21 @@ Section fundamental.
     simp call_conv.
     iApply sim_expr_exception.
   Qed.
-
-  Theorem cfg_logrel_refl c A_t A_s:
-    cfg_WF c ->
-    (⊢ cfg_logrel c c ∅ A_t A_s)%I.
-  Proof with vsimp.
-    iIntros (WF); iApply cfg_compat; eauto.
-    by iApply ocfg_logrel_refl.
-  Qed.
-
-  Theorem fun_logrel_refl f:
+ 
+  Theorem fun_compat f f':
     fun_WF f ->
-    (⊢ fun_logrel f f ∅)%I.
+    fun_WF f' ->
+    df_args f =  df_args f' ->
+    (∀ A_t A_s, cfg_logrel (df_instrs f) (df_instrs f') ∅ A_t A_s) -∗
+    fun_logrel f f' ∅.
   Proof with vsimp.
-    iIntros (WF i_t i_s args_t args_s Hlen) "Hs_t Hs_s Hv HC".
+    iIntros (WF WF' Hargs_eq) "Hf".
+    iIntros (i_t i_s args_t args_s Hlen) "Hs_t Hs_s Hv HC".
 
     rewrite /denote_function; cbn -[denote_cfg].
-    destruct (length (df_args f) =? length args_s) eqn : Hlen_args; cycle 1.
+    destruct (length (df_args f') =? length args_s)%nat eqn : Hlen_args;
+      cycle 1.
     { rewrite bind_bind bind_vis.
-
       setoid_rewrite interp_bind.
       setoid_rewrite interp_vis; rewrite bind_trigger.
       iApply sim_expr_lift.
@@ -812,63 +666,80 @@ Section fundamental.
 
     rewrite /val_rel.Forall2.
     iDestruct (big_sepL2_length  with "Hv") as %Hargs.
-    assert (Hlen_f: length (df_args f) =? length args_t = true).
-    { apply PeanoNat.Nat.eqb_eq; subst.
+    assert (Hlen_f: (length (df_args f) =? length args_t = true)%nat).
+    { apply PeanoNat.Nat.eqb_eq; subst. rewrite Hargs_eq.
       apply PeanoNat.Nat.eqb_eq in Hlen_args; rewrite Hlen_args; done. }
-    rewrite Hlen_f.
+    rewrite Hlen_f. rewrite !bind_ret_l.
 
-    rewrite /L0'expr_conv !interp_bind !interp_ret !bind_ret_l.
-    setoid_rewrite interp_bind;
-    rewrite !interp_vis !bind_bind; cbn -[denote_cfg].
-    setoid_rewrite interp_ret.
-    setoid_rewrite interp_bind.
-    setoid_rewrite interp_vis.
-    setoid_rewrite bind_bind.
-    setoid_rewrite interp_ret.
-    do 2 rewrite -bind_bind.
-    rewrite -(bind_bind (Vis (call_conv () (subevent () MemPush)) (λ x : (), Ret x))).
-    rewrite -(bind_bind (r <- (Vis (call_conv () (subevent () MemPush)) (λ x : (), Ret x)) ;; Tau (Ret r))).
-    iApply sim_expr'_bind.
-    rewrite !bind_bind.
+    rewrite -!(bind_bind (trigger MemPush)) /L0'expr_conv
+      !(interp_bind _ (ITree.bind (trigger MemPush) _)).
+    Cut...
 
-    rewrite /subevent /resum /ReSum_inr /cat /Cat_IFun /inr_ /Inr_sum1.
-    simp L0'_conv.
+    match goal with
+      | |- context [sim_expr' _ ?l _] =>
+          replace l with
+            (r <- trigger MemPush ;;
+              _ <- Tau (Ret r);;
+              r <- trigger (StackPush (combine (df_args f) args_t)) ;;
+              Tau (Ret r):
+              expr vir_lang _)
+     end ;cycle 1.
+    (* TODO *)
+    { eapply EqAxiom.bisimulation_is_eq.
+      tau_steps; eapply eqit_Vis; intros; tau_steps.
+      eapply eqit_Tau; intros; tau_steps.
+      eapply eqit_Vis; intros; tau_steps.
+      eapply eqit_Tau; intros; by tau_steps. }
 
-    iCombine "Hs_t Hs_s" as "Hst".
+    match goal with
+      | |- context [sim_expr' _ _ ?R] =>
+          replace R with
+            (r <- trigger MemPush ;;
+              _ <- Tau (Ret r);;
+              r <- trigger (StackPush (combine (df_args f') args_s)) ;;
+              Tau (Ret r):
+              expr vir_lang _)
+     end ;cycle 1.
+    (* TODO *)
+    { eapply EqAxiom.bisimulation_is_eq.
+      tau_steps; eapply eqit_Vis; intros; tau_steps.
+      eapply eqit_Tau; intros; tau_steps.
+      eapply eqit_Vis; intros; tau_steps.
+      eapply eqit_Tau; intros; by tau_steps. }
+
+    rewrite -!bind_bind. Cut. rewrite !bind_bind.
+
     apply PeanoNat.Nat.eqb_eq in Hlen_args, Hlen_f.
     apply andb_prop_elim in WF. destruct WF.
+    apply andb_prop_elim in WF'. destruct WF'.
     assert (Hnd: NoDup_b (df_args f) = true).
     { destruct (NoDup_b (df_args f)); done. }
-    apply NoDup_b_NoDup in Hnd. clear H. rename H0 into WF.
-
-    iApply (sim_expr'_bupd_mono with "[Hv HC]");
-      [ | iApply sim_expr_lift; iApply (sim_push_frame' with "Hst") ];
+    assert (Hnd': NoDup_b (df_args f') = true).
+    { destruct (NoDup_b (df_args f')); done. }
+    apply NoDup_b_NoDup in Hnd, Hnd'. clear H. rename H0 into WF.
+    iCombine "Hs_t Hs_s" as "Hst".
+    iApply (sim_expr'_bupd_mono with "[Hv HC Hf]");
+      [ | iApply sim_expr_lift; iApply (frame_laws.sim_push_frame' with "Hst") ];
       [ | rewrite combine_fst | rewrite combine_fst ]; eauto.
 
-    cbn.
+    (* cbn -[denote_cfg]. *)
     iIntros (??) "H".
-    iDestruct "H" as (??????) "(Hs_t & Hs_s & Ha_t & Ha_s & Hd_t & Hd_s & Harg_t & Harg_s)".
+    iDestruct "H" as (??????)
+        "(Hs_t & Hs_s & Ha_t & Ha_s & Hd_t & Hd_s & Harg_t & Harg_s)".
     rewrite H H0; clear H H0.
-
-    rewrite !bind_ret_l !bind_tau.
-    iApply sim_expr'_tau; rewrite !bind_ret_l.
-
-    rewrite interp_bind.
-
-    (* Denote CFG *)
-    iApply sim_expr'_bind.
-    iApply spec.instr_to_L0'.
+    vsimp. Tau. iApply sim_expr'_base...
+    Cut... iApply instr_to_L0'.
 
     iDestruct "Hv" as "#Hv".
     iApply sim_expr'_bupd_mono;
-      [ | iApply (cfg_logrel_refl with
+      [ | iApply ("Hf" with
           "[HC Hs_t Hs_s Ha_t Ha_s Hd_t Hd_s Harg_t Harg_s]") ];
       eauto; cycle 1.
     { Unshelve.
       4 : exact (j_t :: i_t). 4 : exact (j_s :: i_s).
       2 : exact ∅. 2 : exact ∅.
       iExists (combine (df_args f) args_t),
-              (combine (df_args f) args_s); iFrame.
+              (combine (df_args f') args_s); iFrame.
       iSplitL "".
       { iPureIntro; eauto. }
 
@@ -895,8 +766,9 @@ Section fundamental.
 
     iApply sim_update_si; iModIntro.
     iIntros (??) "SI".
-    iDestruct (state_interp_WF with "SI") as "%WF_S".
+    iDestruct (bij_laws.state_interp_WF with "SI") as "%WF_S".
     iFrame.
+    iDestruct "HWF" as %HWF.
 
     repeat setoid_rewrite interp_bind.
     setoid_rewrite interp_ret.
@@ -914,17 +786,169 @@ Section fundamental.
     iApply sim_expr_bind.
     iApply sim_expr_bupd_mono; cycle 1.
     { iDestruct "Hbij" as (Hnd_t Hnd_s) "Hbij".
-      iPoseProof with (sim_pop_frame_bij with "Hs_t Hs_s Ha_t Ha_s HC Hbij") as "H";
+      iPoseProof (frame_laws.sim_pop_frame_bij with
+                   "Hs_t Hs_s Ha_t Ha_s HC Hbij") as "H";
         eauto.
       { intros. cbn in H1.
-        assert (length i_s > 0)%Z by lia.
-        specialize (Hlen H2). cbn; lia. } }
+        assert (length i_s > 0).
+        { cbn in H3. lia. } cbn; lia. } }
 
     iIntros (??) "H".
-    iDestruct "H" as (????) "(HC & Hst & Hss)".
-    rewrite H1 H2 !bind_ret_l.
-    iApply sim_expr_tau; iApply sim_expr_base.
+    iDestruct "H" as (??->->) "(HC & Hst & Hss)".
+    final.
     iFrame. iExists _, _; iFrame "Hr"; done.
+  Qed.
+
+
+(* ------------------------------------------------------------------------ *)
+
+(** *Fundamental theorems *)
+  Theorem phi_logrel_refl bid id ϕ C A_t A_s:
+    ⊢ (phi_logrel (denote_phi bid (id, ϕ)) (denote_phi bid (id, ϕ)) C A_t A_s)%I.
+  Proof with vsimp.
+    iApply phi_compat; destruct ϕ.
+    destruct (Util.assoc bid args); try done.
+    iApply expr_logrel_refl.
+  Qed.
+
+  Theorem phis_logrel_refl C bid (Φ : list (local_id * phi dtyp)) A_t A_s:
+    (⊢ phis_logrel (denote_phis bid Φ) (denote_phis bid Φ) C A_t A_s)%I.
+  Proof with vsimp.
+    iApply phis_compat.
+    iInduction Φ as [ | ] "IH"; first done.
+    cbn; iSplitL; [ destruct a; iApply phi_logrel_refl | done ].
+  Qed.
+
+  Theorem instr_logrel_refl id e A_t A_s:
+    instr_WF e ->
+    (⊢ instr_logrel id e id e ∅ A_t A_s)%I.
+  Proof with vsimp.
+    iIntros (WF ??) "HI".
+    destruct e eqn: He.
+    all : destruct id; try iApply instr_conv_raise.
+    { (* Comment *)
+      cbn. vfinal. }
+
+    { (* Pure operations *)
+      cbn... Cut...
+      mono: iApply (expr_logrel_refl with "HI")...
+      iDestruct "HΦ" as "(Hv & Hc)".
+      mono: iApply (local_write_refl with "Hc Hv")...
+      vfinal; by iExists ∅, ∅. }
+
+    { mono: iApply (instr_call_refl with "HI").
+      cbn. iIntros (??) "H".
+      iDestruct "H" as (????) "H".
+      iExists _, _; do 2 (iSplitL ""; first done).
+      by iExists ∅, ∅. }
+
+    { mono: iApply (instr_call_void_refl with "HI").
+      cbn. iIntros (??) "H".
+      iDestruct "H" as (????) "H".
+      iExists _, _; do 2 (iSplitL ""; first done).
+      by iExists ∅, ∅. }
+
+    { mono: iApply (instr_alloca_refl with "HI").
+      cbn. iIntros (??) "H".
+      iDestruct "H" as (??????) "H".
+      iExists _, _; do 2 (iSplitL ""; first done).
+      iExists [l_t], [l_s]; by cbn. }
+
+    { mono: iApply (instr_load_refl with "HI").
+      cbn. iIntros (??) "H".
+      iDestruct "H" as (????) "H".
+      iExists _, _; do 2 (iSplitL ""; first done).
+      by iExists ∅, ∅. }
+
+    { mono: iApply (instr_store_refl with "HI").
+      cbn. iIntros (??) "H".
+      iDestruct "H" as (????) "H".
+      iExists _, _; do 2 (iSplitL ""; first done).
+      by iExists ∅, ∅. }
+  Qed.
+
+  Theorem code_logrel_refl (c : code dtyp) A_t A_s:
+    code_WF c ->
+    ⊢ code_logrel c c ∅ A_t A_s.
+  Proof with vsimp.
+    iIntros (Hwf); iApply code_compat; eauto.
+    iInduction c as [ | ] "IH"; first done.
+    cbn in Hwf; apply andb_prop_elim in Hwf;
+      destruct Hwf as (HW1 & HW2).
+    cbn; iSplitL; [
+      destruct a; iIntros; iApply instr_logrel_refl; eauto |
+      by iApply "IH"];
+      try done.
+  Qed.
+
+  Theorem term_logrel_refl ϒ C:
+    (⊢ term_logrel ϒ ϒ C)%I.
+  Proof with vsimp.
+    iIntros (??????) "HI".
+    destruct ϒ eqn: Hϒ; try solve [iDestruct "WF" as "[]"]; cbn.
+    5-8: iApply exp_conv_raise.
+    5 : iApply exp_conv_raiseUB.
+    { (* TERM_Ret *)
+      destruct v. vsimp. Cut.
+      mono: iApply expr_logrel_refl...
+      iDestruct "HΦ" as "(Hv & HΦ)"; vfinal. }
+    { (* TERM_Ret_void *)
+      vfinal. iApply uval_rel_none. }
+    { (* TERM_Br *)
+      destruct v; vsimp...
+      Cut... mono: iApply expr_logrel_refl...
+      Cut... iDestruct "HΦ" as "(Hv & HI)".
+      mono: (iApply (exp_conv_concretize_or_pick with "Hv")) with "[HI]"...
+      destruct dv_s; try iApply exp_conv_raise; [ | iApply exp_conv_raiseUB ].
+      iDestruct (dval_rel_I1_inv with "HΦ") as %->.
+      destruct (DynamicValues.Int1.eq x DynamicValues.Int1.one); vfinal. }
+    { (* TERM_Br_1 *)
+      vfinal. }
+  Qed.
+
+  Theorem block_logrel_refl b bid A_t A_s:
+    block_WF b ->
+    (⊢ block_logrel b b bid ∅ A_t A_s)%I.
+  Proof with vsimp.
+    iIntros (WF). pose proof (WF' := WF).
+    apply andb_prop_elim in WF; destruct WF.
+    iApply block_compat; eauto.
+    { iApply phis_logrel_refl. }
+    { by iApply code_logrel_refl. }
+    { by iApply term_logrel_refl. }
+  Qed.
+
+  Theorem ocfg_logrel_refl (c : CFG.ocfg dtyp) b1 b2 A_t A_s:
+    ocfg_WF c ->
+    (⊢ ocfg_logrel c c ∅ A_t A_s b1 b2)%I.
+  Proof with vsimp.
+    iIntros (WF ??) "CI".
+    iApply ocfg_compat; try done; iModIntro.
+    (* Proceed by induction. *)
+    iInduction c as [ | ] "IH"; first done.
+    apply ocfg_WF_cons_inv in WF; destruct WF.
+    cbn; iSplitL "".
+    { iSplitL ""; first done; iIntros; by iApply block_logrel_refl. }
+
+    by iApply "IH".
+  Qed.
+
+  Theorem cfg_logrel_refl c A_t A_s:
+    cfg_WF c ->
+    (⊢ cfg_logrel c c ∅ A_t A_s)%I.
+  Proof with vsimp.
+    iIntros (WF); iApply cfg_compat; eauto.
+    by iApply ocfg_logrel_refl.
+  Qed.
+
+  Theorem fun_logrel_refl f:
+    fun_WF f ->
+    (⊢ fun_logrel f f ∅)%I.
+  Proof with vsimp.
+    iIntros (wf).
+    iApply fun_compat; eauto.
+    iIntros; iApply cfg_logrel_refl; eauto.
+    apply andb_prop_elim in wf; by destruct wf.
   Qed.
 
   Theorem fundefs_logrel_refl r Attr:
