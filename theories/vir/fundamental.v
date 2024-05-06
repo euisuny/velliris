@@ -799,6 +799,45 @@ Section fundamental.
     iFrame. iExists _, _; iFrame "Hr"; done.
   Qed.
 
+  Theorem fundefs_compat r r' Attr:
+    ⌜fundefs_WF r Attr⌝ -∗
+    ⌜fundefs_WF r' Attr⌝ -∗
+    ([∗ list] '(v, f); '(v', f') ∈ r; r', fun_logrel f f' ∅) -∗
+    fundefs_logrel r r' Attr Attr ∅.
+  Proof with vsimp.
+    rewrite /fundefs_logrel.
+    iInduction r as [ | f l] "H" forall (r' Attr); first (iIntros; done).
+    iIntros (WF WF') "Hf".
+    iIntros (i f_t' f_s'
+      addr_t addr_s attr Hlu_t Hlu_s Hattr_t Hattr_s) "#Hrel".
+    iIntros (i_t i_s args_t args_s Hlen) "Hs_t Hs_s #Hargs HC".
+    (* iIntros (τ Hcall). *)
+    pose proof fundefs_WF_cons_inv. destruct Attr.
+    { clear -Hattr_t. set_solver. }
+    clear H.
+    pose proof (fundefs_WF_cons_inv _ _ _ _ WF) as HWF_t.
+    destruct HWF_t as (?&?).
+
+    iDestruct (big_sepL2_cons_inv_l with "Hf") as (???)
+      "(CI1 & CI2)". destruct x2; subst.
+    pose proof (fundefs_WF_cons_inv _ _ _ _ WF') as HWF_s.
+    destruct HWF_s as (?&?).
+    destruct f.
+
+    destruct i.
+    { cbn in Hlu_t, Hlu_s, Hattr_t, Hattr_s.
+      inversion Hlu_t; subst.
+      inversion Hlu_s; subst.
+      inversion Hattr_t; subst.
+      iApply ("CI1" with "[] [Hs_t] [Hs_s]"); eauto. }
+    { rewrite /fundefs_WF in H, H1.
+      cbn in H, H1.
+      iSpecialize ("H" $! _ _ H0 H2 with "CI2").
+      inversion Hlu_t; inversion Hlu_s; inversion Hattr_t.
+      iSpecialize ("H" $! i _ _ _ _ _ H4 H5 H6 H6
+                  with "Hrel").
+      iSpecialize ("H" $! _ _ _ _ Hlen with "Hs_t Hs_s Hargs HC"). done. }
+  Qed.
 
 (* ------------------------------------------------------------------------ *)
 
@@ -955,33 +994,13 @@ Section fundamental.
     ⌜fundefs_WF r Attr⌝ -∗
     fundefs_logrel r r Attr Attr ∅.
   Proof with vsimp.
-    rewrite /fundefs_logrel.
-    iInduction r as [ | f l] "H" forall (Attr).
-    { iIntros. done. }
-    { iIntros (WF).
-      iIntros (i f_t' f_s'
-        addr_t addr_s attr Hlu_t Hlu_s Hattr_t Hattr_s) "#Hrel".
-      iIntros (i_t i_s args_t args_s Hlen) "Hs_t Hs_s #Hargs HC".
-      iIntros (τ Hcall).
-      pose proof fundefs_WF_cons_inv. destruct Attr.
-      { clear -Hattr_t. set_solver. }
-      pose proof (fundefs_WF_cons_inv _ _ _ _ WF) as HWF_t.
-      destruct HWF_t as (?&?).
-
-      destruct i.
-      { cbn in Hlu_t, Hlu_s, Hattr_t, Hattr_s.
-        inversion Hlu_t; subst.
-        inversion Hlu_s; subst.
-        inversion Hattr_t; subst.
-        rewrite /fundefs_WF in H0.
-        cbn in H0.
-        do 2 rewrite andb_true_r in H0.
-        iApply (fun_logrel_refl f_s' H0 $!
-                  i_t i_s args_t args_s Hlen with "Hs_t Hs_s Hargs HC"). }
-      { cbn in Hlu_t, Hlu_s, Hattr_t, Hattr_s.
-        iSpecialize ("H" $! Attr H1 i f_t' f_s' _ _ attr Hlu_t Hlu_s Hattr_t Hattr_s with "Hrel").
-        iSpecialize ("H" $! i_t i_s args_t args_s Hlen with "Hs_t Hs_s Hargs HC").
-        by iApply "H". } }
+    iIntros (WF); iApply fundefs_compat; eauto.
+    iInduction r as [|] "IH" forall (Attr WF); first done.
+    destruct Attr; first inv WF.
+    eapply fundefs_WF_cons_inv in WF; destruct WF.
+    rewrite /fundefs_WF in H.
+    cbn; destruct a; iSplitL ""; first iApply fun_logrel_refl; eauto.
+    by iApply "IH".
   Qed.
 
   Theorem mcfg_definitions_refl (defs : CFG.mcfg dtyp) g_t g_s:

@@ -73,17 +73,6 @@ Section WF.
     forallb (fun '(_, f) => fun_WF f) F &&
     NoDup_b F.*1.
 
-  Lemma fundefs_WF_cons_inv f F a Attr:
-    fundefs_WF (f :: F) (a :: Attr) ->
-    fundefs_WF [f] [a] /\ fundefs_WF F Attr.
-  Proof.
-    rewrite /fundefs_WF; cbn.
-    intros.
-    repeat (apply andb_prop_elim in H; destruct H).
-    apply andb_prop_elim in H0, H1; destruct H0, H1. destruct f.
-    split; repeat (apply andb_prop_intro; eauto).
-  Qed.
-
   Definition CFG_attributes (defs : CFG.mcfg dtyp) :=
     dc_attrs <$> (CFG.m_declarations defs).
 
@@ -369,6 +358,18 @@ Section logical_relations_def.
 End logical_relations_def.
 
 Section WF_def_properties.
+
+  Lemma fundefs_WF_cons_inv f F a Attr:
+    fundefs_WF (f :: F) (a :: Attr) ->
+    fun_WF f.2 /\ fundefs_WF F Attr.
+  Proof.
+    rewrite /fundefs_WF; cbn.
+    intros.
+    repeat (apply andb_prop_elim in H; destruct H).
+    destruct f.
+    apply andb_prop_elim in H0, H1; destruct H0, H1.
+    split; last repeat (apply andb_prop_intro; eauto). done.
+  Qed.
 
   Lemma ocfg_WF_cons_inv a c :
     ocfg_WF (a :: c) ->
