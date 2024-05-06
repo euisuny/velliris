@@ -1008,7 +1008,7 @@ Section fundamental.
      ⊢ target_globals g_t -∗
      source_globals g_s -∗
      mcfg_definitions defs ⪯ mcfg_definitions defs
-      [[ fun e_t e_s =>
+      ⦉ fun e_t e_s =>
           ∃ r_t r_s,
             ⌜e_t = Ret r_t⌝ ∗ ⌜e_s = Ret r_s⌝ ∗
             ⌜Permutation r_t.*1
@@ -1022,7 +1022,7 @@ Section fundamental.
                 (CFG_attributes defs) (CFG_attributes defs) ∗
             ⌜fundefs_WF r_t (CFG_attributes defs)⌝ ∗
             ⌜fundefs_WF r_s (CFG_attributes defs)⌝ ∗
-            □ (fundefs_logrel r_t r_s (CFG_attributes defs) (CFG_attributes defs) ∅) ]])%I.
+            □ (fundefs_logrel r_t r_s (CFG_attributes defs) (CFG_attributes defs) ∅) ⦊)%I.
   Proof with vsimp.
     rewrite /mcfg_definitions. iIntros (WF) "#Hg_t #Hg_s". destruct defs.
     cbn in *. rewrite /CFG_WF /CFG_names in WF;
@@ -1060,7 +1060,7 @@ Section fundamental.
       destruct Hlu_s as (?&Hlu_s).
 
       iApply sim_expr_vis; iApply sim_expr_mono;
-        [ | iApply (sim_global_read1 with "Hg_t Hg_s") ]; eauto.
+        [ | iApply (globalbij.sim_global_read1 with "Hg_t Hg_s") ]; eauto.
 
       iIntros (??) "HR". iDestruct "HR" as (????) "(#HR & %Hx1 & %Hx2)"; subst.
       rewrite H H0; repeat rewrite bind_ret_l.
@@ -1187,7 +1187,7 @@ Section fundamental.
      ⊢ target_globals g_t -∗
      source_globals g_s -∗
      mcfg_definitions defs ⪯ mcfg_definitions defs
-      [[ fun e_t e_s =>
+      ⦉ fun e_t e_s =>
           ∃ r_t r_s g_t' g_s',
             ⌜e_t = Ret r_t⌝ ∗ ⌜e_s = Ret r_s⌝ ∗
             ⌜Permutation r_t.*1
@@ -1201,7 +1201,7 @@ Section fundamental.
                 (CFG_attributes defs) (CFG_attributes defs) ∗
             ⌜fundefs_WF r_t (CFG_attributes defs)⌝ ∗
             ⌜fundefs_WF r_s (CFG_attributes defs)⌝ ∗
-            □ (fundefs_logrel r_t r_s (CFG_attributes defs) (CFG_attributes defs) ∅) ]])%I.
+            □ (fundefs_logrel r_t r_s (CFG_attributes defs) (CFG_attributes defs) ∅) ⦊)%I.
   Proof with vsimp.
     rewrite /mcfg_definitions. iIntros (WF) "#Hg_t #Hg_s". destruct defs.
     cbn in *. rewrite /CFG_WF /CFG_names in WF;
@@ -1245,7 +1245,7 @@ Section fundamental.
       destruct Hlu_s as (?&Hlu_s).
 
       iApply sim_expr_vis; iApply sim_expr_mono;
-        [ | iApply (sim_global_read1 with "Hg_t Hg_s") ]; eauto.
+        [ | iApply (globalbij.sim_global_read1 with "Hg_t Hg_s") ]; eauto.
 
       iIntros (??) "HR". iDestruct "HR" as (????) "(#HR & %Hx1 & %Hx2)"; subst.
       rewrite H H0; repeat rewrite bind_ret_l.
