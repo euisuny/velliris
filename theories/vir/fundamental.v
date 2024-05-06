@@ -27,13 +27,13 @@ Section fundamental.
   (* LATER: Generalize this helper lemma to any triple that is lifted with *)
   (*   [map_monad] *)
   Lemma denote_exp_map_monad (e: list (texp dtyp)) C i_t i_s A_t A_s :
-    code_inv C i_t i_s A_t A_s -∗
+    code_inv refl_inv C i_t i_s A_t A_s -∗
     instr_conv
       (map_monad (λ '(t, op), translate exp_to_instr (denote_exp (Some t) op)) e)
       ⪯
     instr_conv
       (map_monad (λ '(t, op), translate exp_to_instr (denote_exp (Some t) op)) e)
-      [{ (e_t, e_s), code_inv C i_t i_s A_t A_s
+      [{ (e_t, e_s), code_inv refl_inv C i_t i_s A_t A_s
                        ∗ [∗ list] _↦x_t;x_s ∈ e_t;e_s, uval_rel x_t x_s }].
   Proof with vsimp.
     iIntros "CI".
@@ -58,13 +58,13 @@ Section fundamental.
   (* Instr-level reflexivity lemmas *)
 
   Lemma instr_call_refl C fn attrs args id  i_t i_s A_t A_s:
-    ⊢ (code_inv C i_t i_s A_t A_s -∗
+    ⊢ (code_inv refl_inv C i_t i_s A_t A_s -∗
       instr_conv
        (denote_instr (IId id, INSTR_Call fn args attrs)) ⪯
        instr_conv
        (denote_instr (IId id, INSTR_Call fn args attrs))
        [{ (r_t, r_s),
-           code_inv C i_t i_s A_t A_s }])%I.
+           code_inv refl_inv C i_t i_s A_t A_s }])%I.
   Proof with vsimp.
     iIntros "CI".
     cbn; destruct fn...
@@ -94,12 +94,12 @@ Section fundamental.
   Qed.
 
   Lemma instr_call_void_refl C fn args attrs n i_t i_s A_t A_s:
-    ⊢ (code_inv C i_t i_s A_t A_s -∗
+    ⊢ (code_inv refl_inv C i_t i_s A_t A_s -∗
       instr_conv
        (denote_instr (IVoid n, INSTR_Call fn args attrs)) ⪯
        instr_conv
        (denote_instr (IVoid n, INSTR_Call fn args attrs))
-       [{ (r_t, r_s), code_inv C i_t i_s A_t A_s }])%I.
+       [{ (r_t, r_s), code_inv refl_inv C i_t i_s A_t A_s }])%I.
   Proof with vsimp.
     iIntros "CI".
     cbn; destruct fn...
@@ -126,12 +126,12 @@ Section fundamental.
 
   Lemma instr_alloca_refl C id t nb align i_t i_s A_t A_s :
     instr_WF (INSTR_Alloca t nb align) ->
-    code_inv C i_t i_s A_t A_s -∗
+    code_inv refl_inv C i_t i_s A_t A_s -∗
     instr_conv (denote_instr (IId id, INSTR_Alloca t nb align))
     ⪯
     instr_conv (denote_instr (IId id, INSTR_Alloca t nb align))
     [{ (r_t, r_s),
-        ∃ l_t l_s, code_inv C i_t i_s (l_t:: A_t) (l_s:: A_s)}].
+        ∃ l_t l_s, code_inv refl_inv C i_t i_s (l_t:: A_t) (l_s:: A_s)}].
   Proof with vsimp.
     iIntros (WF) "CI". cbn.
     vsimp; Cut; vsimp. cbn in *.
@@ -152,11 +152,11 @@ Section fundamental.
 
   Lemma instr_load_refl id volatile t ptr align i_t i_s A_t A_s:
     instr_WF (INSTR_Load volatile t ptr align) ->
-    code_inv ∅ i_t i_s A_t A_s -∗
+    code_inv refl_inv ∅ i_t i_s A_t A_s -∗
     instr_conv (denote_instr (IId id, INSTR_Load volatile t ptr align))
     ⪯
     instr_conv (denote_instr (IId id, INSTR_Load volatile t ptr align))
-    [{ (r_t, r_s), code_inv ∅ i_t i_s A_t A_s }].
+    [{ (r_t, r_s), code_inv refl_inv ∅ i_t i_s A_t A_s }].
   Proof with vsimp.
     iIntros (WF) "CI"; cbn; destruct ptr...
     Cut...
@@ -191,11 +191,11 @@ Section fundamental.
 
   Lemma instr_store_refl n volatile val ptr align i_t i_s A_t A_s:
     instr_WF (INSTR_Store volatile val ptr align) ->
-    code_inv ∅ i_t i_s A_t A_s -∗
+    code_inv refl_inv ∅ i_t i_s A_t A_s -∗
     instr_conv (denote_instr (IVoid n, INSTR_Store volatile val ptr align))
     ⪯
     instr_conv (denote_instr (IVoid n, INSTR_Store volatile val ptr align))
-    [{ (r_t, r_s), code_inv ∅ i_t i_s A_t A_s }].
+    [{ (r_t, r_s), code_inv refl_inv ∅ i_t i_s A_t A_s }].
   Proof with vsimp.
     iIntros (WF) "CI".
     cbn in WF; destruct ptr, d, val; try solve [inversion WF]; cbn...
@@ -250,7 +250,7 @@ Section fundamental.
      let '(Phi dt' args')  := ϕ' in
      match Util.assoc bid args, Util.assoc bid' args' with
      | Some op, Some op' =>
-         expr_logrel C
+         expr_logrel refl_inv C
            (denote_exp (Some dt) op)
            (denote_exp (Some dt') op')
            A_t A_s
@@ -272,7 +272,7 @@ Section fundamental.
 
     vsimp.
 
-    iAssert (code_inv C i_t i_s A_t A_s) with
+    iAssert (code_inv refl_inv C i_t i_s A_t A_s) with
       "[Hdt Hds Hv HC Hat Has Hs_t Hs_s Ha_t Ha_s]" as "HI".
     { rewrite /code_inv; repeat iExists _; iFrame.
       iFrame "HWF".
@@ -293,14 +293,14 @@ Section fundamental.
 
   Lemma phi_list_compat bid (Φ Φ' : list (local_id * phi dtyp)) C i_t i_s A_t A_s:
     ([∗ list] ϕ;ϕ' ∈ Φ; Φ',
-        phi_logrel (denote_phi bid ϕ) (denote_phi bid ϕ') C A_t A_s) -∗
-    code_inv C i_t i_s A_t A_s -∗
+        phi_logrel refl_inv (denote_phi bid ϕ) (denote_phi bid ϕ') C A_t A_s) -∗
+    code_inv refl_inv C i_t i_s A_t A_s -∗
     instr_conv (map_monad (λ x, translate exp_to_instr (denote_phi bid x)) Φ) ⪯
       instr_conv (map_monad (λ x, translate exp_to_instr (denote_phi bid x)) Φ')
     [{ (r_t, r_s),
         ([∗ list] v_t; v_s ∈ r_t; r_s,
            ⌜v_t.1 = v_s.1⌝ ∗ uval_rel v_t.2 v_s.2)
-            ∗ code_inv C i_t i_s A_t A_s }].
+            ∗ code_inv refl_inv C i_t i_s A_t A_s }].
   Proof with vsimp.
     iIntros "HΦ CI".
 
@@ -336,8 +336,8 @@ Section fundamental.
 
   Theorem phis_compat C bid (Φ Φ' : list (local_id * phi dtyp)) A_t A_s:
     ([∗ list] ϕ;ϕ' ∈ Φ; Φ',
-        phi_logrel (denote_phi bid ϕ) (denote_phi bid ϕ') C A_t A_s) -∗
-    phis_logrel (denote_phis bid Φ) (denote_phis bid Φ') C A_t A_s.
+        phi_logrel refl_inv (denote_phi bid ϕ) (denote_phi bid ϕ') C A_t A_s) -∗
+    phis_logrel refl_inv (denote_phis bid Φ) (denote_phis bid Φ') C A_t A_s.
   Proof with vsimp.
     iIntros "HΦ" (??) "CI".
     iPoseProof (phi_list_compat with "HΦ CI") as "H".
@@ -375,8 +375,8 @@ Section fundamental.
     code_WF c ->
     code_WF c' ->
     ([∗ list] '(id, i); '(id', i') ∈ c; c',
-        ∀ A_t A_s, instr_logrel id i id' i' ∅ A_t A_s) -∗
-    code_logrel c c' ∅ A_t A_s.
+        ∀ A_t A_s, instr_logrel refl_inv id i id' i' ∅ A_t A_s) -∗
+    code_logrel refl_inv c c' ∅ A_t A_s.
   Proof with vsimp.
     iIntros (Hwf Hwf') "Hi"; iIntros (??) "CI"; cbn.
     vsimp. setoid_rewrite instr_conv_ret.
@@ -423,7 +423,7 @@ Section fundamental.
        (blk_term b)
        (blk_term b')
        ∅ -∗
-    block_logrel b b' bid ∅ A_t A_s.
+    block_logrel refl_inv b b' bid ∅ A_t A_s.
   Proof with vsimp.
     iIntros (WF_b WF_b') "HΦ Hc Ht".
     iIntros (??) "CI".
@@ -463,8 +463,8 @@ Section fundamental.
         (* The blocks have the same block ids, in order  *)
         ⌜blk_id b = blk_id b'⌝ ∗
         (* and are logically related *)
-        ∀ A_t A_s be, block_logrel b b' be ∅ A_t A_s) -∗
-    ocfg_logrel c c' ∅ A_t A_s b1 b2.
+        ∀ A_t A_s be, block_logrel refl_inv b b' be ∅ A_t A_s) -∗
+    ocfg_logrel refl_inv c c' ∅ A_t A_s b1 b2.
   Proof with vsimp.
     iIntros (WF WF') "#Hb"; iIntros (??) "CI".
     rewrite /ocfg_WF in WF.
@@ -551,7 +551,7 @@ Section fundamental.
     end.
 
     iApply (sim_expr_guarded_iter' _ _ (fun x y => ⌜x = y⌝
-       ∗ code_inv_post ∅ i_t i_s A_t A_s)%I
+       ∗ code_inv_post refl_inv ∅ i_t i_s A_t A_s)%I
              with "[Hb] [CI]"); cycle 1.
     { iSplitL ""; first done.
       by iExists ∅, ∅. }
@@ -565,7 +565,7 @@ Section fundamental.
     { (* Since the two OCFG's have the same block ids, a related block can be found
          for the other OCFG. *)
       iPoseProof (code_same_block_ids_find_block c c'
-        (fun b b' => ∀ A_t A_s be, block_logrel b b' be ∅ A_t A_s) with "Hb")%I
+        (fun b b' => ∀ A_t A_s be, block_logrel refl_inv b b' be ∅ A_t A_s) with "Hb")%I
         as "H".
       iSpecialize ("H" $! _ _ Hb0); iDestruct "H" as (??) "Hrel". rewrite H0.
 
@@ -613,9 +613,9 @@ Section fundamental.
     cfg_WF c ->
     cfg_WF c' ->
     CFG.init c = CFG.init c' ->
-    ocfg_logrel (blks c) (blks c') ∅ A_t A_s
+    ocfg_logrel refl_inv (blks c) (blks c') ∅ A_t A_s
       (CFG.init c) (CFG.init c) -∗
-    cfg_logrel c c' ∅ A_t A_s.
+    cfg_logrel refl_inv c c' ∅ A_t A_s.
   Proof with vsimp.
     iIntros (WF WF' Heq) "Hocfg". iIntros (??) "CI".
     setoid_rewrite interp_bind.
@@ -649,8 +649,8 @@ Section fundamental.
     fun_WF f ->
     fun_WF f' ->
     df_args f =  df_args f' ->
-    (∀ A_t A_s, cfg_logrel (df_instrs f) (df_instrs f') ∅ A_t A_s) -∗
-    fun_logrel f f' ∅.
+    (∀ A_t A_s, cfg_logrel refl_inv (df_instrs f) (df_instrs f') ∅ A_t A_s) -∗
+    fun_logrel refl_inv f f' ∅.
   Proof with vsimp.
     iIntros (WF WF' Hargs_eq) "Hf".
     iIntros (i_t i_s args_t args_s Hlen) "Hs_t Hs_s Hv HC".
@@ -802,8 +802,8 @@ Section fundamental.
   Theorem fundefs_compat r r' Attr:
     ⌜fundefs_WF r Attr⌝ -∗
     ⌜fundefs_WF r' Attr⌝ -∗
-    ([∗ list] '(v, f); '(v', f') ∈ r; r', fun_logrel f f' ∅) -∗
-    fundefs_logrel r r' Attr Attr ∅.
+    ([∗ list] '(v, f); '(v', f') ∈ r; r', fun_logrel refl_inv f f' ∅) -∗
+    fundefs_logrel refl_inv r r' Attr Attr ∅.
   Proof with vsimp.
     rewrite /fundefs_logrel.
     iInduction r as [ | f l] "H" forall (r' Attr); first (iIntros; done).
@@ -843,7 +843,7 @@ Section fundamental.
 
 (** *Fundamental theorems *)
   Theorem phi_logrel_refl bid id ϕ C A_t A_s:
-    ⊢ (phi_logrel (denote_phi bid (id, ϕ)) (denote_phi bid (id, ϕ)) C A_t A_s)%I.
+    ⊢ (phi_logrel refl_inv (denote_phi bid (id, ϕ)) (denote_phi bid (id, ϕ)) C A_t A_s)%I.
   Proof with vsimp.
     iApply phi_compat; destruct ϕ.
     destruct (Util.assoc bid args); try done.
@@ -851,7 +851,7 @@ Section fundamental.
   Qed.
 
   Theorem phis_logrel_refl C bid (Φ : list (local_id * phi dtyp)) A_t A_s:
-    (⊢ phis_logrel (denote_phis bid Φ) (denote_phis bid Φ) C A_t A_s)%I.
+    (⊢ phis_logrel refl_inv (denote_phis bid Φ) (denote_phis bid Φ) C A_t A_s)%I.
   Proof with vsimp.
     iApply phis_compat.
     iInduction Φ as [ | ] "IH"; first done.
@@ -860,7 +860,7 @@ Section fundamental.
 
   Theorem instr_logrel_refl id e A_t A_s:
     instr_WF e ->
-    (⊢ instr_logrel id e id e ∅ A_t A_s)%I.
+    (⊢ instr_logrel refl_inv id e id e ∅ A_t A_s)%I.
   Proof with vsimp.
     iIntros (WF ??) "HI".
     destruct e eqn: He.
@@ -908,7 +908,7 @@ Section fundamental.
 
   Theorem code_logrel_refl (c : code dtyp) A_t A_s:
     code_WF c ->
-    ⊢ code_logrel c c ∅ A_t A_s.
+    ⊢ code_logrel refl_inv c c ∅ A_t A_s.
   Proof with vsimp.
     iIntros (Hwf); iApply code_compat; eauto.
     iInduction c as [ | ] "IH"; first done.
@@ -921,7 +921,7 @@ Section fundamental.
   Qed.
 
   Theorem term_logrel_refl ϒ C:
-    (⊢ term_logrel ϒ ϒ C)%I.
+    (⊢ term_logrel refl_inv ϒ ϒ C)%I.
   Proof with vsimp.
     iIntros (??????) "HI".
     destruct ϒ eqn: Hϒ; try solve [iDestruct "WF" as "[]"]; cbn.
@@ -947,7 +947,7 @@ Section fundamental.
 
   Theorem block_logrel_refl b bid A_t A_s:
     block_WF b ->
-    (⊢ block_logrel b b bid ∅ A_t A_s)%I.
+    (⊢ block_logrel refl_inv b b bid ∅ A_t A_s)%I.
   Proof with vsimp.
     iIntros (WF). pose proof (WF' := WF).
     apply andb_prop_elim in WF; destruct WF.
@@ -959,7 +959,7 @@ Section fundamental.
 
   Theorem ocfg_logrel_refl (c : CFG.ocfg dtyp) b1 b2 A_t A_s:
     ocfg_WF c ->
-    (⊢ ocfg_logrel c c ∅ A_t A_s b1 b2)%I.
+    (⊢ ocfg_logrel refl_inv c c ∅ A_t A_s b1 b2)%I.
   Proof with vsimp.
     iIntros (WF ??) "CI".
     iApply ocfg_compat; try done; iModIntro.
@@ -974,7 +974,7 @@ Section fundamental.
 
   Theorem cfg_logrel_refl c A_t A_s:
     cfg_WF c ->
-    (⊢ cfg_logrel c c ∅ A_t A_s)%I.
+    (⊢ cfg_logrel refl_inv c c ∅ A_t A_s)%I.
   Proof with vsimp.
     iIntros (WF); iApply cfg_compat; eauto.
     by iApply ocfg_logrel_refl.
@@ -982,7 +982,7 @@ Section fundamental.
 
   Theorem fun_logrel_refl f:
     fun_WF f ->
-    (⊢ fun_logrel f f ∅)%I.
+    (⊢ fun_logrel refl_inv f f ∅)%I.
   Proof with vsimp.
     iIntros (wf).
     iApply fun_compat; eauto.
@@ -992,7 +992,7 @@ Section fundamental.
 
   Theorem fundefs_logrel_refl r Attr:
     ⌜fundefs_WF r Attr⌝ -∗
-    fundefs_logrel r r Attr Attr ∅.
+    fundefs_logrel refl_inv r r Attr Attr ∅.
   Proof with vsimp.
     iIntros (WF); iApply fundefs_compat; eauto.
     iInduction r as [|] "IH" forall (Attr WF); first done.
@@ -1022,7 +1022,7 @@ Section fundamental.
                 (CFG_attributes defs) (CFG_attributes defs) ∗
             ⌜fundefs_WF r_t (CFG_attributes defs)⌝ ∗
             ⌜fundefs_WF r_s (CFG_attributes defs)⌝ ∗
-            □ (fundefs_logrel r_t r_s (CFG_attributes defs) (CFG_attributes defs) ∅) ⦊)%I.
+            □ (fundefs_logrel refl_inv r_t r_s (CFG_attributes defs) (CFG_attributes defs) ∅) ⦊)%I.
   Proof with vsimp.
     rewrite /mcfg_definitions. iIntros (WF) "#Hg_t #Hg_s". destruct defs.
     cbn in *. rewrite /CFG_WF /CFG_names in WF;
@@ -1201,7 +1201,7 @@ Section fundamental.
                 (CFG_attributes defs) (CFG_attributes defs) ∗
             ⌜fundefs_WF r_t (CFG_attributes defs)⌝ ∗
             ⌜fundefs_WF r_s (CFG_attributes defs)⌝ ∗
-            □ (fundefs_logrel r_t r_s (CFG_attributes defs) (CFG_attributes defs) ∅) ⦊)%I.
+            □ (fundefs_logrel refl_inv r_t r_s (CFG_attributes defs) (CFG_attributes defs) ∅) ⦊)%I.
   Proof with vsimp.
     rewrite /mcfg_definitions. iIntros (WF) "#Hg_t #Hg_s". destruct defs.
     cbn in *. rewrite /CFG_WF /CFG_names in WF;

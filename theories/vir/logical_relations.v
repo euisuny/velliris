@@ -145,6 +145,7 @@ Definition mcfg_definitions (mcfg : CFG.mcfg dtyp) :
 Section logical_relations_def.
 
   Context {Σ} `{!vellirisGS Σ}.
+  Context (I : local_env -> local_env -> iProp Σ).
 
   (* Well-formedness for function definitions *)
   Definition fundefs_rel_WF
@@ -173,6 +174,10 @@ Section logical_relations_def.
     (* Checkout set is empty *)
     checkout ∅.
 
+  Definition remove_ids {K} {R : K -> K -> Prop} {RelDec_R: RelDec.RelDec R} {V}
+    (k : list K) (l : alist K V) : alist K V:=
+     fold_left (fun acc (x : K) => alist_remove x acc) k l.
+
   Definition expr_local_env_inv i_t i_s m L_t L_s :=
     ([∗ list] l ∈ m,
       ∃ v_t v_s, ⌜alist_find l L_t = Some v_t⌝ ∗ ⌜alist_find l L_s = Some v_s⌝ ∗
@@ -183,16 +188,18 @@ Section logical_relations_def.
     expr_local_env_inv i_t i_s (intersection_local_ids e_t e_s) L_t L_s.
 
   (* Invariant for codes. *)
-   Definition code_inv C i_t i_s A_t A_s : iPropI Σ :=
+   Definition code_inv C i_t i_s A_t A_s L_t L_s : iPropI Σ :=
     (∃ (args_t args_s : local_env),
         ldomain_tgt i_t (list_to_set args_t.*1) ∗
         ldomain_src i_s (list_to_set args_s.*1) ∗
         stack_tgt i_t ∗ stack_src i_s ∗
         frame_WF i_t i_s ∗
-        ⌜args_t.*1 = args_s.*1⌝ ∗
        ([∗ list] '(l_t, v_t) ∈ args_t, [ l_t := v_t ]t i_t) ∗
        ([∗ list] '(l_s, v_s) ∈ args_s, [ l_s := v_s ]s i_s) ∗
-       ([∗ list] v_t; v_s ∈ args_t.*2;args_s.*2, uval_rel v_t v_s) ∗
+       (* The [L_t], [L_s] refer to "reserved" locations that will be
+          out of sync. *)
+       (I (remove_ids L_t args_t) (remove_ids L_s args_s)) ∗
+       (* ([∗ list] v_t; v_s ∈ args_t.*2;args_s.*2, uval_rel v_t v_s) ∗ *)
      checkout C ∗
      alloca_tgt i_t (list_to_set A_t : gset _) ∗
      alloca_src i_s (list_to_set A_s : gset _) ∗
@@ -201,30 +208,34 @@ Section logical_relations_def.
            ⌜C !! (v_t, v_s) = None⌝))%I.
 
    (* Postcondition that states monotonically increasing alloca set. *)
-   Definition code_inv_post C i_t i_s A_t A_s : iPropI Σ:=
+   Definition code_inv_post C i_t i_s A_t A_s L_t L_s: iPropI Σ:=
     (∃ nA_t nA_s,
-      code_inv C i_t i_s (nA_t ++ A_t) (nA_s ++ A_s))%I.
+      code_inv C i_t i_s (nA_t ++ A_t) (nA_s ++ A_s) L_t L_s)%I.
+
+   Definition refl_inv (args_t args_s : local_env) : iProp Σ :=
+    (⌜args_t.*1 = args_s.*1⌝ ∗
+      ([∗ list] v_t; v_s ∈ args_t.*2;args_s.*2, uval_rel v_t v_s))%I.
 
   (* Invariant for CFG. *)
-   Definition CFG_inv C i_t i_s : iPropI Σ :=
+   Definition CFG_inv C i_t i_s L_t L_s : iPropI Σ :=
     (∃ args_t args_s,
         ldomain_tgt i_t (list_to_set args_t.*1) ∗
         ldomain_src i_s (list_to_set args_s.*1) ∗
         stack_tgt i_t ∗ stack_src i_s ∗
-        ⌜args_t.*1 = args_s.*1⌝ ∗
        ([∗ list] '(l_t, v_t) ∈ args_t, [ l_t := v_t ]t i_t) ∗
        ([∗ list] '(l_s, v_s) ∈ args_s, [ l_s := v_s ]s i_s) ∗
-       ([∗ list] v_t; v_s ∈ args_t.*2;args_s.*2, uval_rel v_t v_s) ∗
+       (I (remove_ids L_t args_t) (remove_ids L_s args_s)) ∗
+       (* ([∗ list] v_t; v_s ∈ args_t.*2;args_s.*2, uval_rel v_t v_s) *)
      checkout C ∗ alloca_tgt i_t ∅ ∗ alloca_src i_s ∅)%I.
 
   (* ------------------------------------------------------------------------ *)
    (** *Logical relations *)
 
-   Definition expr_logrel C (e_t e_s : itree exp_E uvalue) A_t A_s : iPropI Σ :=
-    (∀ i_t i_s, code_inv C i_t i_s A_t A_s -∗
+   Definition expr_logrel C (e_t e_s : itree exp_E uvalue) A_t A_s L_t L_s: iPropI Σ :=
+    (∀ i_t i_s, code_inv C i_t i_s A_t A_s L_t L_s -∗
         exp_conv e_t ⪯ exp_conv e_s
         [{ (v_t, v_s),
-            uval_rel v_t v_s ∗ code_inv C i_t i_s A_t A_s }])%I.
+            uval_rel v_t v_s ∗ code_inv C i_t i_s A_t A_s L_t L_s }])%I.
 
   (* Relaxed logical relation for expressions TODO comment *)
   Definition expr_logrel_relaxed e_t e_s : iPropI Σ :=
@@ -235,37 +246,37 @@ Section logical_relations_def.
           uval_rel v_t v_s ∗
           expr_inv i_t i_s L_t L_s e_t e_s }])%I.
 
-   Definition term_logrel ϒ_t ϒ_s C : iPropI Σ :=
+   Definition term_logrel ϒ_t ϒ_s C L_t L_s : iPropI Σ :=
     (∀ i_t i_s A_t A_s,
         ⌜term_WF ϒ_t⌝ -∗
         ⌜term_WF ϒ_s⌝ -∗
-        code_inv C i_t i_s A_t A_s -∗
+        code_inv C i_t i_s A_t A_s L_t L_s -∗
         exp_conv (denote_terminator ϒ_t) ⪯
         exp_conv (denote_terminator ϒ_s)
-        [{ (r_t, r_s), code_inv C i_t i_s A_t A_s ∗
+        [{ (r_t, r_s), code_inv C i_t i_s A_t A_s L_t L_s ∗
                         match r_t, r_s with
                         | inl b_t, inl b_s => ⌜b_t = b_s⌝
                         | inr v_t, inr v_s => uval_rel v_t v_s
                         | _, _ => False
                         end}])%I.
 
-   Definition instr_logrel id_t e_t id_s e_s C A_t A_s
+   Definition instr_logrel id_t e_t id_s e_s C A_t A_s L_t L_s
      : iPropI Σ :=
     (∀ i_t i_s,
-        code_inv C i_t i_s A_t A_s -∗
+        code_inv C i_t i_s A_t A_s L_t L_s -∗
         instr_conv (denote_instr (id_t, e_t)) ⪯
         instr_conv (denote_instr (id_s, e_s))
         [{ (r_t, r_s),
-            code_inv_post C i_t i_s A_t A_s}])%I.
+            code_inv_post C i_t i_s A_t A_s L_t L_s}])%I.
 
-   Definition phi_logrel (ϕ_t ϕ_s : itree exp_E (local_id * uvalue)) C A_t A_s : iPropI Σ :=
+   Definition phi_logrel (ϕ_t ϕ_s : itree exp_E (local_id * uvalue)) C A_t A_s L_t L_s : iPropI Σ :=
     (∀ args_t args_s i_t i_s,
        ⌜args_t.*1 = args_s.*1⌝ ∗
        ⌜NoDup A_t⌝ ∗ ⌜NoDup A_s⌝ ∗
        ldomain_tgt i_t (list_to_set args_t.*1) ∗ ldomain_src i_s (list_to_set args_s.*1) ∗
        ([∗ list] '(l_t, v_t) ∈ args_t, [ l_t := v_t ]t i_t) ∗
        ([∗ list] '(l_s, v_s) ∈ args_s, [ l_s := v_s ]s i_s) ∗
-       ([∗ list] v_t; v_s ∈ args_t.*2;args_s.*2, uval_rel v_t v_s) ∗
+       I args_t args_s ∗
       stack_tgt i_t ∗ stack_src i_s ∗ frame_WF i_t i_s ∗ checkout C ∗
       alloca_tgt i_t (list_to_set A_t) ∗ alloca_src i_s (list_to_set A_s) ∗
       ([∗ list] v_t; v_s ∈ A_t;A_s, (v_t, 0%Z) ↔h (v_s, 0%Z) ∗ ⌜C !! (v_t, v_s) = None⌝) -∗
@@ -273,39 +284,39 @@ Section logical_relations_def.
        [{ fun e_t e_s => ∃ l v_t v_s,
               ⌜e_t = Ret (l, v_t)⌝ ∗ ⌜e_s = Ret (l, v_s)⌝ ∗
               uval_rel v_t v_s ∗
-              code_inv C i_t i_s A_t A_s }])%I.
+              code_inv C i_t i_s A_t A_s L_t L_s }])%I.
 
-   Definition phis_logrel (Φ_t Φ_s : itree instr_E ()) C A_t A_s : iPropI Σ :=
-    (∀ i_t i_s, code_inv C i_t i_s A_t A_s -∗
+   Definition phis_logrel (Φ_t Φ_s : itree instr_E ()) C A_t A_s L_t L_s : iPropI Σ :=
+    (∀ i_t i_s, code_inv C i_t i_s A_t A_s L_t L_s -∗
        instr_conv Φ_t ⪯ instr_conv Φ_s
-       [{ (r_t, r_s), code_inv C i_t i_s A_t A_s }])%I.
+       [{ (r_t, r_s), code_inv C i_t i_s A_t A_s L_t L_s }])%I.
 
-   Definition code_logrel c_t c_s C A_t A_s: iPropI Σ :=
+   Definition code_logrel c_t c_s C A_t A_s L_t L_s : iPropI Σ :=
     (∀ i_t i_s,
-       code_inv C i_t i_s A_t A_s -∗
+       code_inv C i_t i_s A_t A_s L_t L_s -∗
        instr_conv (denote_code c_t) ⪯ instr_conv (denote_code c_s)
         [{ (r_t, r_s),
-            code_inv_post C i_t i_s A_t A_s }])%I.
+            code_inv_post C i_t i_s A_t A_s L_t L_s }])%I.
 
-   Definition block_logrel b_t b_s bid C A_t A_s : iPropI Σ :=
+   Definition block_logrel b_t b_s bid C A_t A_s L_t L_s : iPropI Σ :=
     (∀ i_t i_s,
-       code_inv C i_t i_s A_t A_s -∗
+       code_inv C i_t i_s A_t A_s L_t L_s -∗
        instr_conv ((denote_block b_t) bid) ⪯
        instr_conv ((denote_block b_s) bid)
-       [{ (r_t, r_s), code_inv_post C i_t i_s A_t A_s ∗
+       [{ (r_t, r_s), code_inv_post C i_t i_s A_t A_s L_t L_s ∗
                       match r_t, r_s with
                       | inl b_t, inl b_s => ⌜b_t = b_s⌝
                       | inr v_t, inr v_s => uval_rel v_t v_s
                       | _, _ => False
                       end }])%I.
 
-   Definition ocfg_logrel o_t o_s C A_t A_s b1 b2 : iPropI Σ :=
+   Definition ocfg_logrel o_t o_s C A_t A_s b1 b2 L_t L_s : iPropI Σ :=
     (∀ i_t i_s,
-        code_inv C i_t i_s A_t A_s -∗
+        code_inv C i_t i_s A_t A_s L_t L_s -∗
       instr_conv (denote_ocfg o_t (b1, b2)) ⪯
       instr_conv (denote_ocfg o_s (b1, b2))
       ⦉ fun e_t e_s =>
-           code_inv_post C i_t i_s A_t A_s ∗
+           code_inv_post C i_t i_s A_t A_s L_t L_s ∗
             ∃ v_t v_s, ⌜e_t = Ret v_t⌝ ∗ ⌜e_s = Ret v_s⌝ ∗
                         match v_t, v_s with
                           | inl (id_s, id_s'), inl (id_t, id_t') =>
@@ -314,13 +325,13 @@ Section logical_relations_def.
                           | _,_ => False
                       end⦊)%I.
 
-   Definition cfg_logrel c_t c_s C A_t A_s: iPropI Σ :=
+   Definition cfg_logrel c_t c_s C A_t A_s L_t L_s: iPropI Σ :=
     (∀ i_t i_s,
-      code_inv C i_t i_s A_t A_s -∗
+      code_inv C i_t i_s A_t A_s L_t L_s -∗
       instr_conv (denote_cfg c_t) ⪯ instr_conv (denote_cfg c_s)
       ⦉ fun v_t v_s =>
           ∃ r_t r_s, ⌜v_t = Ret r_t⌝ ∗ ⌜v_s = Ret r_s⌝ ∗ uval_rel r_t r_s ∗
-            code_inv_post C i_t i_s A_t A_s ⦊)%I.
+            code_inv_post C i_t i_s A_t A_s L_t L_s ⦊)%I.
 
   Definition fun_logrel f_t f_s C: iPropI Σ :=
     ∀ i_t i_s args_t args_s,
@@ -931,17 +942,16 @@ Section logical_relations_properties.
     done.
   Qed.
 
-  Lemma local_code_inv σ_t σ_s C i_t i_s A_t A_s:
-    ⊢ code_inv C i_t i_s A_t A_s -∗
+  Lemma local_code_inv σ_t σ_s C i_t i_s A_t A_s I L_t L_s:
+    ⊢ code_inv I C i_t i_s A_t A_s L_t L_s-∗
     state_interp σ_t σ_s ==∗
     ∃ args_t args_s,
-      ⌜args_t.*1 = args_s.*1⌝ ∗
       ⌜(list_to_set args_t.*1 : gset _) = list_to_set (vlocal σ_t).1.*1⌝ ∗
       ⌜(list_to_set args_s.*1 : gset _) = list_to_set (vlocal σ_s).1.*1⌝ ∗
       ⌜NoDup A_t⌝ ∗ ⌜NoDup A_s⌝ ∗
       ([∗ list] '(l_t, v_t) ∈ args_t, [ l_t := v_t ]t i_t) ∗
       ([∗ list] '(l_s, v_s) ∈ args_s, [ l_s := v_s ]s i_s) ∗
-      ([∗ list] v_t; v_s ∈ args_t.*2;args_s.*2, uval_rel v_t v_s) ∗
+      (I (remove_ids L_t args_t) (remove_ids L_s args_s)) ∗
       ([∗ list] v_t;v_s ∈ A_t;A_s, (v_t, 0) ↔h (v_s, 0)
          ∗ ⌜C !! (v_t, v_s) = None⌝) ∗
       state_interp σ_t σ_s ∗
@@ -955,7 +965,7 @@ Section logical_relations_properties.
     iIntros "CI SI".
     iDestruct "SI" as (???) "(Hh_s & Hh_t & H_c & Hbij & SI)".
     iDestruct "CI" as  (??) "(Hd_t & Hd_s & Hf_t & Hf_s & WF &
-        %Harg & Hargs_t & Hargs_s &
+        Hargs_t & Hargs_s &
         Hv & HC & Ha_t & Ha_s & %Hnd_t & %Hnd_s & #Hl)"; subst.
 
     destruct_HC "Hh_s".
@@ -970,7 +980,7 @@ Section logical_relations_properties.
     iExists args_t, args_s.
     cbn in *.
 
-    do 5 (iSplitL ""; [ done | ]).
+    do 4 (iSplitL ""; [ done | ]).
     iFrame.
     iFrame "Hl".
 
@@ -983,16 +993,15 @@ Section logical_relations_properties.
     repeat iExists _; iFrame. cbn; done.
   Qed.
 
-  Lemma local_CFG_inv σ_t σ_s C i_t i_s:
-    ⊢ CFG_inv C i_t i_s -∗
+  Lemma local_CFG_inv σ_t σ_s C i_t i_s I L_t L_s:
+    ⊢ CFG_inv I C i_t i_s L_t L_s -∗
     state_interp σ_t σ_s ==∗
     ∃ args_t args_s,
-      ⌜args_t.*1 = args_s.*1⌝ ∗
       ⌜(list_to_set args_t.*1 : gset _) = list_to_set (vlocal σ_t).1.*1⌝ ∗
       ⌜(list_to_set args_s.*1 : gset _) = list_to_set (vlocal σ_s).1.*1⌝ ∗
       ([∗ list] '(l_t, v_t) ∈ args_t, [ l_t := v_t ]t i_t) ∗
       ([∗ list] '(l_s, v_s) ∈ args_s, [ l_s := v_s ]s i_s) ∗
-      ([∗ list] v_t; v_s ∈ args_t.*2;args_s.*2, uval_rel v_t v_s) ∗
+      (I (remove_ids L_t args_t) (remove_ids L_s args_s)) ∗
       state_interp σ_t σ_s ∗
       ldomain_tgt i_t (list_to_set (vlocal σ_t).1.*1) ∗
       ldomain_src i_s (list_to_set (vlocal σ_s).1.*1) ∗
@@ -1003,7 +1012,7 @@ Section logical_relations_properties.
     iIntros "CI SI".
     iDestruct "SI" as (???) "(Hh_s & Hh_t & H_c & Hbij & SI)".
     iDestruct "CI" as  (??) "(Hd_t & Hd_s & Hf_t & Hf_s &
-                          %Harg & Hargs_t & Hargs_s & Hv & HC & Ha_t & Ha_s)"; subst.
+                          Hargs_t & Hargs_s & Hv & HC & Ha_t & Ha_s)"; subst.
 
     destruct_HC "Hh_s".
 
@@ -1018,7 +1027,7 @@ Section logical_relations_properties.
     cbn in *.
 
     iFrame.
-    do 3 (iSplitL ""; [ done | ]).
+    do 2 (iSplitL ""; [ done | ]).
 
     repeat iExists _; iFrame.
 
@@ -1029,11 +1038,92 @@ Section logical_relations_properties.
     repeat iExists _; iFrame. cbn; done.
   Qed.
 
+  (* TODO: Move *)
+  Lemma assoc_list_elem_of_lookup {K V}
+    `{EqDecision K} `{Countable K}
+    (A B : list (K * V)) (l : K):
+    l ∈ A.*1 ->
+    list_to_set A.*1 = (list_to_set B.*1 : gset _)->
+    exists n v, B !! n = Some (l, v).
+  Proof.
+    intros e Heq.
+    eapply (@elem_of_list_to_set K
+                (@gset _ _ _)) in e; last typeclasses eauto.
+    Unshelve. all : try typeclasses eauto.
+    setoid_rewrite Heq in e. clear -e.
+    rewrite elem_of_list_to_set in e.
+    by apply elem_of_fst_list_some.
+  Qed.
+
+  Lemma remove_id_cons_alist_add {K} {RelDec_R: RelDec.RelDec eq}
+                                 {RelEq_Correct : RelDec.RelDec_Correct RelDec_R}
+    {V} :
+    ∀ (k : list K) (l : alist K V) (x : K) (v : V),
+      (remove_ids (x :: k) (alist_add x v l)) = remove_ids k l.
+  Proof.
+    intros k l; revert k.
+    induction l; eauto; cbn; eauto.
+    { intros. destruct_if_goal; try done. exfalso.
+      rewrite negb_true_iff in H.
+      rewrite eq_dec_eq in H. done. }
+
+    intros; rewrite eq_dec_eq; cbn.
+    cbn in *. setoid_rewrite eq_dec_eq in IHl; cbn in IHl.
+    destruct_if_goal; cycle 1.
+  Admitted.
+
+  (* Local write reflexivity *)
+  Lemma source_local_write_sim {R} C I v_s i_t i_s A_t A_s l_s Φ (e_t: _ R) L_t L_s:
+    code_inv I C i_t i_s A_t A_s L_t L_s -∗
+    (code_inv I C i_t i_s A_t A_s L_t (l_s :: L_s) -∗
+      e_t ⪯ (Ret tt) [{ Φ }]) -∗
+    e_t ⪯ (trigger (LocalWrite l_s v_s)) [{Φ}].
+  Proof.
+    iIntros "CI H".
+    iApply sim_update_si; iIntros (σ_t σ_s) "SI".
+
+    iDestruct (local_code_inv with "CI SI") as ">H'".
+    iDestruct "H'" as (????)
+        "(%Hnd_t & %Hnd_s & Hlt & Hls & Hv & #Ha_v & SI & Hd_t & Hd_s
+          & HC & Hf_t & Hf_s & #WF & Ha_t & Ha_s)".
+
+    (* It's already allocated at source *)
+    destruct (decide (l_s ∈ (vlocal σ_s).1.*1)).
+    { eapply (assoc_list_elem_of_lookup _ args_s) in e; eauto.
+      destruct e as (?&?&?).
+      iDestruct (lmapsto_no_dup with "Hls") as "%Hdup_s".
+      iDestruct (big_sepL_delete with "Hls") as "(Helems & Hl_s)"; eauto;
+        cbn -[subevent state_interp]. iFrame.
+      iApply source_red_sim_expr.
+      iApply (source_red_mono with "[H]");
+        last (iApply (source_local_write with "Helems Hd_s Hf_s")); cycle 1.
+      { iModIntro; iIntros "Hs Hd_s Hs_s".
+        iApply source_red_base. Unshelve.
+        2 : exact (fun x => ⌜x = Ret tt⌝ ∗
+          code_inv I
+          C i_t i_s A_t A_s L_t (l_s :: L_s))%I.
+        iFrame. iSplitL ""; first done.
+        iExists args_t, (alist_add l_s v_s args_s); iFrame;
+          iFrame "WF Ha_v".
+        rewrite H ?H0; iFrame.
+        setoid_rewrite alist_add_domain_stable; cycle 1.
+        { apply alist_find_to_map_Some; eauto.
+          eapply alist_find_Some; eauto. }
+
+        rewrite remove_id_cons_alist_add; iFrame. rewrite H0; iFrame.
+        iSplitR ""; last done. admit. }
+
+      { cbn. iIntros (?) "(%Heq & H')"; subst.
+        iApply ("H" with "H'"). } }
+
+  Abort.
+
   (* Local write reflexivity *)
   Lemma local_write_refl C x v_t v_s i_t i_s A_t A_s:
-    ⊢ code_inv C i_t i_s A_t A_s -∗ uval_rel v_t v_s -∗
+    ⊢ code_inv refl_inv C i_t i_s A_t A_s L_t L_s -∗
+       uval_rel v_t v_s -∗
     trigger (LocalWrite x v_t) ⪯ trigger (LocalWrite x v_s)
-      [{ (v1, v2), code_inv C i_t i_s A_t A_s }].
+      [{ (v1, v2), code_inv refl_inv C i_t i_s A_t A_s L_t L_s }].
   Proof.
     iIntros "CI #Hrel".
     iApply sim_update_si.
@@ -1104,6 +1194,7 @@ Section logical_relations_properties.
       iSplitL "Hl_s".
       { by iApply big_sepL_delete_insert. }
 
+      rewrite /refl_inv.
       rewrite !list_insert_snd.
       iSplitR ""; last by iFrame "Ha_v".
       iApply (big_sepL2_insert args_t.*2 args_s.*2 uval_rel with "Hrel Hv"). }
@@ -1126,9 +1217,9 @@ Section logical_relations_properties.
   Qed.
 
   Lemma local_write_refl_cfg C x v_t v_s i_t i_s :
-    ⊢ CFG_inv C i_t i_s -∗ uval_rel v_t v_s -∗
+    ⊢ CFG_inv refl_inv C i_t i_s -∗ uval_rel v_t v_s -∗
     trigger (LocalWrite x v_t) ⪯ trigger (LocalWrite x v_s)
-      [{ (v1, v2), CFG_inv C i_t i_s }].
+      [{ (v1, v2), CFG_inv refl_inv C i_t i_s }].
   Proof.
     iIntros "CI #Hrel".
     iApply sim_update_si.
@@ -1196,7 +1287,7 @@ Section logical_relations_properties.
       iSplitL "Hl_s".
       { by iApply big_sepL_delete_insert. }
 
-      rewrite !list_insert_snd.
+      rewrite /refl_inv !list_insert_snd.
       iApply (big_sepL2_insert args_t.*2 args_s.*2 uval_rel with "Hrel Hv"). }
 
     { assert (Hn : x ∉ (list_to_set (vlocal σ_t).1.*1 : gset _)) by set_solver.
@@ -1248,9 +1339,9 @@ Section logical_relations_properties.
   Qed.
 
   Lemma local_read_refl C x i_t i_s A_t A_s:
-    ⊢ code_inv C i_t i_s A_t A_s -∗
+    ⊢ code_inv refl_inv C i_t i_s A_t A_s -∗
     trigger (LocalRead x) ⪯ trigger (LocalRead x)
-      [{ (v1, v2), uval_rel v1 v2 ∗ code_inv C i_t i_s A_t A_s }].
+      [{ (v1, v2), uval_rel v1 v2 ∗ code_inv refl_inv C i_t i_s A_t A_s }].
   Proof.
     iIntros "CI".
     iApply sim_update_si.
@@ -1319,9 +1410,9 @@ Section logical_relations_properties.
   Qed.
 
   Lemma local_read_refl_cfg C x i_t i_s :
-    ⊢ CFG_inv C i_t i_s -∗
+    ⊢ CFG_inv refl_inv C i_t i_s -∗
     trigger (LocalRead x) ⪯ trigger (LocalRead x)
-      [{ (v1, v2), uval_rel v1 v2 ∗ CFG_inv C i_t i_s }].
+      [{ (v1, v2), uval_rel v1 v2 ∗ CFG_inv refl_inv C i_t i_s }].
   Proof.
     iIntros "CI".
     iApply sim_update_si.
@@ -1388,14 +1479,14 @@ Section logical_relations_properties.
   Qed.
 
   Lemma call_refl v_t v_s e_t e_s d i_t i_s l A_t A_s C:
-    code_inv C i_t i_s A_t A_s -∗
+    code_inv refl_inv C i_t i_s A_t A_s -∗
     dval_rel v_t v_s -∗
     ([∗ list] x_t; x_s ∈ e_t;e_s, uval_rel x_t x_s) -∗
     (trigger (ExternalCall d v_t e_t l))
     ⪯
     (trigger (ExternalCall d v_s e_s l))
     [{ (v_t, v_s), uval_rel v_t v_s ∗
-                     code_inv C i_t i_s A_t A_s }].
+        code_inv refl_inv C i_t i_s A_t A_s }].
   Proof.
     iIntros "CI #Hv #He".
 
@@ -1474,16 +1565,16 @@ Section logical_relations_properties.
     (x_t x_s : dvalue) (τ : dtyp)
     (i_t i_s : list frame_names) (A_t A_s : list loc):
     dtyp_WF τ ->
-    ⊢ code_inv ∅ i_t i_s A_t A_s -∗
+    ⊢ code_inv refl_inv ∅ i_t i_s A_t A_s -∗
       dval_rel x_t x_s -∗
       trigger (Load τ x_t) ⪯ trigger (Load τ x_s)
-      [{ (v1, v2), uval_rel v1 v2 ∗ code_inv ∅ i_t i_s A_t A_s }].
+      [{ (v1, v2), uval_rel v1 v2 ∗ code_inv refl_inv ∅ i_t i_s A_t A_s }].
   Proof.
     (* If they are related dvalues, they must be values in the public bijection. *)
     iIntros (Hwf) "CI #Hr".
     iApply load_must_be_addr; [ done | ].
     iIntros (????); subst.
-    rewrite /CFG_inv.
+    rewrite /CFG_inv /refl_inv.
 
     iDestruct "CI" as (??)
       "(Hd_t & Hd_s & Hf_t & Hf_s & #WF& %Harg &
@@ -1507,16 +1598,16 @@ Section logical_relations_properties.
      forall a_s, x_s = DVALUE_Addr a_s ->
             C !! (a_t.1, a_s.1) = None \/
             (∃ q, C !! (a_t.1, a_s.1) = Some q /\ (q < 1)%Qp)) ->
-    ⊢ CFG_inv C i_t i_s -∗
+    ⊢ CFG_inv refl_inv C i_t i_s -∗
       dval_rel x_t x_s -∗
       trigger (Load τ x_t) ⪯ trigger (Load τ x_s)
-      [{ (v1, v2), uval_rel v1 v2 ∗ CFG_inv C i_t i_s }].
+      [{ (v1, v2), uval_rel v1 v2 ∗ CFG_inv refl_inv C i_t i_s }].
   Proof.
     (* If they are related dvalues, they must be values in the public bijection. *)
     iIntros (Hwf Hlu) "CI #Hr".
     iApply load_must_be_addr; [ done | ].
     iIntros (????); subst.
-    rewrite /CFG_inv.
+    rewrite /CFG_inv /refl_inv.
 
     iDestruct "CI" as
       (??) "(Hd_t & Hd_s & Hf_t & Hf_s & %Harg & Hargs_t & Hargs_s & Hv & HC & Ha_t & Ha_s)"; subst.
@@ -1592,11 +1683,11 @@ Section logical_relations_properties.
     dtyp_WF τ ->
     dvalue_has_dtyp v_s τ ->
     dvalue_has_dtyp v_t τ ->
-    ⊢ code_inv ∅ i_t i_s A_t A_s -∗
+    ⊢ code_inv refl_inv ∅ i_t i_s A_t A_s -∗
       dval_rel x_t x_s -∗
       dval_rel v_t v_s -∗
     trigger (Store x_t v_t) ⪯ trigger (Store x_s v_s)
-      [{ (v1, v2), code_inv ∅ i_t i_s A_t A_s }].
+      [{ (v1, v2), code_inv refl_inv ∅ i_t i_s A_t A_s }].
   Proof.
     iIntros (WF1 WF2 WF3) "CI #Dv #Dt".
     iApply store_must_be_addr; [ done | ].
@@ -1626,11 +1717,11 @@ Section logical_relations_properties.
     (forall a_t, x_t = DVALUE_Addr a_t ->
     forall a_s, x_s = DVALUE_Addr a_s ->
             C !! (a_t.1, a_s.1) = None) ->
-    ⊢ CFG_inv C i_t i_s -∗
+    ⊢ CFG_inv refl_inv C i_t i_s -∗
       dval_rel x_t x_s -∗
       dval_rel v_t v_s -∗
     trigger (Store x_t v_t) ⪯ trigger (Store x_s v_s)
-      [{ (v1, v2), CFG_inv C i_t i_s }].
+      [{ (v1, v2), CFG_inv refl_inv C i_t i_s }].
   Proof.
     iIntros (Hwf Hdt1 Hdt2 Hlu) "CI #Dv #Dt".
     iApply store_must_be_addr; [ done | ].
@@ -1647,7 +1738,7 @@ Section logical_relations_properties.
     cbn. iIntros (??) "H".
     iDestruct "H" as (????) "H".
     iModIntro; repeat iExists _; iFrame.
-    do 2 (iSplitL ""; [done | ]). rewrite /CFG_inv.
+    do 2 (iSplitL ""; [done | ]). rewrite /CFG_inv /refl_inv.
     repeat iExists _; by iFrame.
   Qed.
 
@@ -1655,10 +1746,10 @@ Section logical_relations_properties.
     (τ : dtyp) (C : gmap (loc * loc) Qp)
     (i_t i_s : list frame_names) (A_t A_s : list loc):
     non_void τ ->
-    code_inv C i_t i_s A_t A_s -∗
+    code_inv refl_inv C i_t i_s A_t A_s -∗
     trigger (Alloca τ) ⪯ trigger (Alloca τ)
     [{ (a, a0), ∃ l_t l_s, dval_rel a a0 ∗
-        code_inv C i_t i_s (l_t :: A_t) (l_s :: A_s) }].
+        code_inv refl_inv C i_t i_s (l_t :: A_t) (l_s :: A_s) }].
   Proof.
     iIntros (WF) "CI".
 
