@@ -819,20 +819,28 @@ Section fundamental.
     repeat iExists _; do 2 (iSplitL ""; eauto); done.
   Qed.
 
-  (* TODO: Bookmark *)
-  (* { unfold CFG.find_block in Hb0. *)
-  (*   apply find_some in Hb0. destruct Hb0. *)
-  (*   destruct (forallb block_WF c) eqn: HWF; try done. *)
-  (*   rewrite forallb_forall in HWF. *)
-  (*   specialize (HWF _ H0). destruct (block_WF b3); try done. } *)
+  (* TODO: Move to [logical_relations]*)
+  Lemma ocfg_WF_cons_inv a c :
+    ocfg_WF (a :: c) ->
+    block_WF a /\ ocfg_WF c.
+  Proof.
+    cbn; intros WF; apply andb_prop_elim in WF; by destruct WF.
+  Qed.
 
   Theorem ocfg_logrel_refl (c : CFG.ocfg dtyp) b1 b2 A_t A_s:
     ocfg_WF c ->
     (⊢ ocfg_logrel c c ∅ A_t A_s b1 b2)%I.
   Proof with vsimp.
     iIntros (WF ??) "CI".
+    iApply ocfg_compat; try done; iModIntro.
     (* Proceed by induction. *)
-  Admitted.
+    iInduction c as [ | ] "IH"; first done.
+    apply ocfg_WF_cons_inv in WF; destruct WF.
+    cbn; iSplitL "".
+    { iSplitL ""; first done; iIntros; by iApply block_logrel_refl. }
+
+    by iApply "IH".
+  Qed.
 
   Theorem cfg_logrel_refl c A_t A_s:
     cfg_WF c ->
