@@ -369,6 +369,12 @@ End logical_relations_def.
 
 Section WF_def_properties.
 
+  Lemma ocfg_WF_cons_inv a c :
+    ocfg_WF (a :: c) ->
+    block_WF a /\ ocfg_WF c.
+  Proof.
+    cbn; intros WF; apply andb_prop_elim in WF; by destruct WF.
+
   Lemma global_names_cons_lookup {T FnBody}
     f (l : list (definition T FnBody)) (g : global_env):
     contains_keys g (defs_names (f :: l)) ->
@@ -1728,6 +1734,58 @@ Section logical_relations_properties.
     Unshelve. all : set_solver.
   Qed.
 
+  (* Some utility for find_block for [ocfg]. *)
+  Lemma code_same_block_ids_find_block {T} c c' R:
+    (([∗ list] y1;y2 ∈ c;c', ⌜blk_id y1 = blk_id (T := T) y2⌝ ∗ R y1 y2) -∗
+      ∀ b v,
+      ⌜find_block (T := T) c' b = Some v⌝ -∗
+      ∃ v', ⌜find_block (T := T) c b = Some v'⌝ ∗ R v' v : iPropI Σ).
+  Proof.
+    revert c.
+    (* Induction on the list of blocks *)
+    induction c'; iIntros (c) "H"; eauto.
+    { iPoseProof (big_sepL2_nil_inv_r with "H") as "%Heq";
+        subst. iIntros (???). inv H. }
+
+    (* cons case *)
+    iPoseProof (big_sepL2_cons_inv_r with "H") as
+      (?a' c'' ?) "((%Heq & HR) & H')"; subst.
+    rename c'' into c.
+
+    (* Use the IH. *)
+    iPoseProof (IHc' with "H'") as "IH".
+    iIntros (???).
+    apply find_block_cons_inv in H;
+      destruct H as [ (Heq' & Hbeq) | (Hineq & H) ]; subst.
+    - iClear "IH". iExists a'; iFrame. rewrite -Heq.
+      by rewrite find_block_eq.
+    - iSpecialize ("IH" $! _ _ H).
+      iDestruct "IH" as (??) "IH".
+      iExists v'; iFrame.
+      rewrite find_block_ineq; try rewrite Heq; try done.
+  Qed.
+
+  Lemma code_same_block_ids_find_block_None {T} c c':
+    (([∗ list] y1;y2 ∈ c;c', ⌜blk_id y1 = blk_id (T := T) y2⌝) -∗
+      ⌜forall b,
+      find_block (T := T) c' b = None ->
+      (find_block (T := T) c b = None)⌝ : iPropI Σ).
+  Proof.
+    revert c'.
+    (* Induction on the list of blocks *)
+    induction c; iIntros (c') "H"; eauto.
+
+    (* cons case *)
+    iPoseProof (big_sepL2_cons_inv_l with "H") as (?a' c'' ? Heq) "H"; subst.
+    rename c'' into c'.
+
+    (* Use the IH. *)
+    iPoseProof (IHc with "H") as "%H".
+    iPureIntro. intros.
+    cbn. rewrite Heq; clear Heq. cbn in *.
+    destruct (Eqv.eqv_dec_p (blk_id a') b) eqn: Heq; eauto.
+    inv H0.
+  Qed.
 
 End logical_relations_properties.
 

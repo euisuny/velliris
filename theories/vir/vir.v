@@ -656,9 +656,9 @@ Ltac itree_simp e :=
   | interp _ (translate _ _) => rewrite interp_translate
   end.
 
-Ltac Tau := iApply sim_expr_tau.
+Ltac Tau := iApply sim_expr_tau + iApply sim_expr'_tau.
 
-Ltac Cut := iApply sim_expr_bind.
+Ltac Cut := iApply sim_expr_bind + iApply sim_expr'_bind.
 
 Ltac sim_expr_simp e :=
   match e with
@@ -669,6 +669,11 @@ Ltac sim_expr_simp e :=
       iApply sim_expr_vis
   (* Some symbolic execution under ITree rewrites *)
   | sim_expr _ ?l ?r =>
+    (* Try doing ITree rewriting on both sides if possible *)
+    itree_simp l + itree_simp r
+
+  (* Some symbolic execution under ITree rewrites *)
+  | sim_expr' _ ?l ?r =>
     (* Try doing ITree rewriting on both sides if possible *)
     itree_simp l + itree_simp r
   end.
@@ -689,6 +694,9 @@ Ltac Base :=
   | |- environments.envs_entails _
       (sim_expr _ (Ret _) (Ret _)) =>
       iApply sim_expr_base
+  | |- environments.envs_entails _
+      (sim_expr' _ (Ret _) (Ret _)) =>
+      iApply sim_expr'_base
   end.
 
 (* ------------------------------------------------------------------------ *)

@@ -3,7 +3,7 @@ From iris.proofmode Require Import proofmode.
 From stdpp Require Import gmap.
 
 From Vellvm Require Import
-  Syntax.DynamicTypes Handlers Utils.Util.
+  Syntax.DynamicTypes Handlers Utils.Util Syntax.ScopeTheory.
 
 From velliris Require Import vir.util utils.tactics.
 
@@ -27,10 +27,24 @@ Proof.
   apply elem_of_cons; right; eapply IHc; eauto.
 Qed.
 
+(* TODO: move to [Syntax.ScopeTheory] *)
+Lemma find_block_cons_inv {T} a c b v:
+  find_block (a :: c) b = Some v ->
+  (blk_id a = b /\ v = a)
+  \/ (blk_id a <> b /\ find_block (T := T) c b = Some v).
+Proof.
+  revert a b v.
+  induction c; cbn; intros; eauto.
+  - destruct_if; by left.
+  - destruct_if; destruct_if_goal; destruct_if;
+      solve [by left | by right].
+Qed.
+
 Definition lb_mem (b : logical_block) : mem_block :=
   match b with
     | LBlock _ m _ => m
   end.
+
 
 (* ------------------------------------------------------------------------ *)
 (** *Utilities for [dtyp] *)

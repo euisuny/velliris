@@ -111,6 +111,12 @@ Ltac sim_expr_vsimp e :=
     (* Try doing ITree rewriting on both sides if possible *)
     (itree_vsimp l + itree_simp l) +
     (itree_vsimp r + itree_simp r)
+
+  (* Some symbolic execution under ITree rewrites on [sim_expr']*)
+  | sim_expr' _ ?l ?r =>
+    (* Try doing ITree rewriting on both sides if possible *)
+    (itree_vsimp l + itree_simp l) +
+    (itree_vsimp r + itree_simp r)
   end.
 
 Ltac vsimp := repeat
@@ -129,4 +135,21 @@ Ltac final :=
   | |- environments.envs_entails _
       (sim_expr _ (Ret _) (Ret _)) =>
       iApply sim_expr_base
+  | |- environments.envs_entails _
+      (sim_expr' _ (Ret _) (Ret _)) =>
+      iApply sim_expr_base
   end.
+
+Tactic Notation "mono:" tactic(tac) :=
+  iApply sim_expr_bupd_mono; [ | tac; eauto ];
+  try (iIntros (??) "HΦ"; iDestruct "HΦ" as (??->->) "HΦ").
+
+Tactic Notation "mono:" tactic(tac) "with" constr(hyps) :=
+  iApply (sim_expr_bupd_mono with hyps); [ | tac; eauto ];
+  try (iIntros (??) "HΦ"; iDestruct "HΦ" as (??->->) "HΦ").
+
+Ltac vfinal :=
+  final;
+  repeat iExists _;
+  repeat (iSplitL ""; first (iPureIntro; done));
+  iFrame; try done.
