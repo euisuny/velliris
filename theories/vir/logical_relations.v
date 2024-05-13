@@ -1114,8 +1114,83 @@ Section logical_relations_properties.
         iApply ("H" with "H'"). } }
   Qed.
 
+  Lemma target_local_write_sim {R}
+    C I v_t i_t i_s A_t A_s l_t Φ (e_s: _ R) L_t L_s:
+    □ (∀ L_t L_s L_t' L_s',
+          ⌜L_t' ⊆ L_t⌝ -∗
+          ⌜L_s' ⊆ L_s⌝ -∗
+          I L_t L_s -∗ I L_t' L_s') -∗
+    code_inv I C i_t i_s A_t A_s L_t L_s -∗
+    (code_inv I C i_t i_s A_t A_s (l_t :: L_t) L_s -∗
+      Ret tt ⪯ e_s [{ Φ }]) -∗
+    trigger (LocalWrite l_t v_t) ⪯ e_s [{Φ}].
+  Proof.
+    iIntros "#HI CI H".
+    iApply sim_update_si; iIntros (σ_t σ_s) "SI".
+
+    (* Get information out of the invariant. *)
+    iDestruct (local_code_inv with "CI SI") as ">H'".
+    iDestruct "H'" as (????)
+        "(%Hnd_t & %Hnd_s & Hlt & Hls & Hv & #Ha_v & SI & Hd_t & Hd_s
+          & HC & Hf_t & Hf_s & #WF & Ha_t & Ha_s)".
+
+    (* It's already allocated at target *)
+    destruct (decide (l_t ∈ (vlocal σ_t).1.*1)).
+    { eapply (assoc_list_elem_of_lookup _ args_t) in e; eauto.
+      destruct e as (?&?&?).
+      iDestruct (lmapsto_no_dup with "Hlt") as "%Hdup_t".
+      iDestruct (big_sepL_delete with "Hlt") as "(Helemt & Hl_t)"; eauto;
+        cbn -[subevent state_interp]. iFrame.
+      iApply target_red_sim_expr.
+      iApply (target_red_mono with "[H]");
+        last (iApply (target_local_write with "Helemt Hd_t Hf_t")); cycle 1.
+      { iModIntro; iIntros "Ht Hd_t Hs_t".
+        iApply target_red_base. Unshelve.
+        2 : exact (fun x => ⌜x = Ret tt⌝ ∗
+          code_inv I
+          C i_t i_s A_t A_s (l_t :: L_t) L_s)%I.
+        iFrame. iSplitL ""; first done.
+        iExists (alist_add l_t v_t args_t), args_s; iFrame;
+          iFrame "WF Ha_v".
+        rewrite ?H ?H0; iFrame.
+        setoid_rewrite alist_add_domain_stable; cycle 1.
+        { apply alist_find_to_map_Some; eauto.
+          eapply alist_find_Some; eauto. }
+
+        rewrite H; iFrame.
+        iSplitL "Hl_t"; cycle 1.
+        { iSplitR ""; last done.
+          iApply "HI"; last iApply "Hv"; last set_solver.
+          rewrite remove_id_cons_alist_add.
+          iPureIntro; apply remove_ids_subseteq. }
+        by iApply (big_sepL_alist_remove with "Hl_t"). }
+
+      { cbn. iIntros (?) "(%Heq & H')"; subst.
+        iApply ("H" with "H'"). } }
+
+    (* It's not allocated at the target. *)
+    { iFrame. iApply target_red_sim_expr.
+      iApply (target_red_mono with "[H]");
+        last iApply (target_local_write_alloc with "Hd_t Hf_t"); cycle 1.
+      { set_solver. }
+      { iModIntro; iIntros "Ht Hd_t Hf_t".
+        iApply target_red_base. Unshelve.
+        2 : exact (fun x => ⌜x = Ret tt⌝ ∗
+          code_inv I
+          C i_t i_s A_t A_s (l_t :: L_t) L_s)%I.
+        iFrame. iSplitL ""; first done.
+        iExists (alist_add l_t v_t args_t), args_s; iFrame;
+          iFrame "WF Ha_v".
+        rewrite list_to_set_insert H H0; iFrame.
+        rewrite remove_id_cons_alist_add; iFrame.
+        rewrite alist_remove_not_in; [ | set_solver]; iFrame; done. }
+
+      { cbn. iIntros (?) "(%Heq & H')"; subst.
+        iApply ("H" with "H'"). } }
+  Qed.
+
   (* Local write reflexivity *)
-  Lemma local_write_refl C x v_t v_s i_t i_s A_t A_s:
+  Lemma local_write_refl C x v_t v_s i_t i_s A_t A_s L_t L_s:
     ⊢ code_inv refl_inv C i_t i_s A_t A_s L_t L_s -∗
        uval_rel v_t v_s -∗
     trigger (LocalWrite x v_t) ⪯ trigger (LocalWrite x v_s)
