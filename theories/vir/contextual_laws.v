@@ -3,11 +3,12 @@ From iris.prelude Require Import options.
 From Equations Require Import Equations.
 
 From ITree Require Import ITree Eq.Eqit Interp.InterpFacts Interp.TranslateFacts.
-From simuliris.simulation Require Import slsls sim_properties reduction.
+
+From velliris.program_logic Require Import program_logic.
 From Vellvm.Syntax Require Import LLVMAst DynamicTypes CFG.
 From Vellvm.Semantics Require Import InterpretationStack.
 From Vellvm.Theory Require Import DenotationTheory.
-From simuliris.vir Require Import spec instr_laws bij_laws tactics fundamental_exp vir_util.
+From velliris.vir Require Import spec instr_laws bij_laws tactics fundamental_exp vir_util.
 
 From Vellvm Require Import Handlers.Handlers.
 Import DenoteTactics.
@@ -60,7 +61,7 @@ Ltac instr_conv_normalize :=
 
 Section contextual_properties.
 
-  Context {Σ : gFunctors} `{!sheapGS Σ, !checkedoutGS Σ, !heapbijGS Σ}.
+  Context {Σ : gFunctors} `{!vellirisGS Σ}.
 
   Theorem code_make_block_contextual c_t c_s Φ P:
     (P -∗ instr_conv (denote_code c_t) ⪯
