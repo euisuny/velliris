@@ -48,10 +48,10 @@ Section fundamental_exp.
 
   Lemma expr_logrel_EXP_Ident :
     forall (id : LLVMAst.ident) (dt : option dtyp) C i_t i_s A_t A_s,
-      code_inv refl_inv C i_t i_s A_t A_s -∗
+      code_refl_inv C i_t i_s A_t A_s -∗
       exp_conv (denote_exp dt (EXP_Ident id)) ⪯
       exp_conv (denote_exp dt (EXP_Ident id))
-      [{ (v_t, v_s), uval_rel v_t v_s ∗ code_inv refl_inv C i_t i_s A_t A_s }].
+      [{ (v_t, v_s), uval_rel v_t v_s ∗ code_refl_inv C i_t i_s A_t A_s }].
   Proof.
     iIntros (id dt C i_t i_s A_t A_s) "HC"; cbn.
     rewrite /lookup_id; destruct id; cbn.
@@ -86,7 +86,7 @@ Section fundamental_exp.
       iExists _, _; by iFrame. }
    Qed.
 
-  (* TODO: Factor out the [code_inv refl_inv] into an arbitrary invariant *)
+  (* TODO: Factor out the [code_refl_inv] into an arbitrary invariant *)
    Lemma expr_logrel_ind_case :
     forall (elts : list (dtyp * exp dtyp)) C i_t i_s A_t A_s Exp,
     □ (uval_rel (Exp []) (Exp [])) -∗
@@ -97,18 +97,18 @@ Section fundamental_exp.
     □ (∀ x : dtyp * exp dtyp,
       ⌜In x elts⌝
       → ∀ (a : option dtyp) (a0 : gmap (vir.loc * vir.loc) Qp),
-            code_inv refl_inv a0 i_t i_s A_t A_s -∗
+            code_refl_inv a0 i_t i_s A_t A_s -∗
             exp_conv (denote_exp a x.2) ⪯
             exp_conv (denote_exp a x.2)
-            [{ (v_t, v_s),uval_rel v_t v_s ∗ code_inv refl_inv a0 i_t i_s A_t A_s }]) -∗
-      (code_inv refl_inv C i_t i_s A_t A_s) -∗
+            [{ (v_t, v_s),uval_rel v_t v_s ∗ code_refl_inv a0 i_t i_s A_t A_s }]) -∗
+      (code_refl_inv C i_t i_s A_t A_s) -∗
       r <- exp_conv
             (map_monad (λ '(dt0, ex), (denote_exp (Some dt0) ex)) elts);;
       Ret (Exp r)
       ⪯
       r <-  exp_conv (map_monad (λ '(dt0, ex), (denote_exp (Some dt0) ex)) elts);;
       Ret (Exp r)
-    [{ (v_t, v_s),uval_rel v_t v_s ∗ code_inv refl_inv C i_t i_s A_t A_s }].
+    [{ (v_t, v_s),uval_rel v_t v_s ∗ code_refl_inv C i_t i_s A_t A_s }].
   Proof.
     iIntros (elts C i_t i_s A_t A_s Exp ) "#Hbase #Hind #IH HI".
     rewrite /exp_conv.
@@ -124,9 +124,9 @@ Section fundamental_exp.
         (∀ x : dtyp * exp dtyp,
           ⌜In x elts⌝ →
           ∀ (a : option dtyp) (a0 : gmap (vir.loc * vir.loc) Qp),
-            code_inv refl_inv a0 i_t i_s A_t A_s  -∗
+            code_refl_inv a0 i_t i_s A_t A_s  -∗
             exp_conv (denote_exp a x.2) ⪯exp_conv (denote_exp a x.2)
-            [{ (v_t, v_s),uval_rel v_t v_s ∗ code_inv refl_inv a0 i_t i_s A_t A_s  }]))%I as "Helts".
+            [{ (v_t, v_s),uval_rel v_t v_s ∗ code_refl_inv a0 i_t i_s A_t A_s  }]))%I as "Helts".
       { iModIntro. iIntros (x Hin dt' l') "Hinv".
         assert ((d, e) = x \/ In x elts) by (by right).
         by iSpecialize ("IH" $! _ H _  l' with "Hinv"). }
@@ -226,14 +226,14 @@ Section fundamental_exp.
       □ (∀ x : dtyp * exp dtyp,
           ⌜In x elts⌝ →
           ∀ (a : option dtyp) (a0 : gmap (vir.loc * vir.loc) Qp),
-          code_inv refl_inv a0 i_t i_s A_t A_s  -∗
+          code_refl_inv a0 i_t i_s A_t A_s  -∗
           exp_conv (denote_exp a x.2) ⪯
           exp_conv (denote_exp a x.2)
-          [{ (v_t, v_s),uval_rel v_t v_s ∗ code_inv refl_inv a0 i_t i_s A_t A_s  }]) -∗
-        code_inv refl_inv C i_t i_s A_t A_s  -∗
+          [{ (v_t, v_s),uval_rel v_t v_s ∗ code_refl_inv a0 i_t i_s A_t A_s  }]) -∗
+        code_refl_inv C i_t i_s A_t A_s  -∗
         exp_conv (denote_exp dt (EXP_Cstring elts)) ⪯
         exp_conv (denote_exp dt (EXP_Cstring elts))
-        [{ (v_t, v_s),uval_rel v_t v_s ∗ code_inv refl_inv C i_t i_s A_t A_s  }].
+        [{ (v_t, v_s),uval_rel v_t v_s ∗ code_refl_inv C i_t i_s A_t A_s  }].
   Proof.
     intros elts dt C ? ? ? ? .
     cbn; setoid_rewrite interp_bind; setoid_rewrite interp_ret.
@@ -250,14 +250,14 @@ Section fundamental_exp.
       □ (∀ x : dtyp * exp dtyp,
           ⌜In x elts⌝ →
           ∀ (a : option dtyp) (a0 : gmap (vir.loc * vir.loc) Qp),
-          code_inv refl_inv a0 i_t i_s A_t A_s  -∗
+          code_refl_inv a0 i_t i_s A_t A_s  -∗
           exp_conv (denote_exp a x.2) ⪯
           exp_conv (denote_exp a x.2)
-          [{ (v_t, v_s),uval_rel v_t v_s ∗ code_inv refl_inv a0 i_t i_s A_t A_s  }]) -∗
-        code_inv refl_inv C i_t i_s A_t A_s  -∗
+          [{ (v_t, v_s),uval_rel v_t v_s ∗ code_refl_inv a0 i_t i_s A_t A_s  }]) -∗
+        code_refl_inv C i_t i_s A_t A_s  -∗
         exp_conv (denote_exp dt (EXP_Struct elts)) ⪯
         exp_conv (denote_exp dt (EXP_Struct elts))
-      [{ (v_t, v_s), uval_rel v_t v_s ∗ code_inv refl_inv C i_t i_s A_t A_s  }].
+      [{ (v_t, v_s), uval_rel v_t v_s ∗ code_refl_inv C i_t i_s A_t A_s  }].
   Proof.
     intros elts dt C ? ? ? ? .
     cbn; setoid_rewrite interp_bind; setoid_rewrite interp_ret.
@@ -274,14 +274,14 @@ Section fundamental_exp.
         □ (∀ x : dtyp * exp dtyp,
           ⌜In x elts⌝ →
           ∀ (a : option dtyp) (a0 : gmap (vir.loc * vir.loc) Qp),
-          code_inv refl_inv a0 i_t i_s A_t A_s  -∗
+          code_refl_inv a0 i_t i_s A_t A_s  -∗
           exp_conv (denote_exp a x.2) ⪯
           exp_conv (denote_exp a x.2)
-          [{ (v_t, v_s),uval_rel v_t v_s ∗ code_inv refl_inv a0 i_t i_s A_t A_s  }]) -∗
-        code_inv refl_inv C i_t i_s A_t A_s  -∗
+          [{ (v_t, v_s),uval_rel v_t v_s ∗ code_refl_inv a0 i_t i_s A_t A_s  }]) -∗
+        code_refl_inv C i_t i_s A_t A_s  -∗
         exp_conv (denote_exp dt (EXP_Array elts)) ⪯
         exp_conv (denote_exp dt (EXP_Array elts))
-      [{ (v_t, v_s),uval_rel v_t v_s ∗ code_inv refl_inv C i_t i_s A_t A_s  }].
+      [{ (v_t, v_s),uval_rel v_t v_s ∗ code_refl_inv C i_t i_s A_t A_s  }].
   Proof.
     iIntros (elts dt C ? ? ? ? ) "#IH HI".
     cbn; setoid_rewrite interp_bind; setoid_rewrite interp_ret.
@@ -297,19 +297,19 @@ Section fundamental_exp.
     ∀ (iop : ibinop) (t : dtyp) (e1 e2 : exp dtyp) (dt : option dtyp)
       C i_t i_s A_t A_s ,
       □ (∀ (a : option dtyp) (a0 : gmap (vir.loc * vir.loc) Qp),
-          code_inv refl_inv a0 i_t i_s A_t A_s  -∗
+          code_refl_inv a0 i_t i_s A_t A_s  -∗
           exp_conv (denote_exp a e1) ⪯
           exp_conv (denote_exp a e1)
-          [{ (v_t, v_s), uval_rel v_t v_s ∗ code_inv refl_inv a0 i_t i_s A_t A_s  }]) -∗
+          [{ (v_t, v_s), uval_rel v_t v_s ∗ code_refl_inv a0 i_t i_s A_t A_s  }]) -∗
         (∀ (a : option dtyp) (a0 : gmap (vir.loc * vir.loc) Qp),
-          code_inv refl_inv a0 i_t i_s A_t A_s  -∗
+          code_refl_inv a0 i_t i_s A_t A_s  -∗
           exp_conv (denote_exp a e2) ⪯
           exp_conv (denote_exp a e2)
-          [{ (v_t, v_s), uval_rel v_t v_s ∗ code_inv refl_inv a0 i_t i_s A_t A_s  }]) -∗
-        code_inv refl_inv C i_t i_s A_t A_s  -∗
+          [{ (v_t, v_s), uval_rel v_t v_s ∗ code_refl_inv a0 i_t i_s A_t A_s  }]) -∗
+        code_refl_inv C i_t i_s A_t A_s  -∗
         exp_conv (denote_exp dt (OP_IBinop iop t e1 e2)) ⪯
         exp_conv (denote_exp dt (OP_IBinop iop t e1 e2))
-      [{ (v_t, v_s), uval_rel v_t v_s ∗ code_inv refl_inv C i_t i_s A_t A_s  }].
+      [{ (v_t, v_s), uval_rel v_t v_s ∗ code_refl_inv C i_t i_s A_t A_s  }].
   Proof.
     iIntros (iop t e1 e2 dt C ???? ) "#IH IH1 HI".
 
@@ -343,14 +343,14 @@ Section fundamental_exp.
     ∀ (conv : conversion_type) (t_from : dtyp) (e : exp dtyp) (t_to : dtyp)
       (dt : option dtyp) (C : gmap (vir.loc * vir.loc) Qp) i_t i_s A_t A_s ,
       □ (∀ (a : option dtyp) (a0 : gmap (vir.loc * vir.loc) Qp),
-          code_inv refl_inv a0 i_t i_s A_t A_s  -∗
+          code_refl_inv a0 i_t i_s A_t A_s  -∗
           exp_conv (denote_exp a e) ⪯
           exp_conv (denote_exp a e)
-          [{ (v_t, v_s),uval_rel v_t v_s ∗ code_inv refl_inv a0 i_t i_s A_t A_s  }]) -∗
-        code_inv refl_inv C i_t i_s A_t A_s  -∗
+          [{ (v_t, v_s),uval_rel v_t v_s ∗ code_refl_inv a0 i_t i_s A_t A_s  }]) -∗
+        code_refl_inv C i_t i_s A_t A_s  -∗
       exp_conv (denote_exp dt (OP_Conversion conv t_from e t_to)) ⪯
       exp_conv (denote_exp dt (OP_Conversion conv t_from e t_to))
-      [{ (v_t, v_s),uval_rel v_t v_s ∗ code_inv refl_inv C i_t i_s A_t A_s  }].
+      [{ (v_t, v_s),uval_rel v_t v_s ∗ code_refl_inv C i_t i_s A_t A_s  }].
   Proof.
     iIntros (conv t_from e t_to dt C ? ? ? ? ) "#IH HI".
 
@@ -373,19 +373,19 @@ Section fundamental_exp.
     forall (cmp : icmp) (t : dtyp) (e1 e2 : exp dtyp) (dt : option dtyp)
       (C : gmap (vir.loc * vir.loc) Qp) i_t i_s A_t A_s ,
       □ (∀ (a : option dtyp) (a0 : gmap (vir.loc * vir.loc) Qp),
-          code_inv refl_inv a0 i_t i_s A_t A_s  -∗
+          code_refl_inv a0 i_t i_s A_t A_s  -∗
           exp_conv (denote_exp a e1) ⪯
           exp_conv (denote_exp a e1)
-          [{ (v_t, v_s), uval_rel v_t v_s ∗ code_inv refl_inv a0 i_t i_s A_t A_s  }]) -∗
+          [{ (v_t, v_s), uval_rel v_t v_s ∗ code_refl_inv a0 i_t i_s A_t A_s  }]) -∗
       □ (∀ (a : option dtyp) (a0 : gmap (vir.loc * vir.loc) Qp),
-          code_inv refl_inv a0 i_t i_s A_t A_s  -∗
+          code_refl_inv a0 i_t i_s A_t A_s  -∗
           exp_conv (denote_exp a e2) ⪯
           exp_conv (denote_exp a e2)
-          [{ (v_t, v_s), uval_rel v_t v_s ∗ code_inv refl_inv a0 i_t i_s A_t A_s  }]) -∗
-      code_inv refl_inv C i_t i_s A_t A_s  -∗
+          [{ (v_t, v_s), uval_rel v_t v_s ∗ code_refl_inv a0 i_t i_s A_t A_s  }]) -∗
+      code_refl_inv C i_t i_s A_t A_s  -∗
       exp_conv (denote_exp dt (OP_ICmp cmp t e1 e2)) ⪯
       exp_conv (denote_exp dt (OP_ICmp cmp t e1 e2))
-      [{ (v_t, v_s),uval_rel v_t v_s ∗ code_inv refl_inv C i_t i_s A_t A_s  }].
+      [{ (v_t, v_s),uval_rel v_t v_s ∗ code_refl_inv C i_t i_s A_t A_s  }].
   Proof.
     iIntros (cmp t e1 e2 dt C ? ? ? ? ) "#IH1 #IH2 HI".
 
@@ -426,19 +426,19 @@ Section fundamental_exp.
       □ (∀ x : dtyp * exp dtyp,
         ⌜In x idxs⌝
         → ∀ (a : option dtyp) (a0 : gmap (vir.loc * vir.loc) Qp),
-          code_inv refl_inv a0 i_t i_s A_t A_s  -∗
+          code_refl_inv a0 i_t i_s A_t A_s  -∗
           exp_conv (denote_exp a x.2) ⪯
           exp_conv (denote_exp a x.2)
-        [{ (v_t, v_s),uval_rel v_t v_s ∗ code_inv refl_inv a0 i_t i_s A_t A_s  }]) -∗
+        [{ (v_t, v_s),uval_rel v_t v_s ∗ code_refl_inv a0 i_t i_s A_t A_s  }]) -∗
       □ (∀ (a : option dtyp) (a0 : gmap (vir.loc * vir.loc) Qp),
-          code_inv refl_inv a0 i_t i_s A_t A_s  -∗
+          code_refl_inv a0 i_t i_s A_t A_s  -∗
           exp_conv (denote_exp a ptrval.2) ⪯
           exp_conv (denote_exp a ptrval.2)
-        [{ (v_t, v_s),uval_rel v_t v_s ∗ code_inv refl_inv a0 i_t i_s A_t A_s  }]) -∗
-      code_inv refl_inv C i_t i_s A_t A_s  -∗
+        [{ (v_t, v_s),uval_rel v_t v_s ∗ code_refl_inv a0 i_t i_s A_t A_s  }]) -∗
+      code_refl_inv C i_t i_s A_t A_s  -∗
       exp_conv (denote_exp dt (OP_GetElementPtr t ptrval idxs)) ⪯
       exp_conv (denote_exp dt (OP_GetElementPtr t ptrval idxs))
-    [{ (v_t, v_s),uval_rel v_t v_s ∗ code_inv refl_inv C i_t i_s A_t A_s  }].
+    [{ (v_t, v_s),uval_rel v_t v_s ∗ code_refl_inv C i_t i_s A_t A_s  }].
   Proof.
     iIntros (t (ptr_t &e1) dt idxs C ? ? ? ? ) "#IH1 #IH2 HI".
 
@@ -470,9 +470,9 @@ Section fundamental_exp.
         (∀ x : dtyp * exp dtyp,
           ⌜In x idxs⌝ →
           ∀ (a : option dtyp) (a0 : gmap (vir.loc * vir.loc) Qp),
-          code_inv refl_inv a0 i_t i_s A_t A_s  -∗
+          code_refl_inv a0 i_t i_s A_t A_s  -∗
             exp_conv (denote_exp a x.2) ⪯exp_conv (denote_exp a x.2)
-            [{ (v_t, v_s),uval_rel v_t v_s ∗ code_inv refl_inv a0 i_t i_s A_t A_s  }]))%I as "Helts".
+            [{ (v_t, v_s),uval_rel v_t v_s ∗ code_refl_inv a0 i_t i_s A_t A_s  }]))%I as "Helts".
       { iModIntro. iIntros (x Hin dt' C') "Hinv".
         assert ((d, e) = x \/ In x idxs) by (by right).
         by iSpecialize ("IH1" $! _ H with "Hinv"). }
@@ -506,7 +506,7 @@ Section fundamental_exp.
 
   (* Reflexivity theorems *)
   Theorem expr_logrel_refl dt e C A_t A_s :
-    (⊢ expr_logrel refl_inv C (denote_exp dt e) (denote_exp dt e) A_t A_s )%I.
+    (⊢ expr_logrel refl_inv C (denote_exp dt e) (denote_exp dt e) A_t A_s nil nil)%I.
   Proof.
     iIntros. rewrite /expr_logrel.
     iRevert (C dt).
