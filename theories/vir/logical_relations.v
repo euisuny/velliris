@@ -174,10 +174,6 @@ Section logical_relations_def.
     (* Checkout set is empty *)
     checkout ∅.
 
-  Definition remove_ids {K} {R : K -> K -> Prop} {RelDec_R: RelDec.RelDec R} {V}
-    (k : list K) (l : alist K V) : alist K V:=
-     fold_left (fun acc (x : K) => alist_remove x acc) k l.
-
   Definition expr_local_env_inv i_t i_s m L_t L_s :=
     ([∗ list] l ∈ m,
       ∃ v_t v_s, ⌜alist_find l L_t = Some v_t⌝ ∗ ⌜alist_find l L_s = Some v_s⌝ ∗
@@ -188,6 +184,9 @@ Section logical_relations_def.
     expr_local_env_inv i_t i_s (intersection_local_ids e_t e_s) L_t L_s.
 
   (* Invariant for codes. *)
+
+  (* [L_t] and [L_s] indicate the excluded local id's from the current arguments;
+    these are the local id's that are "out of sync". *)
    Definition code_inv C i_t i_s A_t A_s L_t L_s : iPropI Σ :=
     (∃ (args_t args_s : local_env),
         ldomain_tgt i_t (list_to_set args_t.*1) ∗
@@ -1038,50 +1037,23 @@ Section logical_relations_properties.
     repeat iExists _; iFrame. cbn; done.
   Qed.
 
-  (* TODO: Move *)
-  Lemma assoc_list_elem_of_lookup {K V}
-    `{EqDecision K} `{Countable K}
-    (A B : list (K * V)) (l : K):
-    l ∈ A.*1 ->
-    list_to_set A.*1 = (list_to_set B.*1 : gset _)->
-    exists n v, B !! n = Some (l, v).
-  Proof.
-    intros e Heq.
-    eapply (@elem_of_list_to_set K
-                (@gset _ _ _)) in e; last typeclasses eauto.
-    Unshelve. all : try typeclasses eauto.
-    setoid_rewrite Heq in e. clear -e.
-    rewrite elem_of_list_to_set in e.
-    by apply elem_of_fst_list_some.
-  Qed.
-
-  Lemma remove_id_cons_alist_add {K} {RelDec_R: RelDec.RelDec eq}
-                                 {RelEq_Correct : RelDec.RelDec_Correct RelDec_R}
-    {V} :
-    ∀ (k : list K) (l : alist K V) (x : K) (v : V),
-      (remove_ids (x :: k) (alist_add x v l)) = remove_ids k l.
-  Proof.
-    intros k l; revert k.
-    induction l; eauto; cbn; eauto.
-    { intros. destruct_if_goal; try done. exfalso.
-      rewrite negb_true_iff in H.
-      rewrite eq_dec_eq in H. done. }
-
-    intros; rewrite eq_dec_eq; cbn.
-    cbn in *. setoid_rewrite eq_dec_eq in IHl; cbn in IHl.
-    destruct_if_goal; cycle 1.
-  Admitted.
-
-  (* Local write reflexivity *)
-  Lemma source_local_write_sim {R} C I v_s i_t i_s A_t A_s l_s Φ (e_t: _ R) L_t L_s:
+  (* Local write reflexivity: we can do local writes on
+     source while maintaining the [code_inv] invariant. *)
+  Lemma source_local_write_sim {R}
+    C I v_s i_t i_s A_t A_s l_s Φ (e_t: _ R) L_t L_s:
+    □ (∀ L_t L_s L_t' L_s',
+          ⌜L_t' ⊆ L_t⌝ -∗
+          ⌜L_s' ⊆ L_s⌝ -∗
+          I L_t L_s -∗ I L_t' L_s') -∗
     code_inv I C i_t i_s A_t A_s L_t L_s -∗
     (code_inv I C i_t i_s A_t A_s L_t (l_s :: L_s) -∗
       e_t ⪯ (Ret tt) [{ Φ }]) -∗
     e_t ⪯ (trigger (LocalWrite l_s v_s)) [{Φ}].
   Proof.
-    iIntros "CI H".
+    iIntros "#HI CI H".
     iApply sim_update_si; iIntros (σ_t σ_s) "SI".
 
+    (* Get information out of the invariant. *)
     iDestruct (local_code_inv with "CI SI") as ">H'".
     iDestruct "H'" as (????)
         "(%Hnd_t & %Hnd_s & Hlt & Hls & Hv & #Ha_v & SI & Hd_t & Hd_s
@@ -1110,13 +1082,37 @@ Section logical_relations_properties.
         { apply alist_find_to_map_Some; eauto.
           eapply alist_find_Some; eauto. }
 
-        rewrite remove_id_cons_alist_add; iFrame. rewrite H0; iFrame.
-        iSplitR ""; last done. admit. }
+        rewrite H0; iFrame.
+        iSplitL "Hl_s"; cycle 1.
+        { iSplitR ""; last done.
+          iApply "HI"; last iApply "Hv"; first set_solver.
+          rewrite remove_id_cons_alist_add.
+          iPureIntro; apply remove_ids_subseteq. }
+        by iApply (big_sepL_alist_remove with "Hl_s"). }
 
       { cbn. iIntros (?) "(%Heq & H')"; subst.
         iApply ("H" with "H'"). } }
 
-  Abort.
+    (* It's not allocated at the source. *)
+    { iFrame. iApply source_red_sim_expr.
+      iApply (source_red_mono with "[H]");
+        last iApply (source_local_write_alloc with "Hd_s Hf_s"); cycle 1.
+      { set_solver. }
+      { iModIntro; iIntros "Hs Hd_s Hf_s".
+        iApply source_red_base. Unshelve.
+        2 : exact (fun x => ⌜x = Ret tt⌝ ∗
+          code_inv I
+          C i_t i_s A_t A_s L_t (l_s :: L_s))%I.
+        iFrame. iSplitL ""; first done.
+        iExists args_t, (alist_add l_s v_s args_s); iFrame;
+          iFrame "WF Ha_v".
+        rewrite H list_to_set_insert H0; iFrame.
+        rewrite remove_id_cons_alist_add; iFrame.
+        rewrite alist_remove_not_in; [ | set_solver]; iFrame; done. }
+
+      { cbn. iIntros (?) "(%Heq & H')"; subst.
+        iApply ("H" with "H'"). } }
+  Qed.
 
   (* Local write reflexivity *)
   Lemma local_write_refl C x v_t v_s i_t i_s A_t A_s:

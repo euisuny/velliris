@@ -369,7 +369,6 @@ Arguments alist_find [_ _ _ _].
 Arguments alist_add [_ _ _ _].
 Arguments alist_remove [_ _ _ _].
 
-
 Section alist_properties.
 
   Context {K : Type}
@@ -1604,6 +1603,154 @@ Proof.
     - destruct H1. by inv H5.
     - destruct H1.
       eapply IHr; eauto. }
+Qed.
+
+
+Lemma assoc_list_elem_of_lookup {K V}
+  `{EqDecision K} `{Countable K}
+  (A B : list (K * V)) (l : K):
+  l ∈ A.*1 ->
+  list_to_set A.*1 = (list_to_set B.*1 : gset _)->
+  exists n v, B !! n = Some (l, v).
+Proof.
+  intros e Heq.
+  eapply (@elem_of_list_to_set K
+              (@gset _ _ _)) in e; last typeclasses eauto.
+  Unshelve. all : try typeclasses eauto.
+  setoid_rewrite Heq in e. clear -e.
+  rewrite elem_of_list_to_set in e.
+  by apply elem_of_fst_list_some.
+Qed.
+
+Lemma list_filter_join {A} f (l : list A):
+  List.filter f (List.filter f l) = List.filter f l.
+Proof.
+  induction l; eauto.
+  cbn. destruct (f a) eqn: Hf; eauto.
+  cbn. rewrite Hf; f_equiv; done.
+Qed.
+
+(* ------------------------------------------------------------------------ *)
+
+(* [Remove_ids] : remove a list of keys from an associative list. *)
+Definition remove_ids {K} {R : K -> K -> Prop} {RelDec_R: RelDec.RelDec R} {V}
+  (k : list K) (l : alist K V) : alist K V:=
+    fold_left (fun acc (x : K) => alist_remove x acc) k l.
+
+Lemma remove_id_cons_alist_add
+  {K} {RelDec_R: RelDec.RelDec eq} {RelEq_Correct : RelDec.RelDec_Correct RelDec_R}
+  {V} :
+  ∀ (k : list K) (l : alist K V) (x : K) (v : V),
+    (remove_ids (x :: k) (alist_add x v l)) = remove_ids k (alist_remove x l).
+Proof.
+  intros k.
+  induction k; eauto; cbn; eauto.
+  { intros.
+    rewrite eq_dec_eq; cbn. rewrite list_filter_join; done. }
+  intros.
+
+  intros; rewrite eq_dec_eq; cbn.
+  cbn in *. setoid_rewrite eq_dec_eq in IHk; cbn in IHk.
+  rewrite !list_filter_join.
+  setoid_rewrite <-IHk; eauto.
+Qed.
+
+Lemma alist_remove_not_in
+  {K} {RelDec_R: RelDec.RelDec eq} {RelEq_Correct : RelDec.RelDec_Correct RelDec_R}
+  {V} :
+  forall (l : alist K V) x,
+  x ∉ l.*1 ->
+  alist_remove x l = l.
+Proof.
+  induction l; eauto.
+  intros; cbn; eauto.
+  apply not_elem_of_cons in H; destruct H.
+  eapply RelDec.rel_dec_neq_false in H; eauto; rewrite H; cbn.
+  f_equiv; eauto.
+Qed.
+
+Lemma big_sepL_alist_remove
+  {PROP K} `{BiAffine PROP}
+  {RelDec_R: RelDec.RelDec eq} {RelEq_Correct : RelDec.RelDec_Correct RelDec_R}
+  {V} :
+  forall (l : alist K V) x n v (P : _ -> PROP),
+  l !! n = Some (x, v) ->
+  NoDup l.*1 ->
+  ([∗ list] k↦y ∈ l, if decide (k = n) then emp else P y) -∗
+  ([∗ list] '(k, v) ∈ alist_remove x l, P (k, v)).
+Proof.
+  intros l.
+  iInduction l as [ | ] "IH"; [ eauto | ].
+  iIntros (k n v P Hlu Hnd) "Hl".
+  pose proof (alist_find_Some Hnd Hlu) as Hlf.
+  cbn.
+  destruct n; cycle 1.
+  { cbn in *. destruct a. cbn in *.
+    apply NoDup_cons in Hnd; destruct Hnd.
+    destruct (RelDec.rel_dec k k0) eqn: Hk.
+    { (* absurd. *) exfalso.
+      rewrite RelDec.rel_dec_correct in Hk; subst.
+      apply H0. clear - Hlu.
+      eapply list_some_elem_of_fst; eauto. }
+    destruct (decide (0 = S n)%nat) eqn: Heq; [ lia | ]; try rewrite Heq.
+    iDestruct "Hl" as "(HP & Hl)"; iFrame.
+    iApply "IH"; eauto.
+    iApply big_sepL_mono; try done.
+    cbn. iIntros (???) "H".
+    destruct (decide (S k1 = S n));
+    destruct (decide (k1 = n)); try lia;
+      try done. }
+
+  destruct (decide (0 = 0))%nat ; try lia; clear e.
+  iDestruct "Hl" as "(_ & Hl)".
+  cbn in *. destruct a; inv Hlu.
+  rewrite eq_dec_eq in Hlf. rewrite eq_dec_eq; cbn; clear Hlf.
+  cbn in *.
+  assert (List.filter (λ x : K * V, negb (RelDec.rel_dec k x.1)) l = l).
+  { induction l; eauto.
+    cbn in *. apply NoDup_cons in Hnd; destruct Hnd.
+    apply not_elem_of_cons in H0. destruct H0.
+    eapply RelDec.rel_dec_neq_false in H0; eauto; rewrite H0; cbn.
+    f_equiv; eapply IHl. apply NoDup_cons; eauto; split; try set_solver.
+    apply NoDup_cons in H1; destruct H1; eauto. }
+  rewrite H0.
+  iApply big_sepL_mono; [ | iApply "Hl"]; cbn; eauto.
+  intros; destruct y; eauto.
+Qed.
+
+Lemma alist_remove_subseteq
+  {K} {RelDec_R: RelDec.RelDec eq} {RelEq_Correct : RelDec.RelDec_Correct RelDec_R}
+  {V} :
+  ∀ (l : alist K V) (x : K), alist_remove x l ⊆ l.
+Proof.
+  induction l; try set_solver.
+  cbn. intros; destruct (RelDec.rel_dec x a.1) eqn: Heq; cbn; try done;
+  set_solver.
+Qed.
+
+Lemma alist_remove_commut
+  {K} {RelDec_R: RelDec.RelDec eq} {RelEq_Correct : RelDec.RelDec_Correct RelDec_R}
+  {V} :
+  ∀ (l : alist K V) (x y : K),
+    alist_remove x (alist_remove y l) = alist_remove y (alist_remove x l).
+Proof.
+  induction l ; eauto.
+  cbn. intros.
+  destruct_if_goal; cbn; eauto; rewrite ?H ?H0; eauto.
+  f_equiv. eauto.
+Qed.
+
+Lemma remove_ids_subseteq
+  {K} {RelDec_R: RelDec.RelDec eq} {RelEq_Correct : RelDec.RelDec_Correct RelDec_R}
+  {V} :
+  ∀ (L : list K) (l : alist K V) (x : K),
+  remove_ids L (alist_remove x l) ⊆ remove_ids L l.
+Proof.
+  intros L; induction L; cbn; eauto.
+  { intros. apply alist_remove_subseteq. }
+  intros. etransitivity.
+  2 : eapply IHL. rewrite alist_remove_commut.
+  unfold remove_ids. set_solver.
 Qed.
 
 (* ------------------------------------------------------------------------ *)
