@@ -41,10 +41,12 @@ theories/vir/frame_laws.v
 theories/vir/instr_laws.v
 theories/vir/interp_properties.v
 
-theories/vir/logical_relations.v
-theories/vir/fundamental_exp.v
-theories/vir/fundamental_exp_relaxed.v
-theories/vir/fundamental.v
+theories/vir/logrel/wellformedness.v
+theories/vir/logrel/logical_relations.v
+theories/vir/logrel/fundamental_exp.v
+theories/vir/logrel/fundamental_exp_relaxed.v
+theories/vir/logrel/fundamental.v
+
 theories/vir/adequacy.v
 
 theories/vir/contextual_mcfg.v

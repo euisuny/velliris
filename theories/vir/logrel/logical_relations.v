@@ -17,7 +17,7 @@ From Paco Require Import paco.
 From velliris.logic Require Import satisfiable.
 From velliris.program_logic Require Import program_logic.
 From velliris.vir Require Import
-   vir spec globalbij heapbij frame_laws primitive_laws bij_laws.
+   vir spec globalbij heapbij frame_laws primitive_laws bij_laws tactics.
 From velliris.utils Require Import no_event.
 Set Default Proof Using "Type*".
 
@@ -145,6 +145,35 @@ Definition local_env_spec {Σ} `{!vellirisGS Σ} :=
 
 Definition alloca_spec {Σ} `{!vellirisGS Σ} :=
   (gmap (loc * loc) Qp -> list Z -> list Z -> iProp Σ).
+
+(* ------------------------------------------------------------------------ *)
+(* Helper lemmas on auxiliary definitions for logical relation. *)
+Lemma intersection_local_ids_eq {T} (e : exp T):
+  intersection_local_ids e e = exp_local_ids e.
+Proof.
+  apply list_intersection_eq.
+Qed.
+
+(* Properties about [expr_local_env_inv] *)
+Lemma exp_local_ids_acc_commute {T} (e : exp T) acc :
+  exp_local_ids_ e acc = exp_local_ids e ++ acc.
+Proof.
+  revert acc.
+  induction e; cbn; try rewrite app_nil_r; eauto.
+  (* Ident *)
+  { destruct id; eauto. }
+  (* Binop *)
+  { intros.
+    do 2 rewrite IHe2. rewrite app_nil_r.
+    do 2 rewrite IHe1. by rewrite app_assoc. }
+  (* ICmp *)
+  { intros.
+    do 2 rewrite IHe2. rewrite app_nil_r.
+    do 2 rewrite IHe1. by rewrite app_assoc. }
+  (* GEP *)
+  { intros. destruct ptrval; cbn.
+    by rewrite app_assoc. }
+Qed.
 
 (* ------------------------------------------------------------------------ *)
 (** *Logical relations *)
@@ -391,8 +420,9 @@ End logical_relations_instance.
 
 Arguments local_bij_at : simpl never.
 
-
-Ltac destruct_code_inv :=
+(* ------------------------------------------------------------------------ *)
+(* Some tactics for destructing invariants *)
+Local Ltac destruct_code_inv :=
   match goal with
   | |- context [environments.Esnoc _ ?CI (code_inv _ _ _ _ _ _ _)] =>
       iDestruct CI as (args_t args_s) "(LI & AI)"
@@ -400,13 +430,13 @@ Ltac destruct_code_inv :=
       iDestruct CI as (nA_t nA_s args_t args_s) "(LI & AI)"
   end.
 
-Ltac destruct_CFG_inv :=
+Local Ltac destruct_CFG_inv :=
   match goal with
   | |- context [environments.Esnoc _ ?CI (CFG_inv _ _ _ _)] =>
       iDestruct CI as (args_t args_s) "(LI & Ha_t & Ha_s)"
   end.
 
-Ltac destruct_local_inv :=
+Local Ltac destruct_local_inv :=
   match goal with
   | |- context [environments.Esnoc _ ?RI (local_inv_bij _ _ _ _ _ _ _)]=>
       iDestruct RI as "(Hf & HL)"
@@ -416,25 +446,27 @@ Ltac destruct_local_inv :=
       iDestruct RI as (?) "(Hl_t & Hl_s & Hl_bij)"
   end.
 
-Ltac destruct_alloca_inv :=
+Local Ltac destruct_alloca_inv :=
   match goal with
   | |- context [environments.Esnoc _ ?RI (alloca_inv _ _ _ _ _ _)]=>
       iDestruct RI as "(Ha_t & Ha_s & %Hd_t & %Hd_s & AI)"
   end.
 
-Ltac destruct_SI :=
+Local Ltac destruct_SI :=
   match goal with
   | |- context [environments.Esnoc _ ?SI (state_interp _ _)]=>
       iDestruct SI as (???) "(Hh_s & Hh_t & H_c & Hbij & %Hdom_c & SI)"
   end.
 
-Ltac destruct_frame :=
+Local Ltac destruct_frame :=
   match goal with
   | |- context [environments.Esnoc _ ?SI (frame_γ _ _ _)]=>
       iDestruct SI as (?) "(Hs & Hd)"
   | |- context [environments.Esnoc _ ?SI (frame_inv _ _ _ _ _)]=>
       iDestruct SI as "(#WF_frame & CI & Hft & Hfs)"
   end.
+
+(* ------------------------------------------------------------------------ *)
 
 Section logical_relations_properties.
 
@@ -551,6 +583,99 @@ Section logical_relations_properties.
     iDestruct (ghost_var_agree with "Hd HD") as %Hd; by subst.
   Qed.
 
+  Lemma local_bij_elem_of {i_t i_s L_t L_s x}:
+    local_bij i_t i_s L_t L_s -∗
+    ⌜x ∈ L_t.*1 <-> x ∈ L_s.*1⌝.
+  Proof.
+    iIntros "HB". iDestruct "HB" as (?) "HB";
+      iPureIntro; split; intros; subst;
+      (rewrite H + rewrite -H); auto.
+  Qed.
+
+  (* ------------------------------------------------------------------------ *)
+  (* Remove an id that's in the local bijection. *)
+  Lemma local_bij_remove {i_t i_s L_t L_s} x:
+    x ∈ L_t.*1 ->
+    local_bij i_t i_s L_t L_s -∗
+    ∃ v_t v_s,
+      [ x := v_t ]t i_t ∗
+      [ x := v_s ]s i_s ∗
+      uval_rel v_t v_s ∗
+      local_bij i_t i_s (alist_remove x L_t) (alist_remove x L_s).
+  Proof.
+    iIntros (H) "Hbij". destruct_local_inv.
+
+    iDestruct (lmapsto_no_dup with "Hl_t") as "%Hdup_t".
+    iDestruct (lmapsto_no_dup with "Hl_s") as "%Hdup_s".
+
+    pose proof (elem_of_fst_list_some _ _ H) as (?&?&?). rewrite H0 in H.
+    pose proof (elem_of_fst_list_some _ _ H) as (?&?&?).
+
+    iDestruct (big_sepL_delete with "Hl_t") as "(Helemt & Hl_t)";
+      eauto; cbn.
+    iDestruct (big_sepL_delete with "Hl_s") as "(Helems & Hl_s)";
+      eauto; cbn.
+    pose proof (no_dup_fst_list_some _ _ _ _ _ _ _ Hdup_t Hdup_s H0 H1 H2);
+      subst.
+    iExists x1, x3; iFrame.
+
+    iAssert (uval_rel x1 x3) as "#Hv'".
+    { iDestruct (big_sepL2_lookup _ _ _ x2 with "Hl_bij") as "H"; eauto.
+      { by eapply list_lookup_snd. }
+      { by eapply list_lookup_snd. } }
+
+    iFrame "Hv'".
+    rewrite /local_bij; iFrame.
+    iPoseProof (big_sepL_alist_remove _ _ _ _ _ H1 Hdup_t with "Hl_t")
+      as "Hl_t"; iFrame.
+    iPoseProof (big_sepL_alist_remove _ _ _ _ _ H2 Hdup_s with "Hl_s")
+      as "Hl_s"; iFrame.
+    iSplitL "".
+    { iPureIntro. by apply alist_remove_fst_eq. }
+
+    iPoseProof (big_sepL2_alist_remove _ _ _ _ _ _ uval_rel with "Hl_bij")
+      as "HR"; eauto.
+  Qed.
+
+  (* Remove an id that's in the local bijection. *)
+  Lemma local_bij_add {i_t i_s L_t L_s} x v_t v_s:
+    [ x := v_t ]t i_t -∗
+    [ x := v_s ]s i_s -∗
+    uval_rel v_t v_s -∗
+    local_bij i_t i_s L_t L_s -∗
+    local_bij i_t i_s (alist_add x v_t L_t) (alist_add x v_s L_s).
+  Proof.
+    iIntros "Hvt Hvs Hv Hbij". destruct_local_inv; iFrame.
+    iSplitL "".
+    { iPureIntro; by eapply alist_add_fst_eq. }
+
+    iDestruct (lmapsto_no_dup with "Hl_t") as "%Hdup_t".
+    iDestruct (lmapsto_no_dup with "Hl_s") as "%Hdup_s".
+    destruct (decide (x ∈ L_t)).
+
+    (* iDestruct (big_sepL_delete with "Hl_t") as "(Helemt & Hl_t)"; *)
+    (*   eauto; cbn. *)
+    (* iDestruct (big_sepL_delete with "Hl_s") as "(Helems & Hl_s)"; *)
+    (*   eauto; cbn. *)
+    (* pose proof (no_dup_fst_list_some _ _ _ _ _ _ _ Hdup_t Hdup_s H0 H1 H2); *)
+    (*   subst. *)
+    (* iExists x1, x3; iFrame. *)
+
+    (* iAssert (uval_rel x1 x3) as "#Hv'". *)
+    (* { iDestruct (big_sepL2_lookup _ _ _ x2 with "Hl_bij") as "H"; eauto. *)
+    (*   { by eapply list_lookup_snd. } *)
+    (*   { by eapply list_lookup_snd. } } *)
+  Admitted.
+
+  Lemma local_bij_add_remove {i_t i_s x v_t v_s L_t L_s}:
+    x ∈ L_t.*1 ->
+    uval_rel v_t v_s -∗
+    local_bij i_t i_s
+      (alist_add x v_t (alist_remove x L_t))
+      (alist_add x v_s (alist_remove x L_s)) -∗
+    local_bij i_t i_s L_t L_s.
+  Proof. Admitted.
+
 End logical_relations_properties.
 
 Section WF_def_properties.
@@ -644,39 +769,13 @@ Section WF_def_properties.
 
 End WF_def_properties.
 
+
 Section logical_relations_properties.
 
   Context {Σ : gFunctors} `{!vellirisGS Σ}.
 
-  (* Auxiliary definitions for invariants. *)
-
-  (* Helper lemmas on [expr_local_env_inv] *)
-  Lemma intersection_local_ids_eq {T} (e : exp T):
-    intersection_local_ids e e = exp_local_ids e.
-  Proof.
-    apply list_intersection_eq.
-  Qed.
-
-  (* Properties about [expr_local_env_inv] *)
-  Lemma exp_local_ids_acc_commute {T} (e : exp T) acc :
-    exp_local_ids_ e acc = exp_local_ids e ++ acc.
-  Proof.
-    revert acc.
-    induction e; cbn; try rewrite app_nil_r; eauto.
-    (* Ident *)
-    { destruct id; eauto. }
-    (* Binop *)
-    { intros.
-      do 2 rewrite IHe2. rewrite app_nil_r.
-      do 2 rewrite IHe1. by rewrite app_assoc. }
-    (* ICmp *)
-    { intros.
-      do 2 rewrite IHe2. rewrite app_nil_r.
-      do 2 rewrite IHe1. by rewrite app_assoc. }
-    (* GEP *)
-    { intros. destruct ptrval; cbn.
-      by rewrite app_assoc. }
-  Qed.
+  (* ------------------------------------------------------------------------ *)
+  (* Local bij properties *)
 
   Lemma local_bij_at_nil i_t i_s L_t L_s:
     (local_bij_at nil i_t i_s L_t L_s ⊣⊢ emp)%I.
@@ -1116,32 +1215,6 @@ Section logical_relations_properties.
     destruct Heq; iExists _, _; by iFrame.
   Qed.
 
-  (* Lemma local_code_refl_inv σ_t σ_s C i_t i_s A_t A_s L_t L_s: *)
-  (*   ⊢ code_refl_inv C i_t i_s A_t A_s L_t L_s -∗ *)
-  (*   state_interp σ_t σ_s ==∗ *)
-  (*   ∃ args_t args_s, *)
-  (*     ⌜(list_to_set args_t.*1 : gset _) = list_to_set (vlocal σ_t).1.*1⌝ ∗ *)
-  (*     ⌜(list_to_set args_s.*1 : gset _) = list_to_set (vlocal σ_s).1.*1⌝ ∗ *)
-  (*     ⌜(remove_ids L_t args_t).*1 = (remove_ids L_s args_s).*1⌝ ∗ *)
-  (*     ⌜NoDup A_t⌝ ∗ ⌜NoDup A_s⌝ ∗ *)
-  (*     ([∗ list] '(l_t, v_t) ∈ remove_ids L_t args_t, [ l_t := v_t ]t i_t) ∗ *)
-  (*     ([∗ list] '(l_s, v_s) ∈ remove_ids L_s args_s, [ l_s := v_s ]s i_s) ∗ *)
-  (*     ([∗ list] v_t;v_s ∈ A_t;A_s, (v_t, 0) ↔h (v_s, 0) *)
-  (*        ∗ ⌜C !! (v_t, v_s) = None⌝) ∗ *)
-  (*     ([∗ list] v_t; v_s ∈ (remove_ids L_t args_t).*2; *)
-  (*      (remove_ids L_s args_s).*2, uval_rel v_t v_s) ∗ *)
-  (*     state_interp σ_t σ_s ∗ *)
-  (*     frame_inv i_t i_s args_t args_s C ∗ *)
-  (*     alloca_tgt i_t (list_to_set A_t) ∗ alloca_src i_s (list_to_set A_s). *)
-  (* Proof. *)
-  (*   iIntros "CI SI". *)
-  (*   iDestruct (local_code_inv with "CI SI") as ">H". *)
-  (*   iDestruct "H" as (????) *)
-  (*       "(%Hnd_t & %Hnd_s & Hlt & Hls & Hv & Hf & Ha_t & Ha_s)". *)
-  (*   iFrame. iExists args_t, args_s; iFrame. *)
-  (*   destruct_refl_inv. rewrite H H0. iFrame "Hlocal_bij Hl_t Hl_s". done. *)
-  (* Qed. *)
-
   Lemma local_CFG_inv {ΠL σ_t σ_s C i_t i_s}:
     ⊢ CFG_inv ΠL C i_t i_s -∗
     state_interp σ_t σ_s -∗
@@ -1156,298 +1229,6 @@ Section logical_relations_properties.
     iDestruct (local_inv_SI with "LI SI") as %Heq.
     destruct Heq; iExists _, _; by iFrame.
   Qed.
-
-  (* Local write reflexivity: we can do local writes on
-     source while maintaining the [code_inv] invariant. *)
-  (* Lemma source_local_write_sim {R} *)
-  (*   C ΠL ΠA v_s i_t i_s A_t A_s l_s Φ (e_t: _ R): *)
-  (*   code_inv ΠL ΠA C i_t i_s A_t A_s -∗ *)
-  (*   (code_inv ΠL ΠA C i_t i_s A_t A_s -∗ *)
-  (*     e_t ⪯ (Ret tt) [{ Φ }]) -∗ *)
-  (*   e_t ⪯ (trigger (LocalWrite l_s v_s)) [{Φ}]. *)
-  (* Proof. *)
-  (*   iIntros "CI H". *)
-
-  (*   iApply sim_update_si; iIntros (σ_t σ_s) "SI". *)
-
-  (*   (* Get information out of the invariant. *) *)
-  (*   iDestruct (code_inv_SI with "CI SI") as "H'". *)
-  (*   iDestruct "H'" as (????) "(HL & HA & SI)"; iFrame. *)
-
-  (*   (* It's already allocated at source *) *)
-  (*   destruct (decide (l_s ∈ (vlocal σ_s).1.*1)). *)
-  (*   { eapply (assoc_list_elem_of_lookup _ args_s) in e; eauto. *)
-  (*     destruct e as (?&?&?). *)
-  (*     iDestruct (lmapsto_no_dup with "Hls") as "%Hdup_s". *)
-  (*     iDestruct (big_sepL_delete with "Hls") as "(Helems & Hl_s)"; eauto; *)
-  (*       cbn -[subevent state_interp]. iFrame. *)
-  (*     iApply source_red_sim_expr. *)
-  (*     iApply (source_red_mono with "[H]"); *)
-  (*       last (iApply (source_local_write with "Helems Hd_s Hf_s")); cycle 1. *)
-  (*     { iModIntro; iIntros "Hs Hd_s Hs_s". *)
-  (*       iApply source_red_base. Unshelve. *)
-  (*       2 : exact (fun x => ⌜x = Ret tt⌝ ∗ *)
-  (*         code_inv I *)
-  (*         C i_t i_s A_t A_s L_t (l_s :: L_s))%I. *)
-  (*       iFrame. iSplitL ""; first done. *)
-  (*       iExists args_t, (alist_add l_s v_s args_s); iFrame; *)
-  (*         iFrame "WF Ha_v". *)
-  (*       rewrite H ?H0; iFrame. *)
-  (*       setoid_rewrite alist_add_domain_stable; cycle 1. *)
-  (*       { apply alist_find_to_map_Some; eauto. *)
-  (*         eapply alist_find_Some; eauto. } *)
-
-  (*       rewrite H0; iFrame. *)
-  (*       iSplitL "Hl_s"; cycle 1. *)
-  (*       { iSplitR ""; last done. *)
-  (*         iApply "HI"; last iApply "Hv"; first set_solver. *)
-  (*         rewrite remove_id_cons_alist_add. *)
-  (*         iPureIntro; apply remove_ids_subseteq. } *)
-  (*       by iApply (big_sepL_alist_remove with "Hl_s"). } *)
-
-  (*     { cbn. iIntros (?) "(%Heq & H')"; subst. *)
-  (*       iApply ("H" with "H'"). } } *)
-
-  (*   (* It's not allocated at the source. *) *)
-  (*   { iFrame. iApply source_red_sim_expr. *)
-  (*     iApply (source_red_mono with "[H]"); *)
-  (*       last iApply (source_local_write_alloc with "Hd_s Hf_s"); cycle 1. *)
-  (*     { set_solver. } *)
-  (*     { iModIntro; iIntros "Hs Hd_s Hf_s". *)
-  (*       iApply source_red_base. Unshelve. *)
-  (*       2 : exact (fun x => ⌜x = Ret tt⌝ ∗ *)
-  (*         code_inv I *)
-  (*         C i_t i_s A_t A_s L_t (l_s :: L_s))%I. *)
-  (*       iFrame. iSplitL ""; first done. *)
-  (*       iExists args_t, (alist_add l_s v_s args_s); iFrame; *)
-  (*         iFrame "WF Ha_v". *)
-  (*       rewrite H list_to_set_insert H0; iFrame. *)
-  (*       rewrite remove_id_cons_alist_add; iFrame. *)
-  (*       rewrite alist_remove_not_in; [ | set_solver]; iFrame; done. } *)
-
-  (*     { cbn. iIntros (?) "(%Heq & H')"; subst. *)
-  (*       iApply ("H" with "H'"). } } *)
-  (* Qed. *)
-
-  (* Lemma target_local_write_sim {R} *)
-  (*   C I v_t i_t i_s A_t A_s l_t Φ (e_s: _ R) L_t L_s: *)
-  (*   □ (∀ L_t L_s L_t' L_s', *)
-  (*         ⌜L_t' ⊆ L_t⌝ -∗ *)
-  (*         ⌜L_s' ⊆ L_s⌝ -∗ *)
-  (*         I L_t L_s -∗ I L_t' L_s') -∗ *)
-  (*   code_inv I C i_t i_s A_t A_s L_t L_s -∗ *)
-  (*   (code_inv I C i_t i_s A_t A_s (l_t :: L_t) L_s -∗ *)
-  (*     Ret tt ⪯ e_s [{ Φ }]) -∗ *)
-  (*   trigger (LocalWrite l_t v_t) ⪯ e_s [{Φ}]. *)
-  (* Proof. *)
-  (*   iIntros "#HI CI H". *)
-  (*   iApply sim_update_si; iIntros (σ_t σ_s) "SI". *)
-
-  (*   (* Get information out of the invariant. *) *)
-  (*   iDestruct (local_code_inv with "CI SI") as ">H'". *)
-  (*   iDestruct "H'" as (????) *)
-  (*       "(%Hnd_t & %Hnd_s & Hlt & Hls & Hv & #Ha_v & SI & Hd_t & Hd_s *)
-  (*         & HC & Hf_t & Hf_s & #WF & Ha_t & Ha_s)". *)
-
-  (*   (* It's already allocated at target *) *)
-  (*   destruct (decide (l_t ∈ (vlocal σ_t).1.*1)). *)
-  (*   { eapply (assoc_list_elem_of_lookup _ args_t) in e; eauto. *)
-  (*     destruct e as (?&?&?). *)
-  (*     iDestruct (lmapsto_no_dup with "Hlt") as "%Hdup_t". *)
-  (*     iDestruct (big_sepL_delete with "Hlt") as "(Helemt & Hl_t)"; eauto; *)
-  (*       cbn -[subevent state_interp]. iFrame. *)
-  (*     iApply target_red_sim_expr. *)
-  (*     iApply (target_red_mono with "[H]"); *)
-  (*       last (iApply (target_local_write with "Helemt Hd_t Hf_t")); cycle 1. *)
-  (*     { iModIntro; iIntros "Ht Hd_t Hs_t". *)
-  (*       iApply target_red_base. Unshelve. *)
-  (*       2 : exact (fun x => ⌜x = Ret tt⌝ ∗ *)
-  (*         code_inv I *)
-  (*         C i_t i_s A_t A_s (l_t :: L_t) L_s)%I. *)
-  (*       iFrame. iSplitL ""; first done. *)
-  (*       iExists (alist_add l_t v_t args_t), args_s; iFrame; *)
-  (*         iFrame "WF Ha_v". *)
-  (*       rewrite ?H ?H0; iFrame. *)
-  (*       setoid_rewrite alist_add_domain_stable; cycle 1. *)
-  (*       { apply alist_find_to_map_Some; eauto. *)
-  (*         eapply alist_find_Some; eauto. } *)
-
-  (*       rewrite H; iFrame. *)
-  (*       iSplitL "Hl_t"; cycle 1. *)
-  (*       { iSplitR ""; last done. *)
-  (*         iApply "HI"; last iApply "Hv"; last set_solver. *)
-  (*         rewrite remove_id_cons_alist_add. *)
-  (*         iPureIntro; apply remove_ids_subseteq. } *)
-  (*       by iApply (big_sepL_alist_remove with "Hl_t"). } *)
-
-  (*     { cbn. iIntros (?) "(%Heq & H')"; subst. *)
-  (*       iApply ("H" with "H'"). } } *)
-
-  (*   (* It's not allocated at the target. *) *)
-  (*   { iFrame. iApply target_red_sim_expr. *)
-  (*     iApply (target_red_mono with "[H]"); *)
-  (*       last iApply (target_local_write_alloc with "Hd_t Hf_t"); cycle 1. *)
-  (*     { set_solver. } *)
-  (*     { iModIntro; iIntros "Ht Hd_t Hf_t". *)
-  (*       iApply target_red_base. Unshelve. *)
-  (*       2 : exact (fun x => ⌜x = Ret tt⌝ ∗ *)
-  (*         code_inv I *)
-  (*         C i_t i_s A_t A_s (l_t :: L_t) L_s)%I. *)
-  (*       iFrame. iSplitL ""; first done. *)
-  (*       iExists (alist_add l_t v_t args_t), args_s; iFrame; *)
-  (*         iFrame "WF Ha_v". *)
-  (*       rewrite list_to_set_insert H H0; iFrame. *)
-  (*       rewrite remove_id_cons_alist_add; iFrame. *)
-  (*       rewrite alist_remove_not_in; [ | set_solver]; iFrame; done. } *)
-
-  (*     { cbn. iIntros (?) "(%Heq & H')"; subst. *)
-  (*       iApply ("H" with "H'"). } } *)
-  (* Qed. *)
-
-  Lemma local_bij_elem_of {i_t i_s L_t L_s x}:
-    local_bij i_t i_s L_t L_s -∗
-    ⌜x ∈ L_t.*1 <-> x ∈ L_s.*1⌝.
-  Proof.
-    iIntros "HB". iDestruct "HB" as (?) "HB";
-      iPureIntro; split; intros; subst;
-      (rewrite H + rewrite -H); auto.
-  Qed.
-
-(* Ltac destruct_local_inv := *)
-(*   match goal with *)
-(*   | |- context [environments.Esnoc _ ?RI (local_inv_bij _ _ _ _ _ _ _)]=> *)
-(*       iDestruct RI as "(Hf & HL)" *)
-(*   | |- context [environments.Esnoc _ ?RI (local_inv _ _ _ _ _ _)]=> *)
-(*       iDestruct RI as "(Hf & HL)" *)
-(*   | |- context [environments.Esnoc _ ?RI (local_bij _ _ _ _)]=> *)
-(*       iDestruct RI as (?) "(Hl_t & Hl_s & Hl_bij)" *)
-(*   end. *)
-
-  (* TODO Move *)
-  Lemma alist_remove_fst_eq {K : Type}
-    {RelDec_R : RelDec.RelDec eq}
-    {RelDec_C: RelDec.RelDec_Correct RelDec_R} :
-    ∀ {V : Type} (l l' : alist K V) (x : K),
-      l.*1 = l'.*1 ->
-      (alist_remove x l).*1 = (alist_remove x l').*1.
-  Proof.
-    induction l; intros; (destruct l'; inv H; eauto).
-    destruct a, p; inv H1. cbn in *; subst.
-    destruct_if_goal; cbn; try solve [f_equiv; eauto].
-    by eapply IHl.
-  Qed.
-
-  Lemma alist_add_fst_eq {K : Type}
-    {RelDec_R : RelDec.RelDec eq}
-    {RelDec_C: RelDec.RelDec_Correct RelDec_R} :
-    ∀ {V : Type} (l l' : alist K V) (x : K) v v',
-      l.*1 = l'.*1 ->
-      (alist_add x v l).*1 = (alist_add x v' l').*1.
-  Proof.
-    cbn. intros. f_equiv.
-    by apply alist_remove_fst_eq.
-  Qed.
-
-  Lemma big_sepL2_alist_remove
-    {PROP K} `{BiAffine PROP}
-    {RelDec_R: RelDec.RelDec eq} {RelEq_Correct : RelDec.RelDec_Correct RelDec_R}
-    {V} :
-    forall (l l' : alist K V) x n v v' (R : _ -> _ -> PROP),
-    l !! n = Some (x, v) ->
-    l' !! n = Some (x, v') ->
-    NoDup l.*1 ->
-    NoDup l'.*1 ->
-    ([∗ list] v1; v2 ∈ l.*2; l'.*2, R v1 v2) -∗
-    ([∗ list] v1; v2 ∈ (alist_remove x l).*2; (alist_remove x l').*2, R v1 v2).
-  Proof.
-    intros l.
-    iInduction l as [ | ] "IH".
-  Admitted.
-
-  (* Remove an id that's in the local bijection. *)
-  Lemma local_bij_remove {i_t i_s L_t L_s} x:
-    x ∈ L_t.*1 ->
-    local_bij i_t i_s L_t L_s -∗
-    ∃ v_t v_s,
-      [ x := v_t ]t i_t ∗
-      [ x := v_s ]s i_s ∗
-      uval_rel v_t v_s ∗
-      local_bij i_t i_s (alist_remove x L_t) (alist_remove x L_s).
-  Proof.
-    iIntros (H) "Hbij". destruct_local_inv.
-
-    iDestruct (lmapsto_no_dup with "Hl_t") as "%Hdup_t".
-    iDestruct (lmapsto_no_dup with "Hl_s") as "%Hdup_s".
-
-    pose proof (elem_of_fst_list_some _ _ H) as (?&?&?). rewrite H0 in H.
-    pose proof (elem_of_fst_list_some _ _ H) as (?&?&?).
-
-    iDestruct (big_sepL_delete with "Hl_t") as "(Helemt & Hl_t)";
-      eauto; cbn.
-    iDestruct (big_sepL_delete with "Hl_s") as "(Helems & Hl_s)";
-      eauto; cbn.
-    pose proof (no_dup_fst_list_some _ _ _ _ _ _ _ Hdup_t Hdup_s H0 H1 H2);
-      subst.
-    iExists x1, x3; iFrame.
-
-    iAssert (uval_rel x1 x3) as "#Hv'".
-    { iDestruct (big_sepL2_lookup _ _ _ x2 with "Hl_bij") as "H"; eauto.
-      { by eapply list_lookup_snd. }
-      { by eapply list_lookup_snd. } }
-
-    iFrame "Hv'".
-    rewrite /local_bij; iFrame.
-    iPoseProof (big_sepL_alist_remove _ _ _ _ _ H1 Hdup_t with "Hl_t")
-      as "Hl_t"; iFrame.
-    iPoseProof (big_sepL_alist_remove _ _ _ _ _ H2 Hdup_s with "Hl_s")
-      as "Hl_s"; iFrame.
-    iSplitL "".
-    { iPureIntro. by apply alist_remove_fst_eq. }
-
-    iPoseProof (big_sepL2_alist_remove _ _ _ _ _ _ uval_rel with "Hl_bij")
-      as "HR"; eauto.
-  Qed.
-
-  (* Remove an id that's in the local bijection. *)
-  Lemma local_bij_add {i_t i_s L_t L_s} x v_t v_s:
-    [ x := v_t ]t i_t -∗
-    [ x := v_s ]s i_s -∗
-    uval_rel v_t v_s -∗
-    local_bij i_t i_s L_t L_s -∗
-    local_bij i_t i_s (alist_add x v_t L_t) (alist_add x v_s L_s).
-  Proof.
-    iIntros "Hvt Hvs Hv Hbij". destruct_local_inv; iFrame.
-    iSplitL "".
-    { iPureIntro; by eapply alist_add_fst_eq. }
-
-    iDestruct (lmapsto_no_dup with "Hl_t") as "%Hdup_t".
-    iDestruct (lmapsto_no_dup with "Hl_s") as "%Hdup_s".
-    destruct (decide (x ∈ L_t)).
-
-    (* iDestruct (big_sepL_delete with "Hl_t") as "(Helemt & Hl_t)"; *)
-    (*   eauto; cbn. *)
-    (* iDestruct (big_sepL_delete with "Hl_s") as "(Helems & Hl_s)"; *)
-    (*   eauto; cbn. *)
-    (* pose proof (no_dup_fst_list_some _ _ _ _ _ _ _ Hdup_t Hdup_s H0 H1 H2); *)
-    (*   subst. *)
-    (* iExists x1, x3; iFrame. *)
-
-    (* iAssert (uval_rel x1 x3) as "#Hv'". *)
-    (* { iDestruct (big_sepL2_lookup _ _ _ x2 with "Hl_bij") as "H"; eauto. *)
-    (*   { by eapply list_lookup_snd. } *)
-    (*   { by eapply list_lookup_snd. } } *)
-  Admitted.
-
-  Lemma local_bij_add_remove {i_t i_s x v_t v_s L_t L_s}:
-    x ∈ L_t.*1 ->
-    uval_rel v_t v_s -∗
-    local_bij i_t i_s
-      (alist_add x v_t (alist_remove x L_t))
-      (alist_add x v_s (alist_remove x L_s)) -∗
-    local_bij i_t i_s L_t L_s.
-  Proof. Admitted.
-
-  From velliris.vir Require Import tactics.
 
   Lemma sim_local_write_frame
     (x_t x_s : LLVMAst.raw_id) (v_t v_s : uvalue) v_t' v_s' i_t i_s L_t L_s C:
@@ -1465,11 +1246,6 @@ Section logical_relations_properties.
     iIntros (??) "H"; iDestruct "H" as (????) "(Ht & Hs & Hs_t & Hs_s)".
     iExists _, _; iFrame; by iFrame "WF_frame".
   Qed.
-
-  Ltac sfinal :=
-    repeat iExists _;
-    repeat (iSplitL ""; first (iPureIntro; done));
-    iFrame; try done.
 
   (* Local write reflexivity *)
   Lemma local_write_refl C x v_t v_s i_t i_s A_t A_s:
@@ -1495,285 +1271,32 @@ Section logical_relations_properties.
     { destruct_local_inv.
   Admitted.
 
-  (*     iApply (sim_expr_bupd_mono with "[HC Ha_t Ha_s Hv Hlt Hls]"); *)
-  (*       [ | iApply (sim_local_write_alloc _ _ _ _ _ _ _ _ Hn Hn1 with "Hd_t Hd_s Hf_t Hf_s")]. *)
-  (*     iIntros (??) "Hp". *)
-  (*     iDestruct "Hp" as (????) "(Ht & Hs & Hd_t & Hd_s & Hf_t & Hf_s)". *)
-  (*     iModIntro. iExists _,_. *)
-  (*     do 2 (iSplitL ""; [ done | ]). rewrite /CFG_inv. *)
-  (*     iExists ((x, v_t) :: args_t), ((x, v_s) :: args_s); iFrame. *)
-  (*     cbn. rewrite H0 H1; iFrame. *)
-  (*     iFrame "WF". *)
-  (*     iSplitL "Hd_t". *)
-  (*     { cbn in *. rewrite -H1 H; done. } *)
-  (*     rewrite /refl_inv. *)
-  (*     iSplitL ""; last done. *)
-  (*     iSplitL "". *)
-  (*     { cbn. iPureIntro. f_equiv; eauto. } *)
-  (*     by iFrame "Hrel Ha_v". } *)
-  (* Qed. *)
-
   Lemma local_write_refl_cfg C x v_t v_s i_t i_s :
     ⊢ CFG_refl_inv C i_t i_s -∗ uval_rel v_t v_s -∗
     trigger (LocalWrite x v_t) ⪯ trigger (LocalWrite x v_s)
       [{ (v1, v2), CFG_refl_inv C i_t i_s }].
   Proof.
     iIntros "CI #Hrel".
-    iApply sim_update_si.
-
-    iIntros "%σ_t %σ_s SI".
-    iDestruct (local_CFG_inv with "CI SI") as ">H".
-    iDestruct "H" as
-      (????)
-        "(Hlt & Hls & Hv & SI & Hd_t & Hd_s & HC & Hf_t & Hf_s & Ha_t & Ha_s)".
-    iFrame.
-    iDestruct "Hv" as (Heq) "Hv".
-
-    destruct (decide (x ∈ (vlocal σ_t).1.*1)).
-    {
-      assert (exists n v, args_t !! n = Some (x, v)).
-      { eapply (@elem_of_list_to_set raw_id (@gset local_loc _ _)) in e.
-        Unshelve. all : try typeclasses eauto.
-        cbn in *. rewrite -H in e.
-        rewrite elem_of_list_to_set in e.
-        by apply elem_of_fst_list_some. }
-
-      assert (exists n v, args_s !! n = Some (x, v)).
-      { rewrite Heq in H. clear -H e.
-        eapply (@elem_of_list_to_set raw_id (@gset local_loc _ _)) in e.
-        Unshelve. all : try typeclasses eauto.
-        setoid_rewrite <-H in e. clear -e.
-        rewrite elem_of_list_to_set in e.
-        by apply elem_of_fst_list_some. }
-      destruct H1 as (?&?&?).
-      destruct H2 as (?&?&?).
-
-      iDestruct (lmapsto_no_dup with "Hlt") as "%Hdup_t".
-      iDestruct (lmapsto_no_dup with "Hls") as "%Hdup_s".
-
-      iDestruct (big_sepL_delete with "Hlt") as "(Helemt & Hl_t)"; eauto; cbn.
-      iDestruct (big_sepL_delete with "Hls") as "(Helems & Hl_s)"; eauto; cbn.
-
-      iApply (sim_expr_bupd_mono with "[Hl_t Hl_s Hd_t Hd_s HC Hv Ha_t Ha_s]");
-        [ | iApply (sim_local_write with "Hf_t Hf_s Helemt Helems")].
-      iIntros (??) "Hp".
-      iDestruct "Hp" as (????) "(Ht & Hs & Hf_t & Hf_s)".
-
-      iModIntro. iExists _,_.
-      do 2 (iSplitL ""; [ done | ]); rewrite /CFG_inv.
-
-      pose proof (no_dup_fst_list_some _ _ _ _ _ _ _ Hdup_t Hdup_s Heq H1 H2); subst.
-      iExists (<[x2 := (x, v_t)]> args_t),
-              (<[x2 := (x, v_s)]> args_s). iFrame.
-
-      setoid_rewrite (big_sepL_delete (fun i '(l_t, v_t1)=> [ l_t := v_t1 ]t i_t) _ x2 (x, v_t))%I; cycle 1.
-      { rewrite list_lookup_insert; eauto.
-        by apply lookup_lt_is_Some. }
-      setoid_rewrite (big_sepL_delete (fun i '(l_t, v_t1)=> [ l_t := v_t1 ]s i_s) _ x2 (x, v_s))%I; cycle 1.
-      { rewrite list_lookup_insert; eauto.
-        by apply lookup_lt_is_Some. }
-      iFrame.
-
-      do 2 (erewrite list_lookup_insert_list_to_set; eauto).
-      rewrite H H0; iFrame.
-      rewrite /refl_inv; rewrite !list_insert_fst; cbn.
-
-      iSplitL "Hl_t".
-      { by iApply big_sepL_delete_insert. }
-      iSplitL "Hl_s".
-      { by iApply big_sepL_delete_insert. }
-      iSplitL ""; first ( iPureIntro; by f_equiv ).
-
-      rewrite /refl_inv !list_insert_snd.
-      iApply (big_sepL2_insert args_t.*2 args_s.*2 uval_rel with "Hrel Hv"). }
-
-    { assert (Hn : x ∉ (list_to_set (vlocal σ_t).1.*1 : gset _)) by set_solver.
-      assert (Hn1 : x ∉ (list_to_set (vlocal σ_s).1.*1 : gset _)).
-      { rewrite -H0 -Heq.  set_solver. }
-      iApply (sim_expr_bupd_mono with "[HC Ha_t Ha_s Hv Hlt Hls]");
-        [ | iApply (sim_local_write_alloc _ _ _ _ _ _ _ _ Hn Hn1 with "Hd_t Hd_s Hf_t Hf_s")].
-      iIntros (??) "Hp".
-      iDestruct "Hp" as (????) "(Ht & Hs & Hd_t & Hd_s & Hf_t & Hf_s)".
-      iModIntro. iExists _,_.
-      do 2 (iSplitL ""; [ done | ]). rewrite /CFG_inv.
-      iExists ((x, v_t) :: args_t), ((x, v_s) :: args_s); iFrame.
-      cbn. rewrite H H0; iFrame.
-      rewrite Heq; iSplit; done. }
-  Qed.
+  Admitted.
 
   Lemma expr_local_read_refl {T} x i_t i_s L_t L_s (e_t e_s : exp T):
     x ∈ intersection_local_ids e_t e_s ->
     ⊢ expr_local_bij i_t i_s L_t L_s e_t e_s -∗
     trigger (LocalRead x) ⪯ trigger (LocalRead x)
       [{ (v1, v2), uval_rel v1 v2 ∗ expr_local_bij i_t i_s L_t L_s e_t e_s }].
-  Proof.
-    iIntros (He) "CI".
-    iApply sim_update_si.
-
-    iIntros "%σ_t %σ_s SI".
-    iDestruct (local_expr_local_bij with "CI SI") as ">H".
-    iDestruct "H" as
-        "(SI & Hv & %Hndt & %Hnds & %Ht & %Hs & Hd_t & Hd_s & HC & Hs_t & Hs_s & Hwf)".
-    iFrame.
-
-    apply elem_of_list_lookup_1 in He. destruct He.
-
-    iDestruct (big_sepL_delete with "Hv") as "(Helemt & Hl_t)"; eauto; cbn.
-    iDestruct "Helemt" as (????) "(Helemt & Helems & #Hv)".
-
-    iApply (sim_expr_bupd_mono with "[Hd_t Hd_s HC Hwf Hv Hl_t]");
-      [ | iApply (sim_local_read with "Helemt Helems Hs_t Hs_s")].
-    iIntros (??) "Hp".
-    iDestruct "Hp" as (????) "(%Ht' & %Hs' & Ht' & Hs' & Hf_t' & Hf_s')";
-      subst.
-    iModIntro. iExists _,_.
-    do 2 (iSplitL ""; [ done | ]).
-    iFrame.
-    rewrite Ht Hs; iFrame.
-
-    setoid_rewrite big_sepL_delete at 2; eauto; iFrame; iFrame "Hv".
-    iSplitL ""; first done. iExists v_t', v_s'; iFrame; by iFrame "Hv".
-  Qed.
+  Proof. Admitted.
 
   Lemma local_read_refl C x i_t i_s A_t A_s:
     ⊢ code_refl_inv C i_t i_s A_t A_s -∗
     trigger (LocalRead x) ⪯ trigger (LocalRead x)
       [{ (v1, v2), uval_rel v1 v2 ∗ code_refl_inv C i_t i_s A_t A_s }].
-  Proof.
-    iIntros "CI".
-    iApply sim_update_si.
-
-    iIntros "%σ_t %σ_s SI".
-    iDestruct (local_code_refl_inv with "CI SI") as ">H".
-    iDestruct "H" as
-      (args_t args_s  Ht Hs Hdom Hnd_t Hnd_s)
-        "(Hlt & Hls & Hv & #Hav & SI & Hf_t & Hf_s & HC & Hs_t & Hs_s & #HWF& Ha_t & Ha_s)".
-    iFrame.
-
-    (* TODO: Refactor *)
-    destruct (decide (x ∈ (vlocal σ_t).1.*1)).
-    {
-      assert (exists n v, args_t !! n = Some (x, v)).
-      { eapply (@elem_of_list_to_set raw_id (@gset local_loc _ _)) in e.
-        Unshelve. all : try typeclasses eauto.
-        setoid_rewrite <-Ht in e. clear -e.
-        rewrite elem_of_list_to_set in e.
-        by apply elem_of_fst_list_some. }
-
-      assert (exists n v, args_s !! n = Some (x, v)).
-      { rewrite Hdom in Ht. clear -Ht e.
-        eapply (@elem_of_list_to_set raw_id (@gset local_loc _ _)) in e.
-        Unshelve. all : try typeclasses eauto.
-        setoid_rewrite <-Ht in e. clear -e.
-        rewrite elem_of_list_to_set in e.
-        by apply elem_of_fst_list_some. }
-
-      destruct H0 as (?&?&?).
-      destruct H as (?&?&?).
-
-      iDestruct (lmapsto_no_dup with "Hlt") as "%Hdup_t".
-      iDestruct (lmapsto_no_dup with "Hls") as "%Hdup_s".
-      pose proof (no_dup_fst_list_some _ _ _ _ _ _ _ Hdup_t Hdup_s Hdom H H0);
-        subst.
-
-      iDestruct (big_sepL_delete with "Hlt") as "(Helemt & Hl_t)"; eauto; cbn.
-      iDestruct (big_sepL_delete with "Hls") as "(Helems & Hl_s)"; eauto; cbn.
-
-      iApply (sim_expr_bupd_mono with "[Hl_t Hl_s Hf_t Hf_s HC Hv Ha_t Ha_s]");
-        [ | iApply (sim_local_read with "Helemt Helems Hs_t Hs_s")].
-      iIntros (??) "Hp".
-      iDestruct "Hp" as (????) "(%Ht' & %Hs' & Ht' & Hs' & Hf_t' & Hf_s')";
-        subst.
-      iModIntro. iExists _,_.
-      do 2 (iSplitL ""; [ done | ]).
-      iAssert (uval_rel v_t' v_s') as "#Hv'".
-      { iDestruct (big_sepL2_lookup _ _ _ x0 with "Hav") as "H"; eauto.
-        { by eapply list_lookup_snd. }
-        { by eapply list_lookup_snd. } }
-
-      iSplitL ""; [ done | ].
-
-      iExists args_t, args_s; iFrame.
-
-      rewrite Ht Hs. iFrame.
-      iSplitL ""; [ done | ].
-
-      setoid_rewrite big_sepL_delete at 3; eauto; iFrame.
-      setoid_rewrite big_sepL_delete at 2; eauto;
-        by iFrame "Hav Hl_s Hs'". }
-    { iApply (sim_local_read_not_in_domain with "Hf_s Hs_s").
-      rewrite -Hs -Hdom Ht. set_solver. }
-  Qed.
+  Proof. Admitted.
 
   Lemma local_read_refl_cfg C x i_t i_s :
     ⊢ CFG_refl_inv C i_t i_s -∗
     trigger (LocalRead x) ⪯ trigger (LocalRead x)
       [{ (v1, v2), uval_rel v1 v2 ∗ CFG_refl_inv C i_t i_s }].
-  Proof.
-    iIntros "CI".
-    iApply sim_update_si.
-
-    iIntros "%σ_t %σ_s SI".
-    iDestruct (local_CFG_inv with "CI SI") as ">H".
-    iDestruct "H" as
-      (args_t args_s Ht Hs)
-        "(Hlt & Hls & Hv & SI & Hf_t & Hf_s & HC & Hs_t & Hs_s & Ha_t & Ha_s)".
-    iFrame.
-
-    iDestruct "Hv" as (Hdom) "Hv".
-
-    destruct (decide (x ∈ (vlocal σ_t).1.*1)).
-    {
-      assert (exists n v, args_t !! n = Some (x, v)).
-      { clear -Ht e.
-        eapply (@elem_of_list_to_set raw_id (@gset local_loc _ _)) in e.
-        Unshelve. all : try typeclasses eauto.
-        setoid_rewrite <-Ht in e. clear -e.
-        rewrite elem_of_list_to_set in e.
-        by apply elem_of_fst_list_some. }
-
-      assert (exists n v, args_s !! n = Some (x, v)).
-      { rewrite Hdom in Ht. clear -Ht e.
-        eapply (@elem_of_list_to_set raw_id (@gset local_loc _ _)) in e.
-        Unshelve. all : try typeclasses eauto.
-        setoid_rewrite <-Ht in e. clear -e.
-        rewrite elem_of_list_to_set in e.
-        by apply elem_of_fst_list_some. }
-
-      destruct H0 as (?&?&?).
-      destruct H as (?&?&?).
-
-      iDestruct (lmapsto_no_dup with "Hlt") as "%Hdup_t".
-      iDestruct (lmapsto_no_dup with "Hls") as "%Hdup_s".
-      pose proof (no_dup_fst_list_some _ _ _ _ _ _ _ Hdup_t Hdup_s Hdom H H0);
-        subst.
-
-      iDestruct (big_sepL_delete with "Hlt") as "(Helemt & Hl_t)"; eauto; cbn.
-      iDestruct (big_sepL_delete with "Hls") as "(Helems & Hl_s)"; eauto; cbn.
-
-      iApply (sim_expr_bupd_mono with "[Hl_t Hl_s Hf_t Hf_s HC Hv Ha_t Ha_s]");
-        [ | iApply (sim_local_read with "Helemt Helems Hs_t Hs_s")].
-      iIntros (??) "Hp".
-      iDestruct "Hp" as (????) "(%Ht' & %Hs' & Ht' & Hs' & Hf_t' & Hf_s')";
-        subst.
-      iModIntro. iExists _,_.
-      do 2 (iSplitL ""; [ done | ]).
-      iAssert (uval_rel v_t' v_s') as "#Hv'".
-      { iDestruct (big_sepL2_lookup _ _ _ x0 with "Hv") as "H"; eauto.
-        { by eapply list_lookup_snd. }
-        { by eapply list_lookup_snd. } }
-
-      iSplitL ""; [ done | ].
-
-      iExists args_t, args_s; iFrame.
-
-      rewrite Ht Hs. iFrame.
-
-      setoid_rewrite big_sepL_delete at 3; eauto; iFrame.
-      setoid_rewrite big_sepL_delete at 2; eauto; iFrame. done. }
-    { iApply (sim_local_read_not_in_domain with "Hf_s Hs_s").
-      rewrite -Hs -Hdom Ht. set_solver. }
-  Qed.
+  Proof. Admitted.
 
   Lemma call_refl v_t v_s e_t e_s d i_t i_s l A_t A_s C:
     code_inv refl_inv C i_t i_s A_t A_s nil nil -∗
@@ -1784,47 +1307,7 @@ Section logical_relations_properties.
     (trigger (ExternalCall d v_s e_s l))
     [{ (v_t, v_s), uval_rel v_t v_s ∗
         code_inv refl_inv C i_t i_s A_t A_s nil nil }].
-  Proof.
-    iIntros "CI #Hv #He".
-
-    rewrite /instr_conv.
-
-    rewrite sim_expr_eq.
-
-    iIntros (σ_t σ_s) "SI".
-    unfold interp_L2.
-    rewrite /subevent /resum /ReSum_inl /cat /Cat_IFun /inl_ /Inl_sum1
-      /resum /ReSum_id /id_ /Id_IFun.
-    simp instrE_conv.
-    rewrite !interp_state_vis.
-    setoid_rewrite interp_state_ret.
-    cbn -[state_interp].
-    rewrite /handle_stateEff.
-    rewrite !bind_vis.
-
-    iApply sim_coindF_vis. iRight.
-    iModIntro.
-    rewrite /handle_event; cbn -[state_interp].
-    rewrite /resum /ReSum_id /id_ /Id_IFun.
-    simp handle_call_events. iLeft.
-    iFrame.
-    iDestruct "CI" as (??) "(?&?&Hs_t&Hs_s&#HWF&?&?&?&HC&?&?)".
-    iExists (C, i_t, i_s).
-    iSplitL "Hs_t Hs_s HC".
-    { rewrite /call_args_eq / arg_val_rel; cbn; iFrame.
-      iFrame "HWF".
-      iSplitL ""; last done; iSplitL "Hv"; try done. }
-
-    iIntros (??) "(SI & V)".
-    iDestruct "V" as "(?&?&?&?)".
-    cbn -[state_interp].
-    iApply sim_coindF_tau; iApply sim_coindF_base.
-    rewrite /lift_expr_rel. iModIntro.
-    iExists v_t0.1, v_t0.2, v_s0.1, v_s0.2; iFrame.
-    rewrite -!itree_eta; do 2 (iSplitL ""; [done |]).
-    iExists _,_; do 2 (iSplitL ""; [done |]); iFrame.
-    iExists _,_; iFrame. done.
-  Qed.
+  Proof. Admitted.
 
   Lemma load_must_be_addr_src τ x_t x_s Φ:
     ⊢ (∀ ptr, ⌜x_s = DVALUE_Addr ptr⌝ -∗

@@ -148,8 +148,9 @@ Tactic Notation "mono:" tactic(tac) "with" constr(hyps) :=
   iApply (sim_expr_bupd_mono with hyps); [ | tac; eauto ];
   try (iIntros (??) "HΦ"; iDestruct "HΦ" as (??->->) "HΦ").
 
-Ltac vfinal :=
-  final;
+Ltac sfinal :=
   repeat iExists _;
   repeat (iSplitL ""; first (iPureIntro; done));
   iFrame; try done.
+
+Ltac vfinal := final; sfinal.

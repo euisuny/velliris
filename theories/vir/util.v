@@ -1669,6 +1669,30 @@ Proof.
   f_equiv; eauto.
 Qed.
 
+Lemma alist_remove_fst_eq {K : Type}
+  {RelDec_R : RelDec.RelDec eq}
+  {RelDec_C: RelDec.RelDec_Correct RelDec_R} :
+  ∀ {V : Type} (l l' : alist K V) (x : K),
+    l.*1 = l'.*1 ->
+    (alist_remove x l).*1 = (alist_remove x l').*1.
+Proof.
+  induction l; intros; (destruct l'; inv H; eauto).
+  destruct a, p; inv H1. cbn in *; subst.
+  destruct_if_goal; cbn; try solve [f_equiv; eauto].
+  by eapply IHl.
+Qed.
+
+Lemma alist_add_fst_eq {K : Type}
+  {RelDec_R : RelDec.RelDec eq}
+  {RelDec_C: RelDec.RelDec_Correct RelDec_R} :
+  ∀ {V : Type} (l l' : alist K V) (x : K) v v',
+    l.*1 = l'.*1 ->
+    (alist_add x v l).*1 = (alist_add x v' l').*1.
+Proof.
+  cbn. intros. f_equiv.
+  by apply alist_remove_fst_eq.
+Qed.
+
 Lemma big_sepL_alist_remove
   {PROP K} `{BiAffine PROP}
   {RelDec_R: RelDec.RelDec eq} {RelEq_Correct : RelDec.RelDec_Correct RelDec_R}
@@ -1717,6 +1741,22 @@ Proof.
   iApply big_sepL_mono; [ | iApply "Hl"]; cbn; eauto.
   intros; destruct y; eauto.
 Qed.
+
+Lemma big_sepL2_alist_remove
+  {PROP K} `{BiAffine PROP}
+  {RelDec_R: RelDec.RelDec eq} {RelEq_Correct : RelDec.RelDec_Correct RelDec_R}
+  {V} :
+  forall (l l' : alist K V) x n v v' (R : _ -> _ -> PROP),
+  l !! n = Some (x, v) ->
+  l' !! n = Some (x, v') ->
+  NoDup l.*1 ->
+  NoDup l'.*1 ->
+  ([∗ list] v1; v2 ∈ l.*2; l'.*2, R v1 v2) -∗
+  ([∗ list] v1; v2 ∈ (alist_remove x l).*2; (alist_remove x l').*2, R v1 v2).
+Proof.
+  intros l.
+  iInduction l as [ | ] "IH".
+Admitted.
 
 Lemma alist_remove_subseteq
   {K} {RelDec_R: RelDec.RelDec eq} {RelEq_Correct : RelDec.RelDec_Correct RelDec_R}
