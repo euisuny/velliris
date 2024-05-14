@@ -1,6 +1,6 @@
 From iris.prelude Require Import options.
 
-From velliris Require Import vir.spec.
+From velliris Require Import vir.lang.spec.
 From ITree Require Import Interp.TranslateFacts Events.StateFacts.
 
 (* General properties about the simulation instantiated for [vir]. *)

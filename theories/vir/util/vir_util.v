@@ -1,11 +1,11 @@
 From iris.prelude Require Import options.
-From iris.proofmode Require Import proofmode.
 From stdpp Require Import gmap.
 
 From Vellvm Require Import
   Syntax.DynamicTypes Handlers Utils.Util Syntax.ScopeTheory.
 
-From velliris Require Import vir.util utils.tactics.
+From velliris.utils Require Import tactics.
+From velliris.vir Require Import util.util.
 
 (* Misc. Utilities for vir *)
 

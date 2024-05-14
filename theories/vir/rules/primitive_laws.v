@@ -3,7 +3,7 @@
 From iris.prelude Require Import options.
 
 From velliris.program_logic Require Import program_logic.
-From velliris.vir Require Export vir vir_state spec util.
+From velliris.vir.lang Require Export lang.
 
 From ITree Require Import
   ITree Eq.Eqit Eq.EqAxiom Events.State Events.StateFacts Extra.IForest.

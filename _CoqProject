@@ -22,42 +22,46 @@ theories/program_logic/wellformedness.v
 theories/program_logic/contextual.v
 theories/program_logic/program_logic.v
 
-theories/vir/base.v
-theories/vir/util.v
-theories/vir/vir_util.v
+theories/vir/util/base.v
+theories/vir/util/util.v
+theories/vir/util/vir_util.v
 
-theories/vir/vir.v
-theories/vir/vir_state.v
-theories/vir/val_rel.v
-theories/vir/globalbij.v
-theories/vir/heapbij.v
-theories/vir/spec.v
-theories/vir/vir_sim_properties.v
-theories/vir/tactics.v
+# Instantiating language and its ghost theory
+theories/vir/lang/vir.v
+theories/vir/lang/vir_state.v
+theories/vir/lang/val_rel.v
+theories/vir/lang/globalbij.v
+theories/vir/lang/heapbij.v
+theories/vir/lang/spec.v
+theories/vir/lang/vir_sim_properties.v
+theories/vir/lang/tactics.v
+theories/vir/lang/lang.v
 
-theories/vir/primitive_laws.v
-theories/vir/bij_laws.v
-theories/vir/frame_laws.v
-theories/vir/instr_laws.v
-theories/vir/interp_properties.v
+theories/vir/rules/primitive_laws.v
+theories/vir/rules/bij_laws.v
+theories/vir/rules/frame_laws.v
+theories/vir/rules/instr_laws.v
+theories/vir/rules/interp_properties.v
+theories/vir/rules/rules.v
 
-theories/vir/logrel/wellformedness.v
-theories/vir/logrel/logical_relations.v
-theories/vir/logrel/fundamental_exp.v
-theories/vir/logrel/fundamental_exp_relaxed.v
-theories/vir/logrel/fundamental.v
+# theories/vir/logrel/wellformedness.v
+# theories/vir/logrel/logical_relations.v
+# theories/vir/logrel/fundamental_exp.v
+# theories/vir/logrel/fundamental_exp_relaxed.v
+# theories/vir/logrel/fundamental.v
+# theories/vir/logrel/logrel.v
 
-theories/vir/adequacy.v
+# theories/vir/adequacy.v
 
-theories/vir/contextual_mcfg.v
-theories/vir/mcfg_contextual.v
-theories/vir/contextual.v
-theories/vir/contextual_laws.v
+# theories/vir/contextual_mcfg.v
+# theories/vir/mcfg_contextual.v
+# theories/vir/contextual.v
+# theories/vir/contextual_laws.v
 
-theories/vir/examples/notations.v
-theories/vir/examples/examples.v
-theories/vir/examples/loop.v
+# theories/vir/examples/notations.v
+# theories/vir/examples/examples.v
+# theories/vir/examples/loop.v
 
-theories/base_logic/gen_sim_heap.v
-theories/base_logic/gen_sim_prog.v
-theories/base_logic/gen_heap_bij.v
+# theories/base_logic/gen_sim_heap.v
+# theories/base_logic/gen_sim_prog.v
+# theories/base_logic/gen_heap_bij.v

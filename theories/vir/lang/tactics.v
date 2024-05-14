@@ -66,7 +66,7 @@ Ltac to_inner G :=
 
 
 (* Some useful tactics for reducing [sim_expr] for [vir] *)
-From velliris.vir Require Import vir vir_sim_properties.
+From velliris.vir.lang Require Import vir vir_sim_properties.
 
 Ltac itree_vsimp e :=
   lazymatch e with

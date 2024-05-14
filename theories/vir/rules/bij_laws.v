@@ -1,12 +1,10 @@
 (** * Primitive Laws with bijection on locations. *)
-
 From iris.algebra Require Import auth.
 From iris.prelude Require Import options.
 
 From velliris.base_logic Require Export gen_sim_prog.
 From velliris.program_logic Require Import program_logic.
-From velliris.vir Require Export
-  vir vir_state spec primitive_laws vir_sim_properties.
+From velliris.vir.lang Require Export lang.
 
 From ITree Require Import
   ITree Eq.Eqit Eq.EqAxiom Events.State Events.StateFacts Extra.IForest.

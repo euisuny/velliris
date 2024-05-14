@@ -3,7 +3,7 @@
 From iris.prelude Require Import options.
 
 From velliris.program_logic Require Import program_logic.
-From velliris.vir Require Export vir spec util.
+From velliris.vir.lang Require Export lang.
 
 Set Default Proof Using "Type*".
 Import uPred.
@@ -305,7 +305,6 @@ Section local_properties.
   Notation "m ∖' f"  := (free_frame_memory f m) (at level 20).
   Notation "m ∖'' f"  := (free_locations_from_frame m f) (at level 20).
 
-
   (* LATER: Move to Utils *)
   Lemma list_subseteq_remove mf mf' a:
     a ∉ mf ->
@@ -365,7 +364,7 @@ Section local_properties.
       apply NoDup_cons in H; destruct H.
 
       rewrite IHmf; eauto; cycle 1.
-      { apply NoDup_remove; eauto; set_solver. }
+      { apply util.NoDup_remove; eauto; set_solver. }
       { eapply (list_subseteq_remove _ _ a) in H1; eauto. }
       rewrite -fold_left_delete_comm.
       rewrite (fold_delete_distr a mf' h.1);
