@@ -1,7 +1,5 @@
 From iris.prelude Require Import options.
 
-From Equations Require Import Equations.
-
 From Vellvm Require Import
   Syntax.DynamicTypes
   Handlers
@@ -14,6 +12,7 @@ From velliris.vir Require Import
   bij_laws
   tactics
   fundamental_exp
+  fundamental
   vir_util.
 
 (* Import DenoteTactics. *)
@@ -31,9 +30,9 @@ Section las_example.
      FIXME: Generalize [v] to expressions *)
   (* TODO: Figure out if there is a normal form that can be enforced to make
            sure expressions refer to [local_id]s. *)
-  Fixpoint las_block {T} (b : code T) (a : raw_id) (v : option raw_id)
+  Fixpoint las_code {T} (c : code T) (a : raw_id) (v : option raw_id)
     : code T :=
-    match b with
+    match c with
     | nil => nil
     | x :: tl =>
         match x with
@@ -43,10 +42,10 @@ Section las_example.
             match v with
               | Some c =>
                   (id, INSTR_Op (EXP_Ident (ID_Local c))) ::
-                  las_block tl a v
-              | None => x :: las_block tl a v
+                  las_code tl a v
+              | None => x :: las_code tl a v
             end
-          else x :: las_block tl a v
+          else x :: las_code tl a v
         (* A store instruction to the promoted local identifier *)
         | (id, INSTR_Store _
                   (* TODO Warning! this is enforced by the syntactic
@@ -54,23 +53,25 @@ Section las_example.
                   (_, EXP_Ident (ID_Local v'))
                   (_, EXP_Ident (ID_Local ptr)) _) =>
             if decide (a = ptr) then
-              x :: las_block tl a (Some v')
+              x :: las_code tl a (Some v')
             else
-              x :: las_block tl a v
-        | x => x :: las_block tl a v
+              x :: las_code tl a v
+        | x => x :: las_code tl a v
         end
     end.
 
+  Definition las_block {T} (a : raw_id) (v : option raw_id) (b : LLVMAst.block T) :
+    LLVMAst.block T :=
+      mk_block
+        (blk_id b)
+        (blk_phis b)
+        (las_code (blk_code b) a v)
+        (blk_term b)
+        (blk_comments b).
+
   (* Apply the [las] optimization over an open control flow graph. *)
   Definition las_ocfg {T} (o : ocfg T) a : ocfg T :=
-    List.map (fun x =>
-      mk_block
-        (blk_id x)
-        (blk_phis x)
-        (las_block (blk_code x) a None)
-        (blk_term x)
-        (blk_comments x))
-      o.
+    List.map (las_block a None) o.
 
   Definition raw_id_not_in_texp {T} (l : list (texp T)) (i : raw_id) : bool :=
     forallb
@@ -189,7 +190,7 @@ Example cfg1 : cfg dtyp :=
 Compute (find_promotable_alloca cfg1).
 
 Compute (las cfg1).
-Compute (las_block code1 (Name "a")).
+Compute (las_code code1 (Name "a")).
 
 (* ------------------------------------------------------------------- *)
 (* Specification of the Load-after-store optimization. *)
@@ -210,63 +211,92 @@ Section las_example_proof.
 
 Context `{vellirisGS Σ}.
 
-Definition ocfg_post_inv C i_t i_s A_t A_s : iPropI Σ :=
-  (∃ (args_t args_s : local_env),
-      ldomain_tgt i_t (list_to_set args_t.*1) ∗
-      ldomain_src i_s (list_to_set args_s.*1) ∗
-      stack_tgt i_t ∗ stack_src i_s ∗
-      frame_WF i_t i_s ∗
-      ([∗ list] '(l_t, v_t) ∈ args_t, [ l_t := v_t ]t i_t) ∗
-      ([∗ list] '(l_s, v_s) ∈ args_s, [ l_s := v_s ]s i_s) ∗
-  checkout C ∗
-  alloca_tgt i_t (list_to_set A_t : gset _) ∗
-  alloca_src i_s (list_to_set A_s : gset _) ∗
-  ⌜NoDup A_t⌝ ∗ ⌜NoDup A_s⌝)%I.
-
-(* TODO : make [logical relations] take in an invariant [I] *)
-Definition term_logrel ϒ_t ϒ_s I : iPropI Σ :=
-(⌜term_WF ϒ_t⌝ -∗
- ⌜term_WF ϒ_s⌝ -∗
-    I -∗
-    exp_conv (denote_terminator ϒ_t) ⪯
-    exp_conv (denote_terminator ϒ_s)
-    [{ (r_t, r_s), I ∗
-                    match r_t, r_s with
-                    | inl b_t, inl b_s => ⌜b_t = b_s⌝
-                    | inr v_t, inr v_s => uval_rel v_t v_s
-                    | _, _ => False
-                    end}])%I.
-
-(* Factor out for use in general optimizations *)
-Lemma simulation_ocfg (a : raw_id) Φ I cfg_t cfg_s i_t i_s A_t A_s b1 b2 :
-  ⊢ (code_inv ∅ i_t i_s A_t A_s -∗ I) -∗
-    (I -∗ ∃ A_t' A_s',
-            ocfg_post_inv ∅ i_t i_s A_t' A_s') -∗
-    (* Related terminators *)
-    (∀ (i : nat) b_t b_s,
-      ⌜cfg_t !! i = Some b_t⌝ -∗
-      ⌜cfg_s !! i = Some b_s⌝ -∗
-      term_logrel (blk_term b_t) (blk_term b_s) I) -∗
-    (* Related instructions *)
-    (∀ (i : nat) b_t b_s,
-      ⌜cfg_t !! i = Some b_t⌝ -∗
-      ⌜cfg_s !! i = Some b_s⌝ -∗
-      I -∗
-      instr_conv (denote_code (blk_code b_t)) ⪯
-      instr_conv (denote_code (blk_code b_s))
-      [{ (r_t, r_s), I ∗ Φ r_t r_s }]) -∗
-   (* TODO: state [phi_logrel] related for a weakened [phi_logrel] *)
-   (* Weaken the postcondition for [ocfg_logrel] *)
-    ocfg_logrel cfg_t cfg_s ∅ A_t A_s b1 b2.
+Lemma block_WF_las a0 a s:
+  Is_true (block_WF a) ->
+  Is_true (block_WF (las_block a0 s a)).
 Proof. Admitted.
+
+Lemma code_WF_las a0 a s:
+  Is_true (code_WF a0) ->
+  Is_true (code_WF (las_code a0 a s)).
+Proof.
+  intros.
+  revert s.
+  induction a0; eauto; cbn -[instr_WF] in *; intros.
+  destruct a0; eauto. destructb; cbn.
+  apply forallb_True in H1.
+  destruct i0; eauto; cbn; destructb; eauto;
+  apply forallb_True in H1.
+  { eapply IHa0; eauto. }
+  { apply andb_prop_intro; split; eauto. }
+  { apply andb_prop_intro; split; eauto. }
+  { destruct ptr, e; cbn; eauto.
+    destruct id; cbn; eauto. destruct_if_goal; cbn; eauto.
+    destruct s; cbn; eauto. }
+  { destruct val, e; cbn; eauto.
+    destruct id; cbn; eauto.
+    destruct ptr, e; cbn; eauto.
+    destruct id0; destruct_if_goal; cbn; eauto. }
+Qed.
+
+(* Well-formedness of ocfg is preserved in the LAS transformation. *)
+Lemma ocfg_WF_las f a:
+  Is_true (ocfg_WF f) ->
+  Is_true (ocfg_WF (las_ocfg f a)).
+Proof.
+  intros. induction f; eauto.
+  (* Why is [is_true] being weird here.. *)
+  pose proof (ocfg_WF_cons_inv _ _ H0) as H0'. destruct H0'.
+  cbn. eapply andb_prop_intro; split; auto.
+  apply andb_prop_elim in H1; destruct H1.
+  eapply andb_prop_intro; split; auto.
+  cbn -[code_WF]. apply code_WF_las; eauto.
+Qed.
+
+(* TODO: Instantiate [ocfg_is_SSA]. *)
+Lemma ocfg_is_SSA_cons_inv a0 f :
+  ocfg_is_SSA (a0 :: f) ->
+  ocfg_is_SSA f.
+Proof. Admitted.
+
+Lemma promotable_ocfg_cons_inv {T} a0 (f : _ T) a:
+  Is_true (promotable_ocfg (a0 :: f) a) ->
+  Is_true (promotable_ocfg f a).
+Proof.
+  rewrite /promotable_ocfg; cbn; intros.
+  destructb. apply forallb_True in H1; auto.
+Qed.
+
+Lemma las_block_sim A_t A_s be b a:
+  Is_true (block_WF b) ->
+  ⊢ block_logrel (fun _ _ => True)
+      (las_block a None b) b be ∅ A_t A_s [] [].
+Proof.
+  iIntros (WF); iApply block_compat; eauto.
+  { by eapply block_WF_las. }
+
+Admitted.
 
 Lemma las_simulation_ocfg
   (f : ocfg dtyp) a A_t A_s b1 b2 :
+  Is_true (ocfg_WF f) ->
   ocfg_is_SSA f ->
-  promotable_ocfg f a ->
-  ⊢ ocfg_logrel (las_ocfg f a) f ∅ A_t A_s b1 b2.
+  Is_true (promotable_ocfg f a) ->
+  ⊢ ocfg_logrel (fun _ _ => True)
+    (las_ocfg f a) f ∅ A_t A_s b1 b2 nil nil.
 Proof.
-Admitted.
+  iIntros (???). iApply ocfg_compat; first (iIntros; done); eauto.
+  { eapply ocfg_WF_las in H0; eauto. }
+  iModIntro.
+  iInduction f as [ | ] "IH"; eauto.
+  apply ocfg_WF_cons_inv in H0. destruct H0.
+  cbn. iSplitL "".
+  { iSplitL ""; first done.
+    iIntros (???); iApply las_block_sim; eauto. }
+  { iApply "IH"; eauto.
+    { iPureIntro; eapply ocfg_is_SSA_cons_inv; eauto. }
+    { iPureIntro; eapply promotable_ocfg_cons_inv; eauto. } }
+Qed.
 
 Lemma las_simulation (f : function) :
   fun_is_SSA f ->
