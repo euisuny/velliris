@@ -139,13 +139,17 @@ Definition mcfg_definitions (mcfg : CFG.mcfg dtyp) :
   itree LLVMEvents.L0 (list (dvalue * _)) :=
     (Util.map_monad address_one_function (CFG.m_definitions mcfg)).
 
-
 (* ------------------------------------------------------------------------ *)
 (** *Logical relations *)
 Section logical_relations_def.
 
   Context {Σ} `{!vellirisGS Σ}.
-  Context (I : local_env -> local_env -> iProp Σ).
+
+  Notation local_env_spec :=
+    (list frame_names -> list frame_names -> local_env -> local_env -> iProp Σ).
+  Notation alloca_spec := (gmap (loc * loc) Qp -> list Z -> list Z -> iProp Σ).
+
+  Context (ΠL : local_env_spec) (ΠA : alloca_spec).
 
   (* Well-formedness for function definitions *)
   Definition fundefs_rel_WF
@@ -163,7 +167,7 @@ Section logical_relations_def.
   (* ------------------------------------------------------------------------ *)
   (** *Invariants *)
   (* Invariant for expressions. *)
-  Definition expr_frame_inv i_t i_s (L_t L_s : local_env) : iProp Σ :=
+  Definition frame_inv i_t i_s (L_t L_s : local_env) C : iProp Σ :=
     (* There are no duplicate keys on the local environment. *)
     ⌜NoDup L_t.*1⌝ ∗ ⌜NoDup L_s.*1⌝ ∗
     (* Current stack frame *)
@@ -171,151 +175,107 @@ Section logical_relations_def.
     (* Domain of local environments on source and target *)
     ldomain_tgt i_t (list_to_set L_t.*1) ∗
     ldomain_src i_s (list_to_set L_s.*1) ∗
-    (* Checkout set is empty *)
-    checkout ∅.
+    (* Checkout set *)
+    checkout C.
 
-  Definition expr_local_env_inv i_t i_s m L_t L_s :=
-    ([∗ list] l ∈ m,
-      ∃ v_t v_s, ⌜alist_find l L_t = Some v_t⌝ ∗ ⌜alist_find l L_s = Some v_s⌝ ∗
-      [ l := v_t ]t i_t ∗ [ l := v_s ]s i_s ∗ uval_rel v_t v_s)%I.
+  Definition local_inv i_t i_s L_t L_s C : iProp Σ :=
+    frame_inv i_t i_s L_t L_s C ∗ ΠL i_t i_s L_t L_s.
 
-  Definition expr_inv {T} i_t i_s L_t L_s (e_t e_s : exp T) : iProp Σ :=
-    expr_frame_inv i_t i_s L_t L_s ∗
-    expr_local_env_inv i_t i_s (intersection_local_ids e_t e_s) L_t L_s.
-
-  (* Invariant for codes. *)
-
-  (* [L_t] and [L_s] indicate the excluded local id's from the current arguments;
-    these are the local id's that are "out of sync". *)
-   Definition code_inv C i_t i_s A_t A_s L_t L_s : iPropI Σ :=
-    (∃ (args_t args_s : local_env),
-        ldomain_tgt i_t (list_to_set args_t.*1) ∗
-        ldomain_src i_s (list_to_set args_s.*1) ∗
-        stack_tgt i_t ∗ stack_src i_s ∗
-        frame_WF i_t i_s ∗
-       ([∗ list] '(l_t, v_t) ∈ args_t, [ l_t := v_t ]t i_t) ∗
-       ([∗ list] '(l_s, v_s) ∈ args_s, [ l_s := v_s ]s i_s) ∗
-       (* The [L_t], [L_s] refer to "reserved" locations that will be
-          out of sync. *)
-       (I (remove_ids L_t args_t) (remove_ids L_s args_s)) ∗
-       (* ([∗ list] v_t; v_s ∈ args_t.*2;args_s.*2, uval_rel v_t v_s) ∗ *)
-     checkout C ∗
-     alloca_tgt i_t (list_to_set A_t : gset _) ∗
+  Definition alloca_inv
+    (i_t i_s : list frame_names) (A_t A_s : list Z)
+    (C : gmap (loc * loc) Qp) :=
+    (alloca_tgt i_t (list_to_set A_t : gset _) ∗
      alloca_src i_s (list_to_set A_s : gset _) ∗
      ⌜NoDup A_t⌝ ∗ ⌜NoDup A_s⌝ ∗
-     (* FIXME: Relax the invariant over the allocated locations *)
-      ([∗ list] v_t; v_s ∈ A_t;A_s, (v_t, 0%Z) ↔h (v_s, 0%Z) ∗
-           ⌜C !! (v_t, v_s) = None⌝))%I.
+     ΠA C A_t A_s)%I.
+
+  (* Invariant for codes. *)
+   Definition code_inv C i_t i_s A_t A_s : iPropI Σ :=
+    (∃ (args_t args_s : local_env),
+       local_inv i_t i_s args_t args_s C ∗
+       alloca_inv i_t i_s A_t A_s C)%I.
 
    (* Postcondition that states monotonically increasing alloca set. *)
-   Definition code_inv_post C i_t i_s A_t A_s L_t L_s: iPropI Σ:=
-    (∃ nA_t nA_s,
-      code_inv C i_t i_s (nA_t ++ A_t) (nA_s ++ A_s) L_t L_s)%I.
-
-   Definition refl_inv (args_t args_s : local_env) : iProp Σ :=
-    (⌜args_t.*1 = args_s.*1⌝ ∗
-      ([∗ list] v_t; v_s ∈ args_t.*2;args_s.*2, uval_rel v_t v_s))%I.
+   Definition code_inv_post C i_t i_s A_t A_s: iPropI Σ :=
+    (∃ nA_t nA_s, code_inv C i_t i_s (nA_t ++ A_t) (nA_s ++ A_s))%I.
 
   (* Invariant for CFG. *)
-   Definition CFG_inv C i_t i_s L_t L_s : iPropI Σ :=
+   Definition CFG_inv C i_t i_s : iPropI Σ :=
     (∃ args_t args_s,
-        ldomain_tgt i_t (list_to_set args_t.*1) ∗
-        ldomain_src i_s (list_to_set args_s.*1) ∗
-        stack_tgt i_t ∗ stack_src i_s ∗
-       ([∗ list] '(l_t, v_t) ∈ args_t, [ l_t := v_t ]t i_t) ∗
-       ([∗ list] '(l_s, v_s) ∈ args_s, [ l_s := v_s ]s i_s) ∗
-       (I (remove_ids L_t args_t) (remove_ids L_s args_s)) ∗
-       (* ([∗ list] v_t; v_s ∈ args_t.*2;args_s.*2, uval_rel v_t v_s) *)
-     checkout C ∗ alloca_tgt i_t ∅ ∗ alloca_src i_s ∅)%I.
+       local_inv i_t i_s args_t args_s C ∗
+       alloca_tgt i_t ∅ ∗ alloca_src i_s ∅)%I.
 
   (* ------------------------------------------------------------------------ *)
    (** *Logical relations *)
-
-   Definition expr_logrel C (e_t e_s : itree exp_E uvalue) A_t A_s L_t L_s: iPropI Σ :=
-    (∀ i_t i_s, code_inv C i_t i_s A_t A_s L_t L_s -∗
-        exp_conv e_t ⪯ exp_conv e_s
+   Definition expr_logrel C τ_t τ_s e_t e_s A_t A_s : iPropI Σ :=
+    (∀ i_t i_s, code_inv C i_t i_s A_t A_s -∗
+        exp_conv (denote_exp τ_t e_t) ⪯ exp_conv (denote_exp τ_s e_s)
         [{ (v_t, v_s),
-            uval_rel v_t v_s ∗ code_inv C i_t i_s A_t A_s L_t L_s }])%I.
+            uval_rel v_t v_s ∗ code_inv C i_t i_s A_t A_s }])%I.
 
-  (* Relaxed logical relation for expressions TODO comment *)
-  Definition expr_logrel_relaxed e_t e_s : iPropI Σ :=
-    (∀ τ (i_t i_s : list frame_names) (L_t L_s : local_env),
-      expr_inv i_t i_s L_t L_s e_t e_s -∗
-      exp_conv (denote_exp τ e_t) ⪯ exp_conv (denote_exp τ e_s)
-      [{ (v_t, v_s),
-          uval_rel v_t v_s ∗
-          expr_inv i_t i_s L_t L_s e_t e_s }])%I.
-
-   Definition term_logrel ϒ_t ϒ_s C L_t L_s : iPropI Σ :=
+   Definition term_logrel ϒ_t ϒ_s C : iPropI Σ :=
     (∀ i_t i_s A_t A_s,
         ⌜term_WF ϒ_t⌝ -∗
         ⌜term_WF ϒ_s⌝ -∗
-        code_inv C i_t i_s A_t A_s L_t L_s -∗
+        code_inv C i_t i_s A_t A_s -∗
         exp_conv (denote_terminator ϒ_t) ⪯
         exp_conv (denote_terminator ϒ_s)
-        [{ (r_t, r_s), code_inv C i_t i_s A_t A_s L_t L_s ∗
+        [{ (r_t, r_s), code_inv C i_t i_s A_t A_s ∗
                         match r_t, r_s with
                         | inl b_t, inl b_s => ⌜b_t = b_s⌝
                         | inr v_t, inr v_s => uval_rel v_t v_s
                         | _, _ => False
                         end}])%I.
 
-   Definition instr_logrel id_t e_t id_s e_s C A_t A_s L_t L_s
-     : iPropI Σ :=
+   Definition instr_logrel id_t e_t id_s e_s C A_t A_s : iPropI Σ :=
     (∀ i_t i_s,
-        code_inv C i_t i_s A_t A_s L_t L_s -∗
+        code_inv C i_t i_s A_t A_s -∗
         instr_conv (denote_instr (id_t, e_t)) ⪯
         instr_conv (denote_instr (id_s, e_s))
         [{ (r_t, r_s),
-            code_inv_post C i_t i_s A_t A_s L_t L_s}])%I.
+            code_inv_post C i_t i_s A_t A_s }])%I.
 
-   Definition phi_logrel (ϕ_t ϕ_s : itree exp_E (local_id * uvalue)) C A_t A_s L_t L_s : iPropI Σ :=
+   Definition phi_logrel (ϕ_t ϕ_s : itree exp_E (local_id * uvalue)) C A_t A_s : iPropI Σ :=
     (∀ args_t args_s i_t i_s,
-       ⌜NoDup A_t⌝ ∗ ⌜NoDup A_s⌝ ∗
-       ldomain_tgt i_t (list_to_set args_t.*1) ∗ ldomain_src i_s (list_to_set args_s.*1) ∗
-       ([∗ list] '(l_t, v_t) ∈ args_t, [ l_t := v_t ]t i_t) ∗
-       ([∗ list] '(l_s, v_s) ∈ args_s, [ l_s := v_s ]s i_s) ∗
-       (I (remove_ids L_t args_t) (remove_ids L_s args_s)) ∗
-      stack_tgt i_t ∗ stack_src i_s ∗ frame_WF i_t i_s ∗ checkout C ∗
-      alloca_tgt i_t (list_to_set A_t) ∗ alloca_src i_s (list_to_set A_s) ∗
-      ([∗ list] v_t; v_s ∈ A_t;A_s, (v_t, 0%Z) ↔h (v_s, 0%Z) ∗ ⌜C !! (v_t, v_s) = None⌝) -∗
-       exp_conv ϕ_t ⪯ exp_conv ϕ_s
-       [{ fun e_t e_s => ∃ l v_t v_s,
-              ⌜e_t = Ret (l, v_t)⌝ ∗ ⌜e_s = Ret (l, v_s)⌝ ∗
-              uval_rel v_t v_s ∗
-              code_inv C i_t i_s A_t A_s L_t L_s }])%I.
+        local_inv i_t i_s args_t args_s C ∗
+        alloca_inv i_t i_s A_t A_s C -∗
+        exp_conv ϕ_t ⪯ exp_conv ϕ_s
+        [{ fun e_t e_s => ∃ l v_t v_s,
+                ⌜e_t = Ret (l, v_t)⌝ ∗ ⌜e_s = Ret (l, v_s)⌝ ∗
+                uval_rel v_t v_s ∗
+                code_inv C i_t i_s A_t A_s }])%I.
 
-   Definition phis_logrel (Φ_t Φ_s : itree instr_E ()) C A_t A_s L_t L_s : iPropI Σ :=
-    (∀ i_t i_s, code_inv C i_t i_s A_t A_s L_t L_s -∗
+   Definition phis_logrel (Φ_t Φ_s : itree instr_E ()) C A_t A_s : iPropI Σ :=
+    (∀ i_t i_s, code_inv C i_t i_s A_t A_s -∗
        instr_conv Φ_t ⪯ instr_conv Φ_s
-       [{ (r_t, r_s), code_inv C i_t i_s A_t A_s L_t L_s }])%I.
+       [{ (r_t, r_s), code_inv C i_t i_s A_t A_s }])%I.
 
-   Definition code_logrel c_t c_s C A_t A_s L_t L_s : iPropI Σ :=
+   Definition code_logrel c_t c_s C A_t A_s : iPropI Σ :=
     (∀ i_t i_s,
-       code_inv C i_t i_s A_t A_s L_t L_s -∗
+       code_inv C i_t i_s A_t A_s -∗
        instr_conv (denote_code c_t) ⪯ instr_conv (denote_code c_s)
         [{ (r_t, r_s),
-            code_inv_post C i_t i_s A_t A_s L_t L_s }])%I.
+            code_inv_post C i_t i_s A_t A_s }])%I.
 
-   Definition block_logrel b_t b_s bid C A_t A_s L_t L_s : iPropI Σ :=
+   Definition block_logrel b_t b_s bid C A_t A_s : iPropI Σ :=
     (∀ i_t i_s,
-       code_inv C i_t i_s A_t A_s L_t L_s -∗
+       code_inv C i_t i_s A_t A_s -∗
        instr_conv ((denote_block b_t) bid) ⪯
        instr_conv ((denote_block b_s) bid)
-       [{ (r_t, r_s), code_inv_post C i_t i_s A_t A_s L_t L_s ∗
+       [{ (r_t, r_s), code_inv_post C i_t i_s A_t A_s ∗
                       match r_t, r_s with
                       | inl b_t, inl b_s => ⌜b_t = b_s⌝
                       | inr v_t, inr v_s => uval_rel v_t v_s
                       | _, _ => False
                       end }])%I.
 
-   Definition ocfg_logrel o_t o_s C A_t A_s b1 b2 L_t L_s : iPropI Σ :=
+   Definition ocfg_logrel o_t o_s C A_t A_s b1 b2 : iPropI Σ :=
     (∀ i_t i_s,
-        code_inv C i_t i_s A_t A_s L_t L_s -∗
+        code_inv C i_t i_s A_t A_s -∗
       instr_conv (denote_ocfg o_t (b1, b2)) ⪯
       instr_conv (denote_ocfg o_s (b1, b2))
       ⦉ fun e_t e_s =>
-           code_inv_post C i_t i_s A_t A_s L_t L_s ∗
+           code_inv_post C i_t i_s A_t A_s ∗
             ∃ v_t v_s, ⌜e_t = Ret v_t⌝ ∗ ⌜e_s = Ret v_s⌝ ∗
                         match v_t, v_s with
                           | inl (id_s, id_s'), inl (id_t, id_t') =>
@@ -324,13 +284,13 @@ Section logical_relations_def.
                           | _,_ => False
                       end⦊)%I.
 
-   Definition cfg_logrel c_t c_s C A_t A_s L_t L_s: iPropI Σ :=
+   Definition cfg_logrel c_t c_s C A_t A_s: iPropI Σ :=
     (∀ i_t i_s,
-      code_inv C i_t i_s A_t A_s L_t L_s -∗
+      code_inv C i_t i_s A_t A_s -∗
       instr_conv (denote_cfg c_t) ⪯ instr_conv (denote_cfg c_s)
       ⦉ fun v_t v_s =>
           ∃ r_t r_s, ⌜v_t = Ret r_t⌝ ∗ ⌜v_s = Ret r_s⌝ ∗ uval_rel r_t r_s ∗
-            code_inv_post C i_t i_s A_t A_s L_t L_s ⦊)%I.
+            code_inv_post C i_t i_s A_t A_s ⦊)%I.
 
   Definition fun_logrel f_t f_s C: iPropI Σ :=
     ∀ i_t i_s args_t args_s,
@@ -366,6 +326,62 @@ Section logical_relations_def.
                 stack_tgt i_t ∗ stack_src i_s ∗ checkout C ∗ uval_rel r_t r_s ⦊)%I.
 
 End logical_relations_def.
+
+Section logical_relations_instance.
+
+  Context {Σ} `{!vellirisGS Σ}.
+
+  Notation local_env_spec :=
+    (list frame_names -> list frame_names -> local_env -> local_env -> iProp Σ).
+  Notation alloca_spec := (gmap (loc * loc) Qp -> list Z -> list Z -> iProp Σ).
+
+  (* ------------------------------------------------------------------------ *)
+  (* Instances for ΠL ΠA. *)
+
+  (* For the ids [m] that are shared by two local environments [L_t L_s],
+    the locations store related locations. *)
+  Definition local_bij_at m : local_env_spec :=
+    fun i_t i_s L_t L_s =>
+    ([∗ list] l ∈ m,
+      ∃ v_t v_s, ⌜alist_find l L_t = Some v_t⌝ ∗ ⌜alist_find l L_s = Some v_s⌝ ∗
+      [ l := v_t ]t i_t ∗ [ l := v_s ]s i_s ∗ uval_rel v_t v_s)%I.
+
+  Definition local_bij_at_exp {T} (e_t e_s : exp T) : local_env_spec :=
+    local_bij_at (intersection_local_ids e_t e_s).
+
+  Definition local_bij : local_env_spec :=
+    fun i_t i_s L_t L_s =>
+      (⌜L_t.*1 = L_s.*1⌝ ∗
+        ([∗ list] '(l_t, v_t) ∈ L_t, [ l_t := v_t ]t i_t) ∗
+        ([∗ list] '(l_s, v_s) ∈ L_s, [ l_s := v_s ]s i_s) ∗
+        ([∗ list] v_t; v_s ∈ L_t.*2;L_s.*2, uval_rel v_t v_s))%I.
+
+  Definition local_inv_bij {T} e_t e_s :=
+    local_inv (local_bij_at_exp (T := T) e_t e_s).
+
+  (* [r_t] and [r_s] indicate the excluded local id's from the current arguments;
+    these are the local id's that are "out of sync". *)
+       (* The [r_t], [r_s] refer to "reserved" locations that will be
+          out of sync. *)
+  Definition local_bij_except r_t r_s : local_env_spec :=
+    fun i_t i_s L_t L_s => local_bij i_t i_s (remove_ids r_t L_t) (remove_ids r_s L_s).
+
+  Definition alloca_bij : alloca_spec :=
+    fun C A_t A_s =>
+      ([∗ list] v_t; v_s ∈ A_t;A_s, (v_t, 0%Z) ↔h (v_s, 0%Z) ∗
+      ⌜C !! (v_t, v_s) = None⌝)%I.
+
+  (* Relaxed logical relation for expressions TODO comment *)
+  Definition expr_logrel_relaxed C τ_t τ_s e_t e_s A_t A_s : iPropI Σ :=
+    expr_logrel (local_bij_at_exp e_t e_s) alloca_bij C τ_t τ_s e_t e_s A_t A_s.
+
+  Definition CFG_refl_inv C i_t i_s :=
+    CFG_inv local_bij C i_t i_s.
+
+  Definition code_refl_inv C i_t i_s A_t A_s :=
+    code_inv local_bij alloca_bij C i_t i_s A_t A_s.
+
+End logical_relations_instance.
 
 Section WF_def_properties.
 
@@ -463,8 +479,6 @@ Section logical_relations_properties.
   Context {Σ : gFunctors} `{!vellirisGS Σ}.
 
   (* Auxiliary definitions for invariants. *)
-  Definition CFG_refl_inv C i_t i_s := CFG_inv refl_inv C i_t i_s nil nil.
-  Definition code_refl_inv C i_t i_s A_t A_s := code_inv refl_inv C i_t i_s A_t A_s nil nil.
 
   (* Helper lemmas on [expr_local_env_inv] *)
   Lemma intersection_local_ids_eq {T} (e : exp T):
@@ -494,16 +508,16 @@ Section logical_relations_properties.
       by rewrite app_assoc. }
   Qed.
 
-  Lemma expr_local_env_inv_nil i_t i_s L_t L_s:
-    (expr_local_env_inv i_t i_s [] L_t L_s ⊣⊢ emp)%I.
+  Lemma local_env_bij_at_nil i_t i_s L_t L_s:
+    (local_bij_at nil i_t i_s L_t L_s ⊣⊢ emp)%I.
   Proof.
-    rewrite /expr_local_env_inv; by cbn.
+    rewrite /local_bij_at; by cbn.
   Qed.
 
-  Lemma expr_local_env_inv_cons_invert i_t i_s L_t L_s x l:
-    expr_local_env_inv i_t i_s (x :: l) L_t L_s -∗
-    expr_local_env_inv i_t i_s [x] L_t L_s ∗
-    expr_local_env_inv i_t i_s l L_t L_s.
+  Lemma local_bij_at_cons_invert i_t i_s L_t L_s x l:
+    local_bij_at (x :: l) i_t i_s L_t L_s -∗
+    local_bij_at [x] i_t i_s L_t L_s ∗
+    local_bij_at l i_t i_s L_t L_s.
   Proof.
     iInduction l as [ | ] "IH" forall (x).
     { (* nil case *)
@@ -515,26 +529,26 @@ Section logical_relations_properties.
       cbn; iFrame.
   Qed.
 
-  Lemma expr_local_env_inv_app_invert i_t i_s L_t L_s l1 l2:
-    expr_local_env_inv i_t i_s (l1 ++ l2) L_t L_s -∗
-    expr_local_env_inv i_t i_s l1 L_t L_s ∗
-    expr_local_env_inv i_t i_s l2 L_t L_s.
+  Lemma local_bij_at_app_invert i_t i_s L_t L_s l1 l2:
+    local_bij_at (l1 ++ l2) i_t i_s L_t L_s -∗
+    local_bij_at l1 i_t i_s L_t L_s ∗
+    local_bij_at l2 i_t i_s L_t L_s.
   Proof.
     iInduction l1 as [ | ] "IH" forall (l2).
     { (* nil case *)
       cbn; iIntros "$". }
 
     (* cons case *)
-    iIntros "H". cbn -[expr_local_env_inv].
-    iDestruct (expr_local_env_inv_cons_invert with "H") as "((Ha & _) & Hl)".
+    iIntros "H". cbn -[local_bij_at].
+    iDestruct (local_bij_at_cons_invert with "H") as "((Ha & _) & Hl)".
     iSpecialize ("IH" with "Hl"); iDestruct "IH" as "(Hl & IH)".
     iFrame.
   Qed.
 
-  Lemma expr_local_env_inv_cons i_t i_s L_t L_s x l:
-    expr_local_env_inv i_t i_s [x] L_t L_s -∗
-    expr_local_env_inv i_t i_s l L_t L_s -∗
-    expr_local_env_inv i_t i_s (x :: l) L_t L_s.
+  Lemma local_bij_at_cons i_t i_s L_t L_s x l:
+    local_bij_at [x] i_t i_s L_t L_s -∗
+    local_bij_at l i_t i_s L_t L_s -∗
+    local_bij_at (x :: l) i_t i_s L_t L_s.
   Proof.
     iInduction l as [ | ] "IH" forall (x).
     { (* nil case *)
@@ -546,339 +560,344 @@ Section logical_relations_properties.
     cbn; iFrame.
   Qed.
 
-  Lemma expr_local_env_inv_app i_t i_s L_t L_s l1 l2:
-    expr_local_env_inv i_t i_s l1 L_t L_s -∗
-    expr_local_env_inv i_t i_s l2 L_t L_s -∗
-    expr_local_env_inv i_t i_s (l1 ++ l2) L_t L_s.
+  Lemma local_bij_at_app i_t i_s L_t L_s l1 l2:
+    local_bij_at l1 i_t i_s L_t L_s -∗
+    local_bij_at l2 i_t i_s L_t L_s -∗
+    local_bij_at (l1 ++ l2) i_t i_s L_t L_s.
   Proof.
     iInduction l1 as [ | ] "IH" forall (l2).
     { (* nil case *)
       cbn; iIntros "_ $". }
 
     (* cons case *)
-    iIntros "H1 H2". cbn -[expr_local_env_inv].
-    iDestruct (expr_local_env_inv_cons_invert with "H1") as "((Ha & _) & H1)".
+    iIntros "H1 H2". cbn -[local_bij_at].
+    iDestruct (local_bij_at_cons_invert with "H1") as "((Ha & _) & H1)".
     iSpecialize ("IH" with "H1 H2"); iDestruct "IH" as "(Hl & IH)"; iFrame.
   Qed.
 
-  Lemma expr_local_env_inv_commute
+  Lemma local_bij_at_commute
     {T} i_t i_s L_t L_s (e1 e2 : exp T):
-    expr_inv i_t i_s L_t L_s e1 e1 -∗
-    expr_local_env_inv i_t i_s (exp_local_ids e2) L_t L_s -∗
-    expr_inv i_t i_s L_t L_s e2 e2 ∗
-    expr_local_env_inv i_t i_s (exp_local_ids e1) L_t L_s.
+    expr_local_bij_at e1 e1 i_t i_s L_t L_s -∗
+    local_bij_at (exp_local_ids e2) i_t i_s L_t L_s -∗
+    expr_local_bij_at e2 e2 i_t i_s L_t L_s ∗
+    local_bij_at (exp_local_ids e1) i_t i_s L_t L_s.
   Proof.
-    iIntros "(Hf & H1) H2"; iFrame.
+    iIntros "H1 H2"; iFrame. rewrite /expr_local_bij_at.
     rewrite !intersection_local_ids_eq; iFrame.
   Qed.
 
-  Lemma expr_local_env_inv_big_opL {T : Set}
+  Lemma local_bij_at_big_opL {T : Set}
     i_t i_s L_t L_s (l : list (T * exp T)):
-    ([∗ list] x ∈ l, expr_local_env_inv i_t i_s (exp_local_ids x.2) L_t L_s) ⊣⊢
-    expr_local_env_inv i_t i_s
+    ([∗ list] x ∈ l, local_bij_at (exp_local_ids x.2) i_t i_s L_t L_s) ⊣⊢
+    local_bij_at
       (concat (map (λ x, exp_local_ids_ x.2 []) l))
+      i_t i_s
       L_t L_s.
   Proof.
     iInduction l as [ | ] "IH"; cbn; try done.
     iSplit.
     { iIntros "(H1&H2)".
-      iApply (expr_local_env_inv_app with "H1").
+      iApply (local_bij_at_app with "H1").
       iApply ("IH" with "H2"). }
     { iIntros "H".
-      iDestruct (expr_local_env_inv_app_invert with "H") as "(H1 & H2)".
+      iDestruct (local_bij_at_app_invert with "H") as "(H1 & H2)".
       iFrame.
       iApply ("IH" with "H2"). }
   Qed.
 
   (* ------------------------------------------------------------------------ *)
   (* Expression-specific [expr-inv] properties *)
-  Lemma expr_inv_op_conversion:
+  Lemma local_inv_bij_op_conversion:
     ∀ (conv : conversion_type)
       (t_from t_to : dtyp)
       (e : exp dtyp)
       (i_t i_s : list frame_names)
-      (L_t L_s : local_env),
-      expr_inv i_t i_s L_t L_s
+      (L_t L_s : local_env) C,
+      local_inv_bij
         (OP_Conversion conv t_from e t_to)
-        (OP_Conversion conv t_from e t_to) -∗
-      expr_inv i_t i_s L_t L_s e e.
+        (OP_Conversion conv t_from e t_to)
+        i_t i_s
+        L_t L_s C -∗
+      local_inv_bij e e i_t i_s L_t L_s C.
   Proof.
-    iIntros (????????) "H"; done.
+    iIntros (?????????) "H"; done.
   Qed.
 
-  Lemma expr_inv_op_gep_invert:
-    ∀ {T} i_t i_s L_t L_s t ptr_t (e : exp T) dt,
-      expr_inv i_t i_s L_t L_s
+  Lemma local_inv_bij_op_gep_invert:
+    ∀ {T} i_t i_s L_t L_s t ptr_t (e : exp T) dt C,
+      local_inv_bij
         (OP_GetElementPtr t (ptr_t, e) dt)
-        (OP_GetElementPtr t (ptr_t, e) dt) -∗
-      expr_inv i_t i_s L_t L_s e e ∗
+        (OP_GetElementPtr t (ptr_t, e) dt)
+        i_t i_s L_t L_s C -∗
+      local_inv_bij e e i_t i_s L_t L_s C ∗
     ([∗ list] x ∈ dt,
-      expr_local_env_inv i_t i_s (exp_local_ids x.2) L_t L_s).
+      local_bij_at (exp_local_ids x.2) i_t i_s L_t L_s).
   Proof.
-    iIntros (?????????) "(Hf & Helts)".
-    rewrite /expr_inv !intersection_local_ids_eq; iFrame.
+    iIntros (??????????) "(Hf & Helts)".
+    rewrite /expr_local_bij_at !intersection_local_ids_eq; iFrame.
 
-    cbn -[expr_local_env_inv].
-    iDestruct (expr_local_env_inv_app_invert with "Helts") as "(He & Helts)".
+    cbn -[local_bij_at].
+    iDestruct (local_bij_at_app_invert with "Helts") as "(He & Helts)".
     iFrame.
-    iApply expr_local_env_inv_big_opL.
+    iApply local_bij_at_big_opL.
     by rewrite app_nil_r.
   Qed.
 
   (* [expr inv] inversion and cons rule for [struct]-y expressions *)
 
   (* EXP_Cstring *)
-  Lemma expr_inv_cstring_invert
-    {T : Set} i_t i_s L_t L_s (elts: list (T * exp T)):
-    expr_inv i_t i_s L_t L_s (EXP_Cstring elts) (EXP_Cstring elts) -∗
-    expr_frame_inv i_t i_s L_t L_s ∗
+  Lemma expr_local_env_bij_cstring_invert
+    {T : Set} i_t i_s L_t L_s (elts: list (T * exp T)) C:
+    local_inv (expr_local_env_bij (EXP_Cstring elts) (EXP_Cstring elts))
+      i_t i_s L_t L_s C -∗
+    frame_inv i_t i_s L_t L_s ∅ ∗
     (∀ x,
         ⌜In x elts⌝ -∗
-      expr_local_env_inv i_t i_s (exp_local_ids x.2) L_t L_s).
+      local_env_bij i_t i_s L_t L_s).
   Proof.
     iIntros "(Hf & Helts)"; iFrame.
-    rewrite intersection_local_ids_eq; cbn -[expr_local_env_inv].
+    rewrite intersection_local_ids_eq; cbn -[local_env_bij].
     rewrite app_nil_r.
     iInduction elts as [ | ] "IH"; iIntros (??); first inv H.
     apply in_inv in H; first destruct H; subst.
-    { cbn -[expr_local_env_inv].
-      iDestruct (expr_local_env_inv_app_invert with "Helts") as "(Hx & elts)".
+    { cbn -[local_env_bij].
+      iDestruct (local_env_bij_app_invert with "Helts") as "(Hx & elts)".
       iSpecialize ("IH" with "elts"); iFrame. }
-    { cbn -[expr_local_env_inv].
-      iDestruct (expr_local_env_inv_app_invert with "Helts") as "(Hx & elts)".
+    { cbn -[local_env_bij].
+      iDestruct (local_env_bij_app_invert with "Helts") as "(Hx & elts)".
       iSpecialize ("IH" with "elts"); iFrame.
       by iApply "IH". }
   Qed.
 
-  Lemma expr_inv_cstring_cons:
+  Lemma expr_local_env_bij_cstring_cons:
     ∀ (i_t i_s : list frame_names)
       (L_t L_s : local_env)
       (d : dtyp) (e : exp dtyp) (elts : list (dtyp * exp dtyp)),
-      expr_inv i_t i_s L_t L_s e e ∗
-        expr_local_env_inv i_t i_s
+      expr_local_env_bij i_t i_s L_t L_s e e ∗
+        local_env_bij i_t i_s
         (exp_local_ids (EXP_Cstring elts)) L_t L_s
       ⊣⊢
-      expr_inv i_t i_s L_t L_s
+      expr_local_env_bij i_t i_s L_t L_s
         (EXP_Cstring ((d, e) :: elts))
         (EXP_Cstring ((d, e) :: elts)).
   Proof.
     iIntros (???????).
     iSplit.
     { iIntros "((Hf & He) & Helts)";
-        cbn -[expr_local_env_inv]; iFrame.
+        cbn -[local_env_bij]; iFrame.
       rewrite !intersection_local_ids_eq;
-        cbn -[expr_local_env_inv].
+        cbn -[local_env_bij].
       rewrite !app_nil_r.
-      iApply (expr_local_env_inv_app with "He Helts"). }
-    { rewrite /expr_inv !intersection_local_ids_eq.
+      iApply (local_env_bij_app with "He Helts"). }
+    { rewrite /expr_local_env_bij !intersection_local_ids_eq.
       iIntros "(Hf & He)"; iFrame.
-      cbn -[expr_local_env_inv].
+      cbn -[local_env_bij].
       rewrite !app_nil_r.
-      iApply (expr_local_env_inv_app_invert with "He"). }
+      iApply (local_env_bij_app_invert with "He"). }
   Qed.
 
   (* EXP_Struct *)
-  Lemma expr_inv_struct_invert
+  Lemma expr_local_env_bij_struct_invert
     {T : Set} i_t i_s L_t L_s (elts: list (T * exp T)):
-    expr_inv i_t i_s L_t L_s (EXP_Struct elts) (EXP_Struct elts) -∗
-    expr_frame_inv i_t i_s L_t L_s ∗
+    expr_local_env_bij i_t i_s L_t L_s (EXP_Struct elts) (EXP_Struct elts) -∗
+    frame_inv i_t i_s L_t L_s ∅ ∗
     (∀ x,
         ⌜In x elts⌝ -∗
-      expr_local_env_inv i_t i_s (exp_local_ids x.2) L_t L_s).
+      local_env_bij i_t i_s (exp_local_ids x.2) L_t L_s).
   Proof.
     iIntros "(Hf & Helts)"; iFrame.
-    rewrite intersection_local_ids_eq; cbn -[expr_local_env_inv].
+    rewrite intersection_local_ids_eq; cbn -[local_env_bij].
     rewrite app_nil_r.
     iInduction elts as [ | ] "IH"; iIntros (??); first inv H.
     apply in_inv in H; first destruct H; subst.
-    { cbn -[expr_local_env_inv].
-      iDestruct (expr_local_env_inv_app_invert with "Helts") as "(Hx & elts)".
+    { cbn -[local_env_bij].
+      iDestruct (local_env_bij_app_invert with "Helts") as "(Hx & elts)".
       iSpecialize ("IH" with "elts"); iFrame. }
-    { cbn -[expr_local_env_inv].
-      iDestruct (expr_local_env_inv_app_invert with "Helts") as "(Hx & elts)".
+    { cbn -[local_env_bij].
+      iDestruct (local_env_bij_app_invert with "Helts") as "(Hx & elts)".
       iSpecialize ("IH" with "elts"); iFrame.
       by iApply "IH". }
   Qed.
 
-  Lemma expr_inv_struct_cons:
+  Lemma expr_local_env_bij_struct_cons:
     ∀ (i_t i_s : list frame_names)
       (L_t L_s : local_env)
       (d : dtyp) (e : exp dtyp) (elts : list (dtyp * exp dtyp)),
-      expr_inv i_t i_s L_t L_s e e ∗
-        expr_local_env_inv i_t i_s
+      expr_local_env_bij i_t i_s L_t L_s e e ∗
+        local_env_bij i_t i_s
         (exp_local_ids (EXP_Struct elts)) L_t L_s
       ⊣⊢
-      expr_inv i_t i_s L_t L_s
+      expr_local_env_bij i_t i_s L_t L_s
         (EXP_Struct ((d, e) :: elts))
         (EXP_Struct ((d, e) :: elts)).
   Proof.
     iIntros (???????).
     iSplit.
     { iIntros "((Hf & He) & Helts)";
-        cbn -[expr_local_env_inv]; iFrame.
+        cbn -[local_env_bij]; iFrame.
       rewrite !intersection_local_ids_eq;
-        cbn -[expr_local_env_inv].
+        cbn -[local_env_bij].
       rewrite !app_nil_r.
-      iApply (expr_local_env_inv_app with "He Helts"). }
-    { rewrite /expr_inv !intersection_local_ids_eq.
+      iApply (local_env_bij_app with "He Helts"). }
+    { rewrite /expr_local_env_bij !intersection_local_ids_eq.
       iIntros "(Hf & He)"; iFrame.
-      cbn -[expr_local_env_inv].
+      cbn -[local_env_bij].
       rewrite !app_nil_r.
-      iApply (expr_local_env_inv_app_invert with "He"). }
+      iApply (local_env_bij_app_invert with "He"). }
   Qed.
 
   (* EXP_Array *)
-  Lemma expr_inv_array_invert
+  Lemma expr_local_env_bij_array_invert
     {T : Set} i_t i_s L_t L_s (elts: list (T * exp T)):
-    expr_inv i_t i_s L_t L_s (EXP_Array elts) (EXP_Array elts) -∗
-    expr_frame_inv i_t i_s L_t L_s ∗
+    expr_local_env_bij i_t i_s L_t L_s (EXP_Array elts) (EXP_Array elts) -∗
+    frame_inv i_t i_s L_t L_s ∅ ∗
     (∀ x,
         ⌜In x elts⌝ -∗
-      expr_local_env_inv i_t i_s (exp_local_ids x.2) L_t L_s).
+      local_env_bij i_t i_s (exp_local_ids x.2) L_t L_s).
   Proof.
     iIntros "(Hf & Helts)"; iFrame.
-    rewrite intersection_local_ids_eq; cbn -[expr_local_env_inv].
+    rewrite intersection_local_ids_eq; cbn -[local_env_bij].
     rewrite app_nil_r.
     iInduction elts as [ | ] "IH"; iIntros (??); first inv H.
     apply in_inv in H; first destruct H; subst.
-    { cbn -[expr_local_env_inv].
-      iDestruct (expr_local_env_inv_app_invert with "Helts") as "(Hx & elts)".
+    { cbn -[local_env_bij].
+      iDestruct (local_env_bij_app_invert with "Helts") as "(Hx & elts)".
       iSpecialize ("IH" with "elts"); iFrame. }
-    { cbn -[expr_local_env_inv].
-      iDestruct (expr_local_env_inv_app_invert with "Helts") as "(Hx & elts)".
+    { cbn -[local_env_bij].
+      iDestruct (local_env_bij_app_invert with "Helts") as "(Hx & elts)".
       iSpecialize ("IH" with "elts"); iFrame.
       by iApply "IH". }
   Qed.
 
-  Lemma expr_inv_array_cons:
+  Lemma expr_local_env_bij_array_cons:
     ∀ (i_t i_s : list frame_names)
       (L_t L_s : local_env)
       (d : dtyp) (e : exp dtyp) (elts : list (dtyp * exp dtyp)),
-      expr_inv i_t i_s L_t L_s e e ∗
-        expr_local_env_inv i_t i_s
+      expr_local_env_bij i_t i_s L_t L_s e e ∗
+        local_env_bij i_t i_s
         (exp_local_ids (EXP_Array elts)) L_t L_s
       ⊣⊢
-      expr_inv i_t i_s L_t L_s
+      expr_local_env_bij i_t i_s L_t L_s
         (EXP_Array ((d, e) :: elts))
         (EXP_Array ((d, e) :: elts)).
   Proof.
     iIntros (???????).
     iSplit.
     { iIntros "((Hf & He) & Helts)";
-        cbn -[expr_local_env_inv]; iFrame.
+        cbn -[local_env_bij]; iFrame.
       rewrite !intersection_local_ids_eq;
-        cbn -[expr_local_env_inv].
+        cbn -[local_env_bij].
       rewrite !app_nil_r.
-      iApply (expr_local_env_inv_app with "He Helts"). }
-    { rewrite /expr_inv !intersection_local_ids_eq.
+      iApply (local_env_bij_app with "He Helts"). }
+    { rewrite /expr_local_env_bij !intersection_local_ids_eq.
       iIntros "(Hf & He)"; iFrame.
-      cbn -[expr_local_env_inv].
+      cbn -[local_env_bij].
       rewrite !app_nil_r.
-      iApply (expr_local_env_inv_app_invert with "He"). }
+      iApply (local_env_bij_app_invert with "He"). }
   Qed.
 
-  (* Inversion rule for [expr_inv] for [binop]-ey expressions. *)
+  (* Inversion rule for [expr_local_env_bij] for [binop]-ey expressions. *)
 
   (* OP_IBinop *)
-  Lemma expr_local_env_inv_binop_invert
+  Lemma local_env_bij_binop_invert
     {T} i_t i_s L_t L_s τ iop (e1 e2: exp T):
-    expr_local_env_inv i_t i_s
+    local_env_bij i_t i_s
       (intersection_local_ids
         (OP_IBinop iop τ e1 e2) (OP_IBinop iop τ e1 e2)) L_t L_s -∗
-    expr_local_env_inv i_t i_s
+    local_env_bij i_t i_s
       (exp_local_ids e1 ++ exp_local_ids e2) L_t L_s.
   Proof.
-    rewrite /expr_local_env_inv; cbn.
+    rewrite /local_env_bij; cbn.
     repeat rewrite exp_local_ids_acc_commute; rewrite app_nil_r.
     rewrite list_intersection_eq.
     by iIntros "H".
   Qed.
 
-  Lemma expr_inv_binop_invert
+  Lemma expr_local_env_bij_binop_invert
     {T} i_t i_s L_t L_s τ iop (e1 e2 : exp T):
-    expr_inv
+    expr_local_env_bij
       i_t i_s L_t L_s
       (OP_IBinop iop τ e1 e2)
       (OP_IBinop iop τ e1 e2) -∗
-    expr_inv i_t i_s L_t L_s e1 e1 ∗
-    expr_local_env_inv i_t i_s (exp_local_ids e2) L_t L_s.
+    expr_local_env_bij i_t i_s L_t L_s e1 e1 ∗
+    local_env_bij i_t i_s (exp_local_ids e2) L_t L_s.
   Proof.
     iIntros "Hb"; iDestruct "Hb" as "(Hf_inv & Hl)"; iFrame.
-    iPoseProof (expr_local_env_inv_binop_invert with "Hl") as "Hl".
-    iDestruct (expr_local_env_inv_app_invert with "Hl") as "(H1 & H2)".
+    iPoseProof (local_env_bij_binop_invert with "Hl") as "Hl".
+    iDestruct (local_env_bij_app_invert with "Hl") as "(H1 & H2)".
     iFrame; by rewrite intersection_local_ids_eq.
   Qed.
 
-  Lemma expr_inv_binop
+  Lemma expr_local_env_bij_binop
     {T} i_t i_s L_t L_s τ iop (e1 e2 : exp T):
-    expr_inv
+    expr_local_env_bij
       i_t i_s L_t L_s
       (OP_IBinop iop τ e1 e2)
       (OP_IBinop iop τ e1 e2) ⊣⊢
-    expr_inv i_t i_s L_t L_s e1 e1 ∗
-    expr_local_env_inv i_t i_s (exp_local_ids e2) L_t L_s.
+    expr_local_env_bij i_t i_s L_t L_s e1 e1 ∗
+    local_env_bij i_t i_s (exp_local_ids e2) L_t L_s.
   Proof.
-    iSplit; first iApply expr_inv_binop_invert.
+    iSplit; first iApply expr_local_env_bij_binop_invert.
     iIntros "((Hf & H1)& H2)"; iFrame.
-    rewrite !intersection_local_ids_eq; cbn -[expr_local_env_inv].
+    rewrite !intersection_local_ids_eq; cbn -[local_env_bij].
     rewrite exp_local_ids_acc_commute.
-    iApply (expr_local_env_inv_app with "H1 H2").
+    iApply (local_env_bij_app with "H1 H2").
   Qed.
 
   (* OP_ICmp *)
-  Lemma expr_local_env_inv_icmp_invert
+  Lemma local_env_bij_icmp_invert
     {T} i_t i_s L_t L_s τ iop (e1 e2: exp T):
-    expr_local_env_inv i_t i_s
+    local_env_bij i_t i_s
       (intersection_local_ids
         (OP_ICmp iop τ e1 e2) (OP_ICmp iop τ e1 e2)) L_t L_s -∗
-    expr_local_env_inv i_t i_s
+    local_env_bij i_t i_s
       (exp_local_ids e1 ++ exp_local_ids e2) L_t L_s.
   Proof.
-    rewrite /expr_local_env_inv; cbn.
+    rewrite /local_env_bij; cbn.
     repeat rewrite exp_local_ids_acc_commute; rewrite app_nil_r.
     rewrite list_intersection_eq.
     by iIntros "H".
   Qed.
 
-  Lemma expr_inv_icmp_invert
+  Lemma expr_local_env_bij_icmp_invert
     {T} i_t i_s L_t L_s τ iop (e1 e2 : exp T):
-    expr_inv
+    expr_local_env_bij
       i_t i_s L_t L_s
       (OP_ICmp iop τ e1 e2)
       (OP_ICmp iop τ e1 e2) -∗
-    expr_inv i_t i_s L_t L_s e1 e1 ∗
-    expr_local_env_inv i_t i_s (exp_local_ids e2) L_t L_s.
+    expr_local_env_bij i_t i_s L_t L_s e1 e1 ∗
+    local_env_bij i_t i_s (exp_local_ids e2) L_t L_s.
   Proof.
     iIntros "Hb"; iDestruct "Hb" as "(Hf_inv & Hl)"; iFrame.
-    iPoseProof (expr_local_env_inv_icmp_invert with "Hl") as "Hl".
-    iDestruct (expr_local_env_inv_app_invert with "Hl") as "(H1 & H2)".
+    iPoseProof (local_env_bij_icmp_invert with "Hl") as "Hl".
+    iDestruct (local_env_bij_app_invert with "Hl") as "(H1 & H2)".
     iFrame; by rewrite intersection_local_ids_eq.
   Qed.
 
-  Lemma expr_inv_icmp
+  Lemma expr_local_env_bij_icmp
     {T} i_t i_s L_t L_s τ iop (e1 e2 : exp T):
-    expr_inv
+    expr_local_env_bij
       i_t i_s L_t L_s
       (OP_ICmp iop τ e1 e2)
       (OP_ICmp iop τ e1 e2) ⊣⊢
-    expr_inv i_t i_s L_t L_s e1 e1 ∗
-    expr_local_env_inv i_t i_s (exp_local_ids e2) L_t L_s.
+    expr_local_env_bij i_t i_s L_t L_s e1 e1 ∗
+    local_env_bij i_t i_s (exp_local_ids e2) L_t L_s.
   Proof.
-    iSplit; first iApply expr_inv_icmp_invert.
+    iSplit; first iApply expr_local_env_bij_icmp_invert.
     iIntros "((Hf & H1)& H2)"; iFrame.
-    rewrite !intersection_local_ids_eq; cbn -[expr_local_env_inv].
+    rewrite !intersection_local_ids_eq; cbn -[local_env_bij].
     rewrite exp_local_ids_acc_commute.
-    iApply (expr_local_env_inv_app with "H1 H2").
+    iApply (local_env_bij_app with "H1 H2").
   Qed.
 
-  (* Utility lemma about [expr_inv]. *)
+  (* Utility lemma about [expr_local_env_bij]. *)
   (* If [x] is included in the local ids of both [e_t] and [e_s]
-     and we have the [expr_inv] on those expressions, the local
+     and we have the [expr_local_env_bij] on those expressions, the local
      environments must contain the local id. *)
-  Lemma expr_inv_local_env_includes {T} x {i_t i_s L_t L_s} (e_t e_s : exp T):
+  Lemma expr_local_env_bij_local_env_includes {T} x {i_t i_s L_t L_s} (e_t e_s : exp T):
     x ∈ (exp_local_ids e_t) ->
     x ∈ (exp_local_ids e_s) ->
-    expr_inv i_t i_s L_t L_s e_t e_s -∗
+    expr_local_env_bij i_t i_s L_t L_s e_t e_s -∗
     ⌜x ∈ L_t.*1 /\ x ∈ L_s.*1⌝.
   Proof.
     iIntros (Ht Hs) "(Hf & Hl)".
@@ -886,7 +905,7 @@ Section logical_relations_properties.
       x ∈ list_intersection (exp_local_ids e_t) (exp_local_ids e_s)).
     { by rewrite elem_of_list_intersection. }
 
-    rewrite /expr_local_env_inv.
+    rewrite /local_env_bij.
     apply elem_of_list_lookup_1 in Hint; destruct Hint.
 
     iDestruct (big_sepL_delete with "Hl") as "(Helem & Hl)"; eauto; cbn.
@@ -897,8 +916,8 @@ Section logical_relations_properties.
   Qed.
 
   (* Useful properties for preserving [*_inv] *)
-  Lemma local_expr_inv {T} σ_t σ_s i_t i_s L_t L_s (e_t e_s: _ T):
-    ⊢ expr_inv i_t i_s L_t L_s e_t e_s -∗
+  Lemma local_expr_local_env_bij {T} σ_t σ_s i_t i_s L_t L_s (e_t e_s: _ T):
+    ⊢ expr_local_env_bij i_t i_s L_t L_s e_t e_s -∗
     state_interp σ_t σ_s ==∗
       state_interp σ_t σ_s ∗
       ([∗ list] l ∈ (intersection_local_ids e_t e_s),
@@ -945,6 +964,30 @@ Section logical_relations_properties.
     done.
   Qed.
 
+  Ltac destruct_code_inv :=
+    match goal with
+    | |- context [environments.Esnoc _ ?CI (code_inv _ _ _ _ _ _ _ _)] =>
+        iDestruct CI as (args_t args_s) "(HF & HI & Ha_t & Ha_s & %Hd_at & %Hd_as & #HAbij)"
+    end.
+
+  Ltac destruct_CFG_inv :=
+    match goal with
+    | |- context [environments.Esnoc _ ?CI (CFG_inv _ _ _ _ _ _)] =>
+        iDestruct CI as (args_t args_s) "(HF & HI & Ha_t & Ha_s)"
+    end.
+
+  Ltac destruct_frame_inv :=
+    match goal with
+    | |- context [environments.Esnoc _ ?FI (frame_inv _ _ _ _ _ )]=>
+        iDestruct FI as (Hd_t Hd_s) "(Hf_t & Hf_s & #HWF & Hd_t & Hd_s & HC)"
+    end.
+
+  Ltac destruct_refl_inv :=
+    match goal with
+    | |- context [environments.Esnoc _ ?RI (refl_inv _ _ _ _)]=>
+        iDestruct RI as (?) "(Hl_t & Hl_s & #Hlocal_bij)"
+    end.
+
   Lemma local_code_inv σ_t σ_s C i_t i_s A_t A_s I L_t L_s:
     ⊢ code_inv I C i_t i_s A_t A_s L_t L_s-∗
     state_interp σ_t σ_s ==∗
@@ -952,24 +995,17 @@ Section logical_relations_properties.
       ⌜(list_to_set args_t.*1 : gset _) = list_to_set (vlocal σ_t).1.*1⌝ ∗
       ⌜(list_to_set args_s.*1 : gset _) = list_to_set (vlocal σ_s).1.*1⌝ ∗
       ⌜NoDup A_t⌝ ∗ ⌜NoDup A_s⌝ ∗
-      ([∗ list] '(l_t, v_t) ∈ args_t, [ l_t := v_t ]t i_t) ∗
-      ([∗ list] '(l_s, v_s) ∈ args_s, [ l_s := v_s ]s i_s) ∗
       (I (remove_ids L_t args_t) (remove_ids L_s args_s)) ∗
       ([∗ list] v_t;v_s ∈ A_t;A_s, (v_t, 0) ↔h (v_s, 0)
          ∗ ⌜C !! (v_t, v_s) = None⌝) ∗
       state_interp σ_t σ_s ∗
-      ldomain_tgt i_t (list_to_set (vlocal σ_t).1.*1) ∗
-      ldomain_src i_s (list_to_set (vlocal σ_s).1.*1) ∗
-      checkout C ∗
-      stack_tgt i_t ∗ stack_src i_s ∗
-      frame_WF i_t i_s ∗
+      frame_inv i_t i_s args_t args_s C ∗
       alloca_tgt i_t (list_to_set A_t) ∗ alloca_src i_s (list_to_set A_s).
   Proof.
     iIntros "CI SI".
     iDestruct "SI" as (???) "(Hh_s & Hh_t & H_c & Hbij & SI)".
-    iDestruct "CI" as  (??) "(Hd_t & Hd_s & Hf_t & Hf_s & WF &
-        Hargs_t & Hargs_s &
-        Hv & HC & Ha_t & Ha_s & %Hnd_t & %Hnd_s & #Hl)"; subst.
+    destruct_code_inv.
+    destruct_frame_inv.
 
     destruct_HC "Hh_s".
 
@@ -978,55 +1014,48 @@ Section logical_relations_properties.
 
     iDestruct (ghost_var_agree with "Hf_s HCF") as %Hf_s.
     iDestruct (ghost_var_agree with "Hf_t HCF_t") as %Hf_t. subst.
-    iDestruct (ghost_var_agree with "Hd_s HD") as %Hd_s.
-    iDestruct (ghost_var_agree with "Hd_t HD_t") as %Hd_t.
+    iDestruct (ghost_var_agree with "Hd_s HD") as %Hd_s'.
+    iDestruct (ghost_var_agree with "Hd_t HD_t") as %Hd_t'.
     iExists args_t, args_s.
     cbn in *.
 
     do 4 (iSplitL ""; [ done | ]).
     iFrame.
-    iFrame "Hl".
+    iFrame "HAbij".
+    iFrame "HWF". iSplitR ""; last done.
 
     repeat iExists _; iFrame.
 
-    iSplitL "Hd_s Hf_s HA HL HSA Hb".
-    { repeat iExists _; iFrame. rewrite Hd_s. by iFrame. }
+    iSplitL "HD Hf_s HA HL HSA Hb".
+    { repeat iExists _; iFrame. done. }
 
-    rewrite Hd_t.
     repeat iExists _; iFrame. cbn; done.
   Qed.
 
   Lemma local_code_refl_inv σ_t σ_s C i_t i_s A_t A_s L_t L_s:
-    ⊢ code_inv refl_inv C i_t i_s A_t A_s L_t L_s -∗
+    ⊢ code_refl_inv C i_t i_s A_t A_s L_t L_s -∗
     state_interp σ_t σ_s ==∗
     ∃ args_t args_s,
       ⌜(list_to_set args_t.*1 : gset _) = list_to_set (vlocal σ_t).1.*1⌝ ∗
       ⌜(list_to_set args_s.*1 : gset _) = list_to_set (vlocal σ_s).1.*1⌝ ∗
       ⌜(remove_ids L_t args_t).*1 = (remove_ids L_s args_s).*1⌝ ∗
       ⌜NoDup A_t⌝ ∗ ⌜NoDup A_s⌝ ∗
-      ([∗ list] '(l_t, v_t) ∈ args_t, [ l_t := v_t ]t i_t) ∗
-      ([∗ list] '(l_s, v_s) ∈ args_s, [ l_s := v_s ]s i_s) ∗
+      ([∗ list] '(l_t, v_t) ∈ remove_ids L_t args_t, [ l_t := v_t ]t i_t) ∗
+      ([∗ list] '(l_s, v_s) ∈ remove_ids L_s args_s, [ l_s := v_s ]s i_s) ∗
       ([∗ list] v_t;v_s ∈ A_t;A_s, (v_t, 0) ↔h (v_s, 0)
          ∗ ⌜C !! (v_t, v_s) = None⌝) ∗
       ([∗ list] v_t; v_s ∈ (remove_ids L_t args_t).*2;
        (remove_ids L_s args_s).*2, uval_rel v_t v_s) ∗
       state_interp σ_t σ_s ∗
-      ldomain_tgt i_t (list_to_set (vlocal σ_t).1.*1) ∗
-      ldomain_src i_s (list_to_set (vlocal σ_s).1.*1) ∗
-      checkout C ∗
-      stack_tgt i_t ∗ stack_src i_s ∗
-      frame_WF i_t i_s ∗
+      frame_inv i_t i_s args_t args_s C ∗
       alloca_tgt i_t (list_to_set A_t) ∗ alloca_src i_s (list_to_set A_s).
   Proof.
     iIntros "CI SI".
     iDestruct (local_code_inv with "CI SI") as ">H".
     iDestruct "H" as (????)
-        "(%Hnd_t & %Hnd_s & Hlt & Hls & Hv & #Ha_v & SI & Hd_t & Hd_s
-          & HC & Hf_t & Hf_s & #WF & Ha_t & Ha_s)".
+        "(%Hnd_t & %Hnd_s & Hlt & Hls & Hv & Hf & Ha_t & Ha_s)".
     iFrame. iExists args_t, args_s; iFrame.
-    rewrite /refl_inv. cbn.
-    iDestruct "Hv" as (?) "Hv"; iFrame.
-    iFrame "Ha_v WF"; done.
+    destruct_refl_inv. rewrite H H0. iFrame "Hlocal_bij Hl_t Hl_s". done.
   Qed.
 
   Lemma local_CFG_inv σ_t σ_s C i_t i_s I L_t L_s:
@@ -1035,21 +1064,14 @@ Section logical_relations_properties.
     ∃ args_t args_s,
       ⌜(list_to_set args_t.*1 : gset _) = list_to_set (vlocal σ_t).1.*1⌝ ∗
       ⌜(list_to_set args_s.*1 : gset _) = list_to_set (vlocal σ_s).1.*1⌝ ∗
-      ([∗ list] '(l_t, v_t) ∈ args_t, [ l_t := v_t ]t i_t) ∗
-      ([∗ list] '(l_s, v_s) ∈ args_s, [ l_s := v_s ]s i_s) ∗
       (I (remove_ids L_t args_t) (remove_ids L_s args_s)) ∗
       state_interp σ_t σ_s ∗
-      ldomain_tgt i_t (list_to_set (vlocal σ_t).1.*1) ∗
-      ldomain_src i_s (list_to_set (vlocal σ_s).1.*1) ∗
-      checkout C ∗
-      stack_tgt i_t ∗ stack_src i_s ∗
+      frame_inv i_t i_s args_t args_s C ∗
       alloca_tgt i_t ∅ ∗ alloca_src i_s ∅.
   Proof.
     iIntros "CI SI".
     iDestruct "SI" as (???) "(Hh_s & Hh_t & H_c & Hbij & SI)".
-    iDestruct "CI" as  (??) "(Hd_t & Hd_s & Hf_t & Hf_s &
-                          Hargs_t & Hargs_s & Hv & HC & Ha_t & Ha_s)"; subst.
-
+    destruct_CFG_inv; destruct_frame_inv.
     destruct_HC "Hh_s".
 
     iDestruct "Hh_t" as (cft hFt)
@@ -1057,21 +1079,23 @@ Section logical_relations_properties.
 
     iDestruct (ghost_var_agree with "Hf_s HCF") as %Hf_s.
     iDestruct (ghost_var_agree with "Hf_t HCF_t") as %Hf_t. subst.
-    iDestruct (ghost_var_agree with "Hd_s HD") as %Hd_s.
-    iDestruct (ghost_var_agree with "Hd_t HD_t") as %Hd_t.
+    iDestruct (ghost_var_agree with "Hd_s HD") as %Hd_s'.
+    iDestruct (ghost_var_agree with "Hd_t HD_t") as %Hd_t'.
     iExists args_t, args_s.
     cbn in *.
 
     iFrame.
     do 2 (iSplitL ""; [ done | ]).
+    iFrame "HWF".
 
+    iSplitR ""; last done.
     repeat iExists _; iFrame.
 
-    iSplitL "Hd_s Hf_s HA HL HSA Hb".
-    { repeat iExists _; iFrame. rewrite Hd_s. by iFrame. }
 
-    rewrite Hd_t.
-    repeat iExists _; iFrame. cbn; done.
+    iSplitL "HD Hf_s HA HL HSA Hb".
+    { repeat iExists _; by iFrame. }
+
+    repeat iExists _; by iFrame.
   Qed.
 
   (* Local write reflexivity: we can do local writes on
@@ -1415,15 +1439,15 @@ Section logical_relations_properties.
 
   Lemma expr_local_read_refl {T} x i_t i_s L_t L_s (e_t e_s : exp T):
     x ∈ intersection_local_ids e_t e_s ->
-    ⊢ expr_inv i_t i_s L_t L_s e_t e_s -∗
+    ⊢ expr_local_env_bij i_t i_s L_t L_s e_t e_s -∗
     trigger (LocalRead x) ⪯ trigger (LocalRead x)
-      [{ (v1, v2), uval_rel v1 v2 ∗ expr_inv i_t i_s L_t L_s e_t e_s }].
+      [{ (v1, v2), uval_rel v1 v2 ∗ expr_local_env_bij i_t i_s L_t L_s e_t e_s }].
   Proof.
     iIntros (He) "CI".
     iApply sim_update_si.
 
     iIntros "%σ_t %σ_s SI".
-    iDestruct (local_expr_inv with "CI SI") as ">H".
+    iDestruct (local_expr_local_env_bij with "CI SI") as ">H".
     iDestruct "H" as
         "(SI & Hv & %Hndt & %Hnds & %Ht & %Hs & Hd_t & Hd_s & HC & Hs_t & Hs_s & Hwf)".
     iFrame.
