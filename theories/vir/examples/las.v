@@ -267,18 +267,19 @@ Proof.
   destructb. apply forallb_True in H1; auto.
 Qed.
 
-Lemma block_compat_relaxed (a : raw_id) Φ I A_t A_s b_t b_s bid L:
+Lemma block_compat_relaxed
+  (a : raw_id) Φ I A_t A_s b_t b_s bid L L_t L_s:
   Is_true (block_WF b_t) ->
   Is_true (block_WF b_s) ->
-  ⊢ (∀ i_t i_s, code_inv L ∅ i_t i_s A_t A_s nil nil -∗ I) -∗
-    (∀ i_t i_s, I -∗ code_inv_post L ∅ i_t i_s A_t A_s nil nil) -∗
+  ⊢ (∀ i_t i_s, code_inv L ∅ i_t i_s A_t A_s L_t L_s -∗ I) -∗
+    (∀ i_t i_s, I -∗ code_inv_post L ∅ i_t i_s A_t A_s L_t L_s) -∗
     (* Related phi nodes *)
     (phis_logrel L
         (denote_phis bid (blk_phis b_t))
         (denote_phis bid (blk_phis b_s))
-       ∅ A_t A_s nil nil) -∗
+       ∅ A_t A_s L_t L_s) -∗
     (* Related terminators *)
-    (term_logrel L (blk_term b_t) (blk_term b_s) ∅ nil nil) -∗
+    (term_logrel L (blk_term b_t) (blk_term b_s) ∅ L_t L_s) -∗
     (* Related instructions *)
     (I -∗
       instr_conv (denote_code (blk_code b_t)) ⪯
@@ -286,7 +287,7 @@ Lemma block_compat_relaxed (a : raw_id) Φ I A_t A_s b_t b_s bid L:
       [{ (r_t, r_s), I ∗ Φ r_t r_s }]) -∗
    (* TODO: state [phi_logrel] related for a weakened [phi_logrel] *)
    (* Weaken the postcondition for [ocfg_logrel] *)
-   block_logrel L b_t b_s bid ∅ A_t A_s nil nil.
+   block_logrel L b_t b_s bid ∅ A_t A_s L_t L_s.
 Proof with vsimp.
   iIntros (WF_b WF_b') "Hinv I HΦ Hterm Hinst".
   iIntros (??) "CI".
@@ -324,13 +325,56 @@ Proof with vsimp.
   iModIntro. by iExists _, _.
 Qed.
 
+(* The [las] algorithm does not change the phi nodes. *)
+Lemma las_phi_stable {T} a b :
+  blk_phis (las_block a None b) = blk_phis (T := T) b.
+Proof.
+  eauto.
+Qed.
+
+From velliris.vir Require Import fundamental_exp_relaxed.
+
+Theorem phi_logrel_refl bid id ϕ C A_t A_s L_t L_s:
+  ⊢ (phi_logrel expr_inv (denote_phi bid (id, ϕ)) (denote_phi bid (id, ϕ)) C A_t A_s L_t L_s)%I.
+Proof with vsimp.
+  iApply phi_compat; destruct ϕ.
+  { iIntros (????); iApply refl_inv_mono. }
+  destruct (Util.assoc bid args); try done.
+  iApply expr_logrel_relaxed_refl.
+Qed.
+
+
+Theorem phis_logrel_refl C bid (Φ : list (local_id * phi dtyp)) A_t A_s a:
+  (⊢ phis_logrel refl_inv (denote_phis bid Φ) (denote_phis bid Φ) C A_t A_s [a] [a])%I.
+Proof with vsimp.
+  iApply phis_compat.
+  { iIntros (????); iApply refl_inv_mono. }
+  iInduction Φ as [ | ] "IH"; first done.
+  cbn; iSplitL; [ destruct a; iApply phi_logrel_refl | done ].
+Qed.
+
+
 Lemma las_block_sim A_t A_s be b a:
   Is_true (block_WF b) ->
-  ⊢ block_logrel (fun _ _ => True)
-      (las_block a None b) b be ∅ A_t A_s [] [].
+  ⊢ block_logrel refl_inv
+      (las_block a None b) b be ∅ A_t A_s [a] [a].
 Proof.
-  iIntros (WF); iApply block_compat; eauto.
+  iIntros (WF).
+  iApply block_compat_relaxed; eauto.
   { by eapply block_WF_las. }
+
+  (* Invariant *)
+  { iIntros (??) "CI". admit. }
+
+  (* Invariant *)
+  { admit. }
+
+  (* Phi compat *)
+  { rewrite las_phi_stable.
+    iApply phis_compat.
+    { iIntros (????); iApply refl_inv_mono. }
+    
+
 
 Admitted.
 
