@@ -271,7 +271,6 @@ Section logical_relations_def.
 
    Definition phi_logrel (ϕ_t ϕ_s : itree exp_E (local_id * uvalue)) C A_t A_s L_t L_s : iPropI Σ :=
     (∀ args_t args_s i_t i_s,
-       ⌜args_t.*1 = args_s.*1⌝ ∗
        ⌜NoDup A_t⌝ ∗ ⌜NoDup A_s⌝ ∗
        ldomain_tgt i_t (list_to_set args_t.*1) ∗ ldomain_src i_s (list_to_set args_s.*1) ∗
        ([∗ list] '(l_t, v_t) ∈ args_t, [ l_t := v_t ]t i_t) ∗
