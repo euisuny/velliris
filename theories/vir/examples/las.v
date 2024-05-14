@@ -203,9 +203,9 @@ Axiom fun_is_SSA : function -> Prop.
 Axiom ocfg_is_SSA : ocfg dtyp -> Prop.
 Axiom code_is_SSA : code dtyp -> Prop.
 
-From velliris Require Import vir.logical_relations.
-
 From velliris.program_logic Require Import program_logic.
+
+From velliris.vir Require Import logical_relations tactics.
 
 Section las_example_proof.
 
@@ -267,6 +267,63 @@ Proof.
   destructb. apply forallb_True in H1; auto.
 Qed.
 
+Lemma block_compat_relaxed (a : raw_id) Φ I A_t A_s b_t b_s bid L:
+  Is_true (block_WF b_t) ->
+  Is_true (block_WF b_s) ->
+  ⊢ (∀ i_t i_s, code_inv L ∅ i_t i_s A_t A_s nil nil -∗ I) -∗
+    (∀ i_t i_s, I -∗ code_inv_post L ∅ i_t i_s A_t A_s nil nil) -∗
+    (* Related phi nodes *)
+    (phis_logrel L
+        (denote_phis bid (blk_phis b_t))
+        (denote_phis bid (blk_phis b_s))
+       ∅ A_t A_s nil nil) -∗
+    (* Related terminators *)
+    (term_logrel L (blk_term b_t) (blk_term b_s) ∅ nil nil) -∗
+    (* Related instructions *)
+    (I -∗
+      instr_conv (denote_code (blk_code b_t)) ⪯
+      instr_conv (denote_code (blk_code b_s))
+      [{ (r_t, r_s), I ∗ Φ r_t r_s }]) -∗
+   (* TODO: state [phi_logrel] related for a weakened [phi_logrel] *)
+   (* Weaken the postcondition for [ocfg_logrel] *)
+   block_logrel L b_t b_s bid ∅ A_t A_s nil nil.
+Proof with vsimp.
+  iIntros (WF_b WF_b') "Hinv I HΦ Hterm Hinst".
+  iIntros (??) "CI".
+  cbn -[denote_phis]...
+  setoid_rewrite instr_conv_bind at 3.
+  Cut...
+
+  (* Phis *)
+  mono: (iApply ("HΦ" with "CI")) with "[Hinv I Hterm Hinst]"...
+  setoid_rewrite instr_conv_bind...
+  rewrite <- !bind_bind. Cut...
+
+  (* Code block *)
+  iSpecialize ("Hinv" with "HΦ").
+  iSpecialize ("Hinst" with "Hinv").
+  mono: iApply "Hinst" with "[I Hterm]"...
+
+  iDestruct "HΦ" as "(HI & HΦ)".
+  iSpecialize ("I" with "HI"); iDestruct "I" as (??) "HI".
+
+  (* Well-formedness of block *)
+  apply andb_prop_elim in WF_b, WF_b';
+    destruct WF_b, WF_b'.
+
+  (* Terminator *)
+  iSpecialize ("Hterm" with "[] [] HI"); eauto.
+
+  mono: iApply "Hterm" with "[HΦ]"...
+
+  iIntros (??) "H".
+  iDestruct "H" as (????) "(Hi & H)".
+  iExists _,_. rewrite H4 H5.
+  do 2 (iSplitL ""; [ done | ]).
+  iFrame "H".
+  iModIntro. by iExists _, _.
+Qed.
+
 Lemma las_block_sim A_t A_s be b a:
   Is_true (block_WF b) ->
   ⊢ block_logrel (fun _ _ => True)
@@ -277,6 +334,7 @@ Proof.
 
 Admitted.
 
+
 Lemma las_simulation_ocfg
   (f : ocfg dtyp) a A_t A_s b1 b2 :
   Is_true (ocfg_WF f) ->
@@ -285,7 +343,8 @@ Lemma las_simulation_ocfg
   ⊢ ocfg_logrel (fun _ _ => True)
     (las_ocfg f a) f ∅ A_t A_s b1 b2 nil nil.
 Proof.
-  iIntros (???). iApply ocfg_compat; first (iIntros; done); eauto.
+  iIntros (???).
+  iApply ocfg_compat; first (iIntros; done); eauto.
   { eapply ocfg_WF_las in H0; eauto. }
   iModIntro.
   iInduction f as [ | ] "IH"; eauto.
