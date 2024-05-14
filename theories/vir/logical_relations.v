@@ -203,6 +203,7 @@ Section logical_relations_def.
      alloca_tgt i_t (list_to_set A_t : gset _) ∗
      alloca_src i_s (list_to_set A_s : gset _) ∗
      ⌜NoDup A_t⌝ ∗ ⌜NoDup A_s⌝ ∗
+     (* FIXME: Relax the invariant over the allocated locations *)
       ([∗ list] v_t; v_s ∈ A_t;A_s, (v_t, 0%Z) ↔h (v_s, 0%Z) ∗
            ⌜C !! (v_t, v_s) = None⌝))%I.
 
@@ -275,7 +276,7 @@ Section logical_relations_def.
        ldomain_tgt i_t (list_to_set args_t.*1) ∗ ldomain_src i_s (list_to_set args_s.*1) ∗
        ([∗ list] '(l_t, v_t) ∈ args_t, [ l_t := v_t ]t i_t) ∗
        ([∗ list] '(l_s, v_s) ∈ args_s, [ l_s := v_s ]s i_s) ∗
-       I args_t args_s ∗
+       (I (remove_ids L_t args_t) (remove_ids L_s args_s)) ∗
       stack_tgt i_t ∗ stack_src i_s ∗ frame_WF i_t i_s ∗ checkout C ∗
       alloca_tgt i_t (list_to_set A_t) ∗ alloca_src i_s (list_to_set A_s) ∗
       ([∗ list] v_t; v_s ∈ A_t;A_s, (v_t, 0%Z) ↔h (v_s, 0%Z) ∗ ⌜C !! (v_t, v_s) = None⌝) -∗
