@@ -1232,7 +1232,7 @@ Section fundamental.
                 (CFG_attributes defs) (CFG_attributes defs) ∗
             ⌜fundefs_WF r_t (CFG_attributes defs)⌝ ∗
             ⌜fundefs_WF r_s (CFG_attributes defs)⌝ ∗
-            □ (fundefs_logrel refl_inv r_t r_s (CFG_attributes defs) (CFG_attributes defs) ∅) ⦊)%I.
+            □ (fundefs_logrel r_t r_s (CFG_attributes defs) (CFG_attributes defs) ∅) ⦊)%I.
   Proof with vsimp.
     rewrite /mcfg_definitions. iIntros (WF) "#Hg_t #Hg_s". destruct defs.
     cbn in *. rewrite /CFG_WF /CFG_names in WF;
