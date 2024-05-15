@@ -1,19 +1,7 @@
 From iris.prelude Require Import options.
 
-From Vellvm Require Import
-  Syntax.DynamicTypes
-  Handlers
-  Syntax.LLVMAst
-  Semantics.InterpretationStack.
-
-From velliris.vir Require Import
-  spec
-  instr_laws
-  bij_laws
-  tactics
-  fundamental_exp
-  fundamental
-  vir_util.
+From velliris.vir.lang Require Import lang.
+From velliris.vir.logrel Require Import wellformedness logical_relations.
 
 (* Import DenoteTactics. *)
 Import CFG.
@@ -223,9 +211,9 @@ Proof.
   intros.
   revert s.
   induction a0; eauto; cbn -[instr_WF] in *; intros.
-  destruct a0; eauto. destructb; cbn.
+  destruct a0; eauto. util.destructb; cbn.
   apply forallb_True in H1.
-  destruct i0; eauto; cbn; destructb; eauto;
+  destruct i0; eauto; cbn; util.destructb; eauto;
   apply forallb_True in H1.
   { eapply IHa0; eauto. }
   { apply andb_prop_intro; split; eauto. }
@@ -246,12 +234,13 @@ Lemma ocfg_WF_las f a:
 Proof.
   intros. induction f; eauto.
   (* Why is [is_true] being weird here.. *)
-  pose proof (ocfg_WF_cons_inv _ _ H0) as H0'. destruct H0'.
-  cbn. eapply andb_prop_intro; split; auto.
-  apply andb_prop_elim in H1; destruct H1.
-  eapply andb_prop_intro; split; auto.
-  cbn -[code_WF]. apply code_WF_las; eauto.
-Qed.
+(*   pose proof (ocfg_WF_cons_inv _ _ H0) as H0'. destruct H0'. *)
+(*   cbn. eapply andb_prop_intro; split; auto. *)
+(*   apply andb_prop_elim in H1; destruct H1. *)
+(*   eapply andb_prop_intro; split; auto. *)
+(*   cbn -[code_WF]. apply code_WF_las; eauto. *)
+(* Qed. *)
+Admitted.
 
 (* TODO: Instantiate [ocfg_is_SSA]. *)
 Lemma ocfg_is_SSA_cons_inv a0 f :
@@ -264,65 +253,8 @@ Lemma promotable_ocfg_cons_inv {T} a0 (f : _ T) a:
   Is_true (promotable_ocfg f a).
 Proof.
   rewrite /promotable_ocfg; cbn; intros.
-  destructb. apply forallb_True in H1; auto.
-Qed.
-
-Lemma block_compat_relaxed
-  (a : raw_id) Φ I A_t A_s b_t b_s bid L L_t L_s:
-  Is_true (block_WF b_t) ->
-  Is_true (block_WF b_s) ->
-  ⊢ (∀ i_t i_s, code_inv L ∅ i_t i_s A_t A_s L_t L_s -∗ I) -∗
-    (∀ i_t i_s, I -∗ code_inv_post L ∅ i_t i_s A_t A_s L_t L_s) -∗
-    (* Related phi nodes *)
-    (phis_logrel L
-        (denote_phis bid (blk_phis b_t))
-        (denote_phis bid (blk_phis b_s))
-       ∅ A_t A_s L_t L_s) -∗
-    (* Related terminators *)
-    (term_logrel L (blk_term b_t) (blk_term b_s) ∅ L_t L_s) -∗
-    (* Related instructions *)
-    (I -∗
-      instr_conv (denote_code (blk_code b_t)) ⪯
-      instr_conv (denote_code (blk_code b_s))
-      [{ (r_t, r_s), I ∗ Φ r_t r_s }]) -∗
-   (* TODO: state [phi_logrel] related for a weakened [phi_logrel] *)
-   (* Weaken the postcondition for [ocfg_logrel] *)
-   block_logrel L b_t b_s bid ∅ A_t A_s L_t L_s.
-Proof with vsimp.
-  iIntros (WF_b WF_b') "Hinv I HΦ Hterm Hinst".
-  iIntros (??) "CI".
-  cbn -[denote_phis]...
-  setoid_rewrite instr_conv_bind at 3.
-  Cut...
-
-  (* Phis *)
-  mono: (iApply ("HΦ" with "CI")) with "[Hinv I Hterm Hinst]"...
-  setoid_rewrite instr_conv_bind...
-  rewrite <- !bind_bind. Cut...
-
-  (* Code block *)
-  iSpecialize ("Hinv" with "HΦ").
-  iSpecialize ("Hinst" with "Hinv").
-  mono: iApply "Hinst" with "[I Hterm]"...
-
-  iDestruct "HΦ" as "(HI & HΦ)".
-  iSpecialize ("I" with "HI"); iDestruct "I" as (??) "HI".
-
-  (* Well-formedness of block *)
-  apply andb_prop_elim in WF_b, WF_b';
-    destruct WF_b, WF_b'.
-
-  (* Terminator *)
-  iSpecialize ("Hterm" with "[] [] HI"); eauto.
-
-  mono: iApply "Hterm" with "[HΦ]"...
-
-  iIntros (??) "H".
-  iDestruct "H" as (????) "(Hi & H)".
-  iExists _,_. rewrite H4 H5.
-  do 2 (iSplitL ""; [ done | ]).
-  iFrame "H".
-  iModIntro. by iExists _, _.
+  util.destructb.
+  apply forallb_True in H1; auto.
 Qed.
 
 (* The [las] algorithm does not change the phi nodes. *)
@@ -332,36 +264,184 @@ Proof.
   eauto.
 Qed.
 
-From velliris.vir Require Import fundamental_exp_relaxed.
+(* Theorem phi_logrel_refl bid id ϕ C A_t A_s L_t L_s: *)
+(*   ⊢ (phi_logrel expr_inv (denote_phi bid (id, ϕ)) (denote_phi bid (id, ϕ)) C A_t A_s L_t L_s)%I. *)
+(* Proof with vsimp. *)
+(*   iApply phi_compat; destruct ϕ. *)
+(*   { iIntros (????); iApply refl_inv_mono. } *)
+(*   destruct (Util.assoc bid args); try done. *)
+(*   iApply expr_logrel_relaxed_refl. *)
+(* Qed. *)
 
-Theorem phi_logrel_refl bid id ϕ C A_t A_s L_t L_s:
-  ⊢ (phi_logrel expr_inv (denote_phi bid (id, ϕ)) (denote_phi bid (id, ϕ)) C A_t A_s L_t L_s)%I.
-Proof with vsimp.
-  iApply phi_compat; destruct ϕ.
-  { iIntros (????); iApply refl_inv_mono. }
-  destruct (Util.assoc bid args); try done.
-  iApply expr_logrel_relaxed_refl.
-Qed.
+(* Theorem phis_logrel_refl C bid (Φ : list (local_id * phi dtyp)) A_t A_s a: *)
+(*   (⊢ phis_logrel refl_inv (denote_phis bid Φ) (denote_phis bid Φ) C A_t A_s [a] [a])%I. *)
+(* Proof with vsimp. *)
+(*   iApply phis_compat. *)
+(*   { iIntros (????); iApply refl_inv_mono. } *)
+(*   iInduction Φ as [ | ] "IH"; first done. *)
+(*   cbn; iSplitL; [ destruct a; iApply phi_logrel_refl | done ]. *)
+(* Qed. *)
 
+(* Lemma block_compat_relaxed *)
+(*   (a : raw_id) Φ I A_t A_s b_t b_s bid L L_t L_s: *)
+(*   Is_true (block_WF b_t) -> *)
+(*   Is_true (block_WF b_s) -> *)
+(*   ⊢ (∀ i_t i_s, code_inv L ∅ i_t i_s A_t A_s L_t L_s -∗ I) -∗ *)
+(*     (∀ i_t i_s, I -∗ code_inv_post L ∅ i_t i_s A_t A_s L_t L_s) -∗ *)
+(*     (* Related phi nodes *) *)
+(*     (phis_logrel L *)
+(*         (denote_phis bid (blk_phis b_t)) *)
+(*         (denote_phis bid (blk_phis b_s)) *)
+(*        ∅ A_t A_s L_t L_s) -∗ *)
+(*     (* Related terminators *) *)
+(*     (term_logrel L (blk_term b_t) (blk_term b_s) ∅ L_t L_s) -∗ *)
+(*     (* Related instructions *) *)
+(*     (I -∗ *)
+(*       instr_conv (denote_code (blk_code b_t)) ⪯ *)
+(*       instr_conv (denote_code (blk_code b_s)) *)
+(*       [{ (r_t, r_s), I ∗ Φ r_t r_s }]) -∗ *)
+(*    (* TODO: state [phi_logrel] related for a weakened [phi_logrel] *) *)
+(*    (* Weaken the postcondition for [ocfg_logrel] *) *)
+(*    block_logrel L b_t b_s bid ∅ A_t A_s L_t L_s. *)
+(* Proof with vsimp. *)
+(*   iIntros (WF_b WF_b') "Hinv I HΦ Hterm Hinst". *)
+(*   iIntros (??) "CI". *)
+(*   cbn -[denote_phis]... *)
+(*   setoid_rewrite instr_conv_bind at 3. *)
+(*   Cut... *)
 
-Theorem phis_logrel_refl C bid (Φ : list (local_id * phi dtyp)) A_t A_s a:
-  (⊢ phis_logrel refl_inv (denote_phis bid Φ) (denote_phis bid Φ) C A_t A_s [a] [a])%I.
-Proof with vsimp.
-  iApply phis_compat.
-  { iIntros (????); iApply refl_inv_mono. }
-  iInduction Φ as [ | ] "IH"; first done.
-  cbn; iSplitL; [ destruct a; iApply phi_logrel_refl | done ].
-Qed.
+(*   (* Phis *) *)
+(*   mono: (iApply ("HΦ" with "CI")) with "[Hinv I Hterm Hinst]"... *)
+(*   setoid_rewrite instr_conv_bind... *)
+(*   rewrite <- !bind_bind. Cut... *)
 
+(*   (* Code block *) *)
+(*   iSpecialize ("Hinv" with "HΦ"). *)
+(*   iSpecialize ("Hinst" with "Hinv"). *)
+(*   mono: iApply "Hinst" with "[I Hterm]"... *)
+
+(*   iDestruct "HΦ" as "(HI & HΦ)". *)
+(*   iSpecialize ("I" with "HI"); iDestruct "I" as (??) "HI". *)
+
+(*   (* Well-formedness of block *) *)
+(*   apply andb_prop_elim in WF_b, WF_b'; *)
+(*     destruct WF_b, WF_b'. *)
+
+(*   (* Terminator *) *)
+(*   iSpecialize ("Hterm" with "[] [] HI"); eauto. *)
+
+(*   mono: iApply "Hterm" with "[HΦ]"... *)
+
+(*   iIntros (??) "H". *)
+(*   iDestruct "H" as (????) "(Hi & H)". *)
+(*   iExists _,_. rewrite H4 H5. *)
+(*   do 2 (iSplitL ""; [ done | ]). *)
+(*   iFrame "H". *)
+(*   iModIntro. by iExists _, _. *)
+(* Qed. *)
+
+Lemma local_bij_equiv_except l_t l_s:
+ ∀ (i_t i_s : list frame_names) (L_t L_s : local_env) Π,
+   local_bij i_t i_s L_t L_s ∗-∗
+   local_bij_except l_t l_s i_t i_s L_t L_s ∗ Π.
+Proof. Admitted.
+
+(* Definition of monotonicity for [local_env_spec] and [alloca_spec]. *)
+Definition local_env_spec_sep (ΠL ΠL1 : local_env_spec) ΠL2: iProp Σ:=
+  (∀ i_t i_s L_t L_s C,
+    local_inv ΠL i_t i_s L_t L_s C -∗
+    (local_inv ΠL1 i_t i_s L_t L_s C ∗ ΠL2)) ∗
+  (∀ i_t i_s L_t L_s C,
+    (local_inv ΠL1 i_t i_s L_t L_s C ∗ ΠL2) -∗
+    local_inv ΠL i_t i_s L_t L_s C).
+
+(* Notation "ΠL ΠL'" := (local_env_spec_includes ΠL ΠL'). *)
+(* Notation "ΠL ⊆ ΠL'" := (local_env_spec_includes ΠL ΠL'). *)
+
+(* TODO Move to [logical_relations] *)
+(* Monotonicity of logical relations w.r.t. invariants *)
+(* TODO: Add a post condition on [phi_logrel] so that it can restate
+    ΠL2. *)
+Lemma phi_logrel_mono ΠL ΠL1 ΠL2 ΠA ϕ_t ϕ_s C A_t A_s:
+  □ (local_env_spec_sep ΠL ΠL1 ΠL2) -∗
+  ΠL2 -∗
+  phi_logrel ΠL ΠA ϕ_t ϕ_s C A_t A_s -∗
+  phi_logrel ΠL1 ΠA ϕ_t ϕ_s C A_t A_s.
+Proof.
+  iIntros "#(HΠL1 & HΠL2) H HΦ".
+  iIntros (????) "(HL & HA)".
+  iCombine "HL H" as "HL"; iSpecialize ("HΠL2" with "HL").
+
+  iCombine "HΠL2 HA" as "HI".
+  mono: iApply ("HΦ" with "HI").
+  iIntros (??) "H".
+  iDestruct "H" as (?????) "(Hv & HC)".
+  iExists _, _, _; iFrame.
+  subst; do 2 (iSplitL ""; first done).
+Admitted.
+
+(* Lemma block_compat_relaxed *)
+(*   {A_t A_s b_t b_s bid I}: *)
+(*   block_WF b_t -> *)
+(*   block_WF b_s -> *)
+(*   ⊢ (* Related phi nodes *) *)
+(*     (phis_logrel local_bij alloca_bij *)
+(*         (denote_phis bid (blk_phis b_t)) *)
+(*         (denote_phis bid (blk_phis b_s)) *)
+(*         ∅ A_t A_s) -∗ *)
+(*     (* Related terminators *) *)
+(*     (term_logrel local_bij alloca_bij (blk_term b_t) (blk_term b_s) ∅) -∗ *)
+(*     (* Related code *) *)
+(*     (I -∗ *)
+(*       instr_conv (denote_code (blk_code b_t)) ⪯ *)
+(*       instr_conv (denote_code (blk_code b_s)) *)
+(*       [{ (r_t, r_s), I }]) -∗ *)
+(*     block_logrel (local_bij_except [a] [a]) *)
+(*     alloca_bij b_t b_s bid ∅ A_t A_s. *)
+(* Proof with vsimp. *)
+(* Admitted. *)
 
 Lemma las_block_sim A_t A_s be b a:
-  Is_true (block_WF b) ->
-  ⊢ block_logrel refl_inv
-      (las_block a None b) b be ∅ A_t A_s [a] [a].
-Proof.
-  iIntros (WF).
-  iApply block_compat_relaxed; eauto.
-  { by eapply block_WF_las. }
+  block_WF b ->
+  ⊢ block_logrel (local_bij_except [a] [a]) alloca_bij
+      (las_block a None b) b be ∅ A_t A_s.
+Proof with vsimp.
+  iIntros (WF ??) "CI".
+  cbn -[denote_phis]...
+  setoid_rewrite instr_conv_bind at 3. Cut...
+
+  (* Phis *)
+  mono: (iApply ("HΦ" with "CI")) with "[Hc Ht]"...
+  rewrite instr_conv_bind... Cut...
+
+  (* Code block *)
+  iSpecialize ("Hc" with "HΦ").
+  rewrite /denote_code /map_monad_.
+  rewrite !instr_conv_bind ; setoid_rewrite instr_conv_ret.
+  iPoseProof (sim_expr_fmap_inv with "Hc") as "Hc".
+  mono: (iApply "Hc") with "[Ht]"...
+  iDestruct "HΦ" as ([][] _ _ ??) "HI".
+
+  (* Well-formedness of block *)
+  apply andb_prop_elim in WF_b, WF_b';
+    destruct WF_b, WF_b'.
+
+  (* Terminator *)
+  mono: iApply "Ht"...
+
+  iIntros (??) "H".
+  iDestruct "H" as (????) "(Hi & H)".
+  iExists _,_. rewrite H3 H4.
+  do 2 (iSplitL ""; [ done | ]). iFrame.
+  by iExists _, _.
+Qed.
+
+  iApply (block_compat_relaxed local_bij).
+  3 : iIntros; by iApply local_bij_implies_except.
+  1-2 : admit.
+  1, 2 : cbn -[denote_phis].
+  { admit. }
+  (* { admit. eapply block_WF_las. } *)
 
   (* Invariant *)
   { iIntros (??) "CI". admit. }

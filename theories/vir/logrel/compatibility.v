@@ -2,7 +2,7 @@ From iris.prelude Require Import options.
 
 From velliris.vir.lang Require Import lang.
 From velliris.vir.rules Require Import rules.
-From velliris.vir.logrel Require Import logical_relations.
+From velliris.vir.logrel Require Import wellformedness logical_relations.
 
 Set Default Proof Using "Type*".
 
@@ -52,8 +52,9 @@ Section compatibility.
     instr_conv (map_monad (λ x, translate exp_to_instr (denote_phi bid x)) Φ) ⪯
       instr_conv (map_monad (λ x, translate exp_to_instr (denote_phi bid x)) Φ')
     [{ (r_t, r_s),
-        ([∗ list] v_t; v_s ∈ r_t; r_s,
-          ⌜v_t.1 = v_s.1⌝ ∗ uval_rel v_t.2 v_s.2)
+        ⌜r_t.*1 = Φ.*1⌝ ∗
+        ⌜r_s.*1 = Φ'.*1⌝ ∗
+        ([∗ list] v_t; v_s ∈ r_t; r_s, uval_rel v_t.2 v_s.2)
             ∗ code_inv ΠL ΠA C i_t i_s A_t A_s }].
   Proof with vsimp.
     iIntros "HΦ CI".
@@ -76,13 +77,14 @@ Section compatibility.
       try iFrame; eauto; cycle 1.
 
     cbn. iIntros (??) "H".
-    iDestruct "H" as (?????) "(#H & CI)".
+    iDestruct "H" as (????) "(#H & CI)".
     rewrite H H0...
 
     iSpecialize ("IH" with "CI"). subst.
     Cut... mono: (iApply "IH")...
-    iDestruct "HΦ" as "(H' & CI)".
-    vfinal; cbn; vsimp; by iFrame "H".
+    iDestruct "HΦ" as (??) "(H' & CI)".
+    vfinal; cbn; vsimp; iFrame "H".
+    rewrite H H0; done.
   Qed.
 
   (* TODO Move *)
@@ -92,9 +94,9 @@ Section compatibility.
     ⊢ frame_inv i_t i_s L_t L_s C -∗
       ([ x_s := v_s ]s i_s -∗
       frame_inv i_t i_s L_t (alist_add x_s v_s L_s) C -∗
-      e_t ⪯ Ret () [{ (v_t0, v_s0),Q}]) -∗
+      e_t ⪯ Ret () [{ Q }]) -∗
       e_t ⪯ trigger (LocalWrite x_s v_s)
-      [{ (v_t, v_s), Q }].
+      [{ Q }].
   Proof.
     iIntros (He) "Hf HΦ".
     destruct_frame.
@@ -121,9 +123,9 @@ Section compatibility.
     ⊢ frame_inv i_t i_s L_t L_s C -∗
       ([ x_t := v_t ]t i_t -∗
       frame_inv i_t i_s (alist_add x_t v_t L_t) L_s C -∗
-      Ret () ⪯ e_s [{ (v_t0, v_s0),Q}]) -∗
+      Ret () ⪯ e_s [{ Q }]) -∗
       trigger (LocalWrite x_t v_t) ⪯ e_s
-      [{ (v_t, v_s), Q }].
+      [{ Q }].
   Proof.
     iIntros (He) "Hf HΦ".
     destruct_frame.
@@ -151,9 +153,9 @@ Section compatibility.
       [ x_s := v_s ]s i_s -∗
       ([ x_s := v_s' ]s i_s -∗
       frame_inv i_t i_s L_t L_s C -∗
-      e_t ⪯ Ret () [{ (v_t0, v_s0),Q}]) -∗
+      e_t ⪯ Ret () [{ Q }]) -∗
       e_t ⪯ trigger (LocalWrite x_s v_s')
-      [{ (v_t, v_s), Q }].
+      [{ Q }].
   Proof.
     iIntros "Hf Hxs HΦ".
     destruct_frame.
@@ -176,9 +178,9 @@ Section compatibility.
       [ x_t := v_t ]t i_t -∗
       ([ x_t := v_t' ]t i_t -∗
       frame_inv i_t i_s L_t L_s C -∗
-      Ret () ⪯ e_s [{ (v_t0, v_s0),Q}]) -∗
+      Ret () ⪯ e_s [{ Q }]) -∗
       trigger (LocalWrite x_t v_t') ⪯ e_s
-      [{ (v_t, v_s), Q }].
+      [{ Q }].
   Proof.
     iIntros "Hf Hxs HΦ".
     destruct_frame.
@@ -230,13 +232,13 @@ Section compatibility.
     x ∉ l_t ->
     x ∉ l_s ->
     code_inv (local_bij_except l_t l_s) ΠA C i_t i_s A_t A_s -∗
-    (code_inv (local_bij_except l_t l_s) ΠA C i_t i_s A_t A_s -∗
-      Ret tt ⪯ Ret tt [{ (v1, v2), Q }]) -∗
     uval_rel v_t v_s -∗
+    (code_inv (local_bij_except l_t l_s) ΠA C i_t i_s A_t A_s -∗
+      Ret tt ⪯ Ret tt [{ Q }]) -∗
     trigger (LocalWrite x v_t) ⪯ trigger (LocalWrite x v_s)
-    [{ (v1, v2), Q }].
+    [{ Q }].
   Proof.
-    iIntros (Hnt Hns) "CI HΦ #Hv"; destruct_code_inv.
+    iIntros (Hnt Hns) "CI #Hv HΦ"; destruct_code_inv.
 
     (* The location is in bijection *)
     destruct (decide (x ∈ (remove_ids l_t args_t).*1)).
@@ -260,14 +262,12 @@ Section compatibility.
       iDestruct (local_bij_elem_of with "HL") as %Hdom.
       rewrite Hdom in n.
       mono: iApply (local_write_frame_source_alloc Q with "Hf").
-      { iIntros (??) "H".
-        iDestruct "H" as (????) "H"; iExists _, _; iFrame; try done. }
+      { by iIntros (??) "H". }
       { eapply (remove_ids_not_elem_of l_s); eauto. }
       iIntros "Hs Hf".
 
       mono: iApply (local_write_frame_target_alloc Q with "Hf").
-      { iIntros (??) "H".
-        iDestruct "H" as (????) "H"; iExists _, _; iFrame; try done. }
+      { by iIntros (??) "H". }
       { rewrite -Hdom in n;
         eapply (remove_ids_not_elem_of l_t); eauto. }
       iIntros "Ht Hf".
@@ -278,47 +278,37 @@ Section compatibility.
   Qed.
 
   Theorem phis_compat ΠA C bid Φ Φ' A_t A_s l_t l_s:
-    bid ∉ l_t ->
-    bid ∉ l_s ->
+    Φ.*1 ## l_t ->
+    Φ'.*1 ## l_s ->
+    Φ.*1 = Φ'.*1 ->
     ([∗ list] ϕ;ϕ' ∈ Φ; Φ',
        phi_logrel (local_bij_except l_t l_s)
          ΠA bid bid ϕ ϕ' C A_t A_s) -∗
     phis_logrel (local_bij_except l_t l_s)
       ΠA bid bid Φ Φ' C A_t A_s.
   Proof with vsimp.
-    iIntros (Hnt Hns) "HΦ"; iIntros (??) "CI".
+    iIntros (Hnt Hns Heq) "HΦ"; iIntros (??) "CI".
     iPoseProof (phi_list_compat with "HΦ CI") as "H".
     rewrite /denote_phis... Cut...
     mono: iApply "H"...
-    iDestruct "HΦ" as "(H & CI)".
-
+    iDestruct "HΦ" as (Hrt Hrs) "(H & CI)".
     setoid_rewrite instr_conv_ret.
 
-    iInduction r_s as [] "IH" forall (r_t).
+    iInduction r_s as [] "IH" forall (r_t Hrt Hrs).
     { iDestruct (big_sepL2_nil_inv_r with "H") as %Hx; subst; cbn...
       Cut... do 2 vfinal. }
 
-    iDestruct (big_sepL2_cons_inv_r with "H") as (???) "(CI1 & #CI2)";
+    iDestruct (big_sepL2_cons_inv_r with "H") as (???) "(#Hv & #CI2)";
     destruct a, x1; subst; cbn...
     Cut...
+    iClear "H".
 
-    iDestruct "CI1" as "(%Hl & #Hv)"; subst.
-
-    Cut... destruct_code_inv_all.
-
-    iApply (source_local_write with "[] CI").
-    { iModIntro; iIntros (??????) "HI"; by iApply I_mono. }
-
-    iIntros "CI".
-
-    iApply (target_local_write_sim with "[] CI").
-    { iModIntro; iIntros (??????) "HI"; by iApply I_mono. }
-
+    Cut... assert (l0 = l) by admit. subst.
+    iApply (local_write_bij_except with "CI Hv").
+    1,2: admit.
     iIntros "CI"; vfinal... vfinal...
-    (* TODO: Show that [code_inv] is monotone *)
-    iAssert (code_inv I C i_t i_s A_t A_s L_t L_s) as "H". { admit. }
 
-    iSpecialize ("IH" with "CI2 H")...
+    iSpecialize ("IH" $! _ _ _ with "CI2 CI")...
     iPoseProof (sim_expr_fmap_inv with "IH") as "Hf".
     Cut.
 

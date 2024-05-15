@@ -1,24 +1,8 @@
-From Coq Require Import String List Program.Equality.
 From iris.prelude Require Import options.
-From iris.base_logic.lib Require Export gen_heap ghost_map.
-From iris.base_logic Require Import gset_bij.
 
-From ITree Require Import
-  ITree Eq
-  Interp.InterpFacts Interp.RecursionFacts Events.StateFacts TranslateFacts.
-
-From Vellvm Require Import Syntax.LLVMAst Syntax.DynamicTypes
-  Semantics.InterpretationStack Handlers Utils.Util Semantics.LLVMEvents.
-
-From Equations Require Import Equations.
-
-From Paco Require Import paco.
-
-From velliris.logic Require Import satisfiable.
-From velliris.program_logic Require Import program_logic.
-From velliris.vir Require Import
-   vir spec globalbij heapbij frame_laws primitive_laws bij_laws logical_relations.
-From velliris.utils Require Import no_event.
+From velliris.vir.lang Require Import lang.
+From velliris.vir.rules Require Import rules.
+From velliris.vir.logrel Require Import logical_relations.
 
 Set Default Proof Using "Type*".
 
@@ -49,31 +33,27 @@ Section fundamental_exp.
 
   Lemma expr_logrel_EXP_Ident :
     forall (id : LLVMAst.ident) (dt : option dtyp) i_t i_s L_t L_s,
-      expr_inv i_t i_s L_t L_s (EXP_Ident id) (EXP_Ident id : exp uvalue) -∗
+      local_bij_at_exp (EXP_Ident id) (EXP_Ident id : exp uvalue) i_t i_s L_t L_s
+      -∗
       exp_conv (denote_exp dt (EXP_Ident id)) ⪯
       exp_conv (denote_exp dt (EXP_Ident id))
       [{ (v_t, v_s),
           uval_rel v_t v_s ∗
-          expr_inv i_t i_s L_t L_s (EXP_Ident id) (EXP_Ident id : exp uvalue) }].
-  Proof.
+      local_bij_at_exp (EXP_Ident id) (EXP_Ident id : exp uvalue) i_t i_s L_t L_s }].
+  Proof with vsimp.
     iIntros (id dt i_t i_s L_t L_s) "HC"; cbn.
     rewrite /lookup_id; destruct id; cbn.
     { (* Global *)
-      rewrite /exp_conv.
-
-      rewrite interp_translate interp_bind interp_vis.
-      rewrite bind_bind bind_trigger.
-      cbn. setoid_rewrite interp_ret.
+      rewrite /exp_conv interp_translate interp_bind interp_vis.
+      vsimp. Cut...
       iApply sim_expr_vis.
-      iApply (sim_expr_bupd_mono with "[HC]"); [ | iApply sim_global_read; eauto].
-      iIntros (??) "H".
-      iDestruct "H" as (????) "H".
-      rewrite H H0; do 2 rewrite bind_ret_l.
-      rewrite !bind_tau !bind_ret_l.
-      iApply sim_expr_tau. iApply sim_expr_base. iModIntro.
-      iExists (dvalue_to_uvalue v_t), (dvalue_to_uvalue v_s).
-      do 2 (iSplitL ""; [ iPureIntro; reflexivity | ]); iFrame.
-      iApply (dval_rel_lift with "H"). }
+      mono: iApply sim_global_read with "[HC]"...
+      final...
+      iApply sim_expr_base... vsimp.
+      rewrite !bind_tau. Tau...
+      do 2 (rewrite !interp_ret; vsimp).
+      vfinal.
+      iApply (dval_rel_lift with "HΦ"). }
     { (* Local *)
       rewrite /exp_conv.
 
@@ -82,18 +62,19 @@ Section fundamental_exp.
       rewrite bind_trigger.
       iApply sim_expr_vis; rewrite !subevent_subevent.
 
-      iDestruct (expr_inv_local_env_includes id with "HC") as %(Ht & Hs);
-      [ set_solver | set_solver | ].
+   (*    iDestruct (expr_inv_local_env_includes id with "HC") as %(Ht & Hs); *)
+   (*    [ set_solver | set_solver | ]. *)
 
-      iApply sim_expr_bupd_mono ;
-        [ | iApply (expr_local_read_refl with "HC")]; eauto; cycle 1.
-      { cbn; case_decide; set_solver. }
-      iIntros (??) "H".
-      iDestruct "H" as (????) "H".
-      rewrite H H0. rewrite !bind_ret_l.
-      iApply sim_expr_tau; iApply sim_expr_base.
-      iExists _, _; by iFrame. }
-   Qed.
+   (*    iApply sim_expr_bupd_mono ; *)
+   (*      [ | iApply (expr_local_read_refl with "HC")]; eauto; cycle 1. *)
+   (*    { cbn; case_decide; set_solver. } *)
+   (*    iIntros (??) "H". *)
+   (*    iDestruct "H" as (????) "H". *)
+   (*    rewrite H H0. rewrite !bind_ret_l. *)
+   (*    iApply sim_expr_tau; iApply sim_expr_base. *)
+   (*    iExists _, _; by iFrame. } *)
+   (* Qed. *)
+  Admitted.
 
   Lemma expr_logrel_EXP_Integer:
     ∀ (x : int) (dt : option dtyp),
@@ -166,23 +147,23 @@ Section fundamental_exp.
 
   (* [OP_IBinop] *)
   Lemma expr_logrel_OP_IBinop:
-    ∀ (iop : ibinop) (t : dtyp) (e1 e2 : exp dtyp) (dt : option dtyp)
+    ∀ I (iop : ibinop) (t : dtyp) (e1 e2 : exp dtyp) (dt : option dtyp)
       i_t i_s L_t L_s,
       □ (∀ (a : option dtyp),
-          expr_inv i_t i_s L_t L_s e1 e1 -∗
+           I i_t i_s L_t L_s e1 e1 -∗
           exp_conv (denote_exp a e1) ⪯
           exp_conv (denote_exp a e1)
           [{ (v_t, v_s),
               uval_rel v_t v_s ∗
-              expr_inv i_t i_s L_t L_s e1 e1 }]) -∗
+              code_inv I i_t i_s L_t L_s e1 e1 }]) -∗
         (∀ (a : option dtyp),
-          expr_inv i_t i_s L_t L_s e2 e2 -∗
+          code_inv I i_t i_s L_t L_s e2 e2 -∗
           exp_conv (denote_exp a e2) ⪯
           exp_conv (denote_exp a e2)
           [{ (v_t, v_s),
               uval_rel v_t v_s ∗
-              expr_inv i_t i_s L_t L_s e2 e2  }]) -∗
-        expr_inv i_t i_s L_t L_s
+              code_inv I i_t i_s L_t L_s e2 e2  }]) -∗
+        code_inv I i_t i_s L_t L_s
           (OP_IBinop iop t e1 e2)
           (OP_IBinop iop t e1 e2)  -∗
         exp_conv (denote_exp dt (OP_IBinop iop t e1 e2)) ⪯
