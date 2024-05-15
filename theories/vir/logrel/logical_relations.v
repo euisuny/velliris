@@ -113,8 +113,8 @@ Section logical_relations_def.
         local_inv i_t i_s args_t args_s C ∗
         alloca_inv i_t i_s A_t A_s C -∗
         exp_conv (denote_phi bid_t ϕ_t) ⪯ exp_conv (denote_phi bid_s ϕ_s)
-        [{ fun e_t e_s => ∃ l v_t v_s,
-            ⌜e_t = Ret (l, v_t)⌝ ∗ ⌜e_s = Ret (l, v_s)⌝ ∗
+        [{ fun e_t e_s => ∃ v_t v_s,
+            ⌜e_t = Ret (ϕ_t.1, v_t)⌝ ∗ ⌜e_s = Ret (ϕ_s.1, v_s)⌝ ∗
             uval_rel v_t v_s ∗
             code_inv C i_t i_s A_t A_s }])%I.
 
