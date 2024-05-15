@@ -1,6 +1,6 @@
 From iris.prelude Require Import options.
 
-From velliris.vir Require Import util vir_util.
+From velliris.vir.util Require Import util vir_util.
 
 (* Syntactic well-formedness conditions and other auxiliary lemmas used for
   logical relation. *)

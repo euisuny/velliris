@@ -14,7 +14,7 @@ From Equations Require Import Equations.
 From velliris.logic Require Import satisfiable.
 From velliris.program_logic Require Import program_logic.
 From velliris.utils Require Import tactics.
-From velliris.vir Require Import vir.
+From velliris.vir.lang Require Import lang.
 
 Set Default Proof Using "Type*".
 
@@ -1277,8 +1277,6 @@ Section interp_L2_conv_properties.
   Qed.
 
 End interp_L2_conv_properties.
-
-From velliris Require Import vir.spec.
 
 Section vir_sim_expr_util.
 

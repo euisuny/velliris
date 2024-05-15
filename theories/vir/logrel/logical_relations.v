@@ -1,24 +1,9 @@
-From Coq Require Import String List Program.Equality.
 From iris.prelude Require Import options.
-From iris.base_logic.lib Require Export gen_heap ghost_map.
-From iris.base_logic Require Import gset_bij.
 
-From ITree Require Import
-  ITree Eq Interp.InterpFacts Interp.RecursionFacts Events.StateFacts TranslateFacts.
+From velliris.vir.lang Require Import lang.
+From velliris.vir.rules Require Import rules.
+From velliris.vir.logrel Require Import wellformedness.
 
-From Vellvm Require Import Syntax.LLVMAst Syntax.DynamicTypes
-  Semantics.InterpretationStack Handlers Utils.Util Semantics.LLVMEvents
-  Syntax.ScopeTheory.
-
-From Equations Require Import Equations.
-
-From Paco Require Import paco.
-
-From velliris.logic Require Import satisfiable.
-From velliris.program_logic Require Import program_logic.
-From velliris.vir Require Import
-   vir spec globalbij heapbij frame_laws primitive_laws bij_laws tactics.
-From velliris.utils Require Import no_event.
 Set Default Proof Using "Type*".
 
 Import ListNotations.
