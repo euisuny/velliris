@@ -1,31 +1,14 @@
-From Coq Require Import String List Program.Equality.
 From iris.prelude Require Import options.
-From iris.base_logic.lib Require Export gen_heap ghost_map.
-From iris.base_logic Require Import gset_bij.
 
-From ITree Require Import
-  ITree Eq
-  Interp.InterpFacts Interp.RecursionFacts Events.StateFacts TranslateFacts.
-
-From Vellvm Require Import Syntax.LLVMAst Syntax.DynamicTypes
-  Semantics.InterpretationStack Handlers Utils.Util Semantics.LLVMEvents.
-
-From Equations Require Import Equations.
-
-From Paco Require Import paco.
-
-From velliris.logic Require Import satisfiable.
-From velliris.program_logic Require Import program_logic.
-From velliris.vir Require Import
-   vir spec globalbij heapbij frame_laws primitive_laws bij_laws logical_relations.
-From velliris.utils Require Import no_event.
+From velliris.vir.lang Require Import lang.
+From velliris.vir.rules Require Import rules.
+From velliris.vir.logrel Require Import logical_relations.
 
 Set Default Proof Using "Type*".
 
 Import ListNotations.
 Import SemNotations.
 Import LLVMAst.
-
 
 (** *Reflexivity theorems for logical relations *)
 Section fundamental_exp.
@@ -506,7 +489,7 @@ Section fundamental_exp.
 
   (* Reflexivity theorems *)
   Theorem expr_logrel_refl dt e C A_t A_s :
-    (⊢ expr_logrel refl_inv C (denote_exp dt e) (denote_exp dt e) A_t A_s nil nil)%I.
+    (⊢ expr_logrel local_bij alloca_bij C dt dt e e A_t A_s)%I.
   Proof.
     iIntros. rewrite /expr_logrel.
     iRevert (C dt).
