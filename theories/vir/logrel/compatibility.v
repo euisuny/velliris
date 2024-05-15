@@ -85,17 +85,68 @@ Section compatibility.
     vfinal; cbn; vsimp; by iFrame "H".
   Qed.
 
-  Lemma local_bij_remove_source {i_t i_s L_t L_s} x:
-    x ∈ L_s.*1 ->
-    local_bij i_t i_s L_t L_s -∗
-    ∃ v_t v_s,
-      [ x := v_t ]t i_t ∗
-      [ x := v_s ]s i_s ∗
-      uval_rel v_t v_s ∗
-      local_bij i_t i_s (alist_remove x L_t) (alist_remove x L_s).
-  Proof. Admitted.
+  (* TODO Move *)
+  Lemma local_write_frame_source_alloc {R}
+    {x_s v_s i_t i_s L_t L_s C} {e_t: _ R} Q:
+    x_s ∉ L_s.*1 ->
+    ⊢ frame_inv i_t i_s L_t L_s C -∗
+      ([ x_s := v_s ]s i_s -∗
+      frame_inv i_t i_s L_t (alist_add x_s v_s L_s) C -∗
+      e_t ⪯ Ret () [{ (v_t0, v_s0),Q}]) -∗
+      e_t ⪯ trigger (LocalWrite x_s v_s)
+      [{ (v_t, v_s), Q }].
+  Proof.
+    iIntros (He) "Hf HΦ".
+    destruct_frame.
+    iDestruct "Hft" as (?) "(Hs_t & Hd_t)".
+    iDestruct "Hfs" as (?) "(Hs_s & Hd_s)".
+    iApply source_red_sim_expr.
+    iApply (source_red_mono with "[HΦ]");
+      last (iApply (source_local_write_alloc with "Hd_s Hs_s")); cycle 1.
+    { set_solver. }
+    { iIntros "Hx Hd Hs". iApply source_red_base.
+      Unshelve.
+      2 : exact (fun x => ⌜x = Ret tt⌝ ∗ [ x_s := v_s ]s i_s ∗
+         frame_inv i_t i_s L_t (alist_add x_s v_s L_s) C)%I.
+      iFrame; iFrame "WF_frame"; sfinal.
+      cbn; rewrite alist_remove_not_in; eauto; iFrame.
+      iPureIntro; apply NoDup_cons; split; eauto. }
+    iIntros (?) "H"; iDestruct "H" as (?) "(Hxs & Hf)".
+    subst. iApply ("HΦ" with "Hxs Hf").
+  Qed.
 
-  Lemma local_write_frame_source {R} x_s v_s v_s' i_t i_s L_t L_s C (e_t: _ R) Q:
+  Lemma local_write_frame_target_alloc {R}
+    {x_t v_t i_t i_s L_t L_s C} {e_s: _ R} Q:
+    x_t ∉ L_t.*1 ->
+    ⊢ frame_inv i_t i_s L_t L_s C -∗
+      ([ x_t := v_t ]t i_t -∗
+      frame_inv i_t i_s (alist_add x_t v_t L_t) L_s C -∗
+      Ret () ⪯ e_s [{ (v_t0, v_s0),Q}]) -∗
+      trigger (LocalWrite x_t v_t) ⪯ e_s
+      [{ (v_t, v_s), Q }].
+  Proof.
+    iIntros (He) "Hf HΦ".
+    destruct_frame.
+    iDestruct "Hft" as (?) "(Hs_t & Hd_t)".
+    iDestruct "Hfs" as (?) "(Hs_s & Hd_s)".
+    iApply target_red_sim_expr.
+    iApply (target_red_mono with "[HΦ]");
+      last (iApply (target_local_write_alloc with "Hd_t Hs_t")); cycle 1.
+    { set_solver. }
+    { iIntros "Hx Hd Hs". iApply target_red_base.
+      Unshelve.
+      2 : exact (fun x => ⌜x = Ret tt⌝ ∗
+                [ x_t := v_t ]t i_t ∗
+                frame_inv i_t i_s (alist_add x_t v_t L_t) L_s C)%I.
+      iFrame; iFrame "WF_frame"; sfinal.
+      cbn; rewrite alist_remove_not_in; eauto; iFrame.
+      iPureIntro. split; auto. apply NoDup_cons; split; eauto. }
+    iIntros (?) "H"; iDestruct "H" as (?) "(Hxs & Hf)".
+    subst. iApply ("HΦ" with "Hxs Hf").
+  Qed.
+
+  Lemma local_write_frame_source {R}
+    x_s v_s v_s' i_t i_s L_t L_s C (e_t: _ R) Q:
     ⊢ frame_inv i_t i_s L_t L_s C -∗
       [ x_s := v_s ]s i_s -∗
       ([ x_s := v_s' ]s i_s -∗
@@ -119,44 +170,123 @@ Section compatibility.
     subst. iApply ("HΦ" with "Hxs Hf").
   Qed.
 
-  Lemma local_write_source {R} ΠA C x v_s i_t i_s A_t A_s (e_t : _ R) l_t l_s Q:
+  Lemma local_write_frame_target {R}
+    x_t v_t v_t' i_t i_s L_t L_s C (e_s: _ R) Q:
+    ⊢ frame_inv i_t i_s L_t L_s C -∗
+      [ x_t := v_t ]t i_t -∗
+      ([ x_t := v_t' ]t i_t -∗
+      frame_inv i_t i_s L_t L_s C -∗
+      Ret () ⪯ e_s [{ (v_t0, v_s0),Q}]) -∗
+      trigger (LocalWrite x_t v_t') ⪯ e_s
+      [{ (v_t, v_s), Q }].
+  Proof.
+    iIntros "Hf Hxs HΦ".
+    destruct_frame.
+    iDestruct "Hft" as (?) "(Hs_t & Hd_t)".
+    iDestruct "Hfs" as (?) "(Hs_s & Hd_s)".
+    iApply target_red_sim_expr.
+    iApply (target_red_mono with "[HΦ]");
+      last (iApply (target_local_write with "Hxs Hd_t Hs_t")); cycle 1.
+    { iIntros "Hx Hd Hs". iApply target_red_base.
+      Unshelve.
+      2 : exact (fun x => ⌜x = Ret tt⌝ ∗ [ x_t := v_t' ]t i_t ∗ frame_inv i_t i_s L_t L_s C)%I.
+      iFrame; iFrame "WF_frame"; done. }
+    iIntros (?) "H"; iDestruct "H" as (?) "(Hxs & Hf)".
+    subst. iApply ("HΦ" with "Hxs Hf").
+  Qed.
+
+  Lemma local_bij_except_add {l_t l_s args_t args_s v_t v_s i_t i_s x}:
+    x ∈ (remove_ids l_t args_t).*1 ->
+    uval_rel v_t v_s -∗
+    local_bij i_t i_s
+      (alist_add x v_t (alist_remove x (remove_ids l_t args_t)))
+      (alist_add x v_s (alist_remove x (remove_ids l_s args_s))) -∗
+    local_bij_except l_t l_s i_t i_s args_t args_s.
+  Proof.
+  Admitted.
+
+  Lemma local_bij_except_add_notin {l_t l_s args_t args_s v_t v_s i_t i_s x}:
+    x ∉ (remove_ids l_t args_t).*1 ->
+    uval_rel v_t v_s -∗
+    local_bij_except l_t l_s i_t i_s args_t args_s -∗
+    [ x := v_s ]s i_s -∗
+    [ x := v_t ]t i_t -∗
+    local_bij_except l_t l_s i_t i_s
+      (alist_add x v_t args_t)
+      (alist_add x v_s args_s).
+  Proof.
+  Admitted.
+
+  Lemma remove_ids_not_elem_of
+    {K : Type} {R : K → K → Prop} `{RelDec.RelDec _ R}:
+      ∀ {V : Type} (l: list K) (L: alist K V) x,
+    x ∉ l ->
+    x ∉ (remove_ids l L).*1 ->
+    x ∉ L.*1.
+  Proof. Admitted.
+
+  Lemma local_write_bij_except
+    ΠA C x v_t v_s i_t i_s A_t A_s l_t l_s Q:
+    x ∉ l_t ->
+    x ∉ l_s ->
     code_inv (local_bij_except l_t l_s) ΠA C i_t i_s A_t A_s -∗
     (code_inv (local_bij_except l_t l_s) ΠA C i_t i_s A_t A_s -∗
-      [ x := v_s ]s i_s -∗
-      e_t ⪯ Ret tt [{ (v1, v2), Q }]) -∗
-    e_t ⪯ trigger (LocalWrite x v_s) [{ (v1, v2), Q }].
+      Ret tt ⪯ Ret tt [{ (v1, v2), Q }]) -∗
+    uval_rel v_t v_s -∗
+    trigger (LocalWrite x v_t) ⪯ trigger (LocalWrite x v_s)
+    [{ (v1, v2), Q }].
   Proof.
-    iIntros "CI HΦ"; destruct_code_inv.
+    iIntros (Hnt Hns) "CI HΦ #Hv"; destruct_code_inv.
 
     (* The location is in bijection *)
-    destruct (decide (x ∈ (remove_ids l_s args_s).*1)).
+    destruct (decide (x ∈ (remove_ids l_t args_t).*1)).
     { destruct_local_inv.
-      iDestruct (local_bij_remove_source x with "HL") as (??) "(Hxt & Hxs & #Hv & HL)";
-        auto.
+      iDestruct (local_bij_remove x with "HL") as (??)
+        "(Hxt & Hxs & #Hv' & HL)"; auto.
 
-      iApply (local_write_frame_source with "Hf Hxs").
-      iIntros "Hxs Hf".
-      iApply ("HΦ" with "[AI Hf HL]"); iFrame.
-      sfinal. admit. (* Need to reinsert it into the bijection *) }
+      iApply (local_write_frame_source with "Hf Hxs"); iIntros "Hxs Hf".
+      iApply (local_write_frame_target with "Hf Hxt"); iIntros "Hxt Hf".
+
+      iApply ("HΦ" with "[AI Hf HL Hxs Hxt]"); iFrame.
+      iPoseProof (local_bij_add with "Hxt Hxs Hv HL") as "Hbij".
+      iExists args_t, args_s; iFrame.
+      rewrite /local_bij_except.
+
+      iApply (local_bij_except_add e with "Hv Hbij"). }
 
     (* The location is not in bijection *)
     { destruct_local_inv.
-      iApply source_red_sim_expr.
-      iApply (source_red_mono with "[HΦ]").
-      iDestruct (local_bij_remove_source x with "HL") as (??) "(Hxt & Hxs & #Hv & HL)";
-        auto.
 
-      iApply (local_write_frame_source with "Hf Hxs").
-      iIntros "Hxs Hf".
-      iApply ("HΦ" with "[AI Hf HL]"); iFrame.
-      sfinal. admit. (* Need to reinsert it into the bijection *) }
+      iDestruct (local_bij_elem_of with "HL") as %Hdom.
+      rewrite Hdom in n.
+      mono: iApply (local_write_frame_source_alloc Q with "Hf").
+      { iIntros (??) "H".
+        iDestruct "H" as (????) "H"; iExists _, _; iFrame; try done. }
+      { eapply (remove_ids_not_elem_of l_s); eauto. }
+      iIntros "Hs Hf".
 
+      mono: iApply (local_write_frame_target_alloc Q with "Hf").
+      { iIntros (??) "H".
+        iDestruct "H" as (????) "H"; iExists _, _; iFrame; try done. }
+      { rewrite -Hdom in n;
+        eapply (remove_ids_not_elem_of l_t); eauto. }
+      iIntros "Ht Hf".
+      iApply "HΦ"; iFrame.
+      iExists (alist_add x v_t args_t), (alist_add x v_s args_s); iFrame.
+      iApply (local_bij_except_add_notin with "Hv HL Hs Ht").
+      by rewrite Hdom. }
+  Qed.
 
-  Theorem phis_compat ΠL ΠA C bid Φ Φ' A_t A_s:
-    ([∗ list] ϕ;ϕ' ∈ Φ; Φ', phi_logrel ΠL ΠA bid bid ϕ ϕ' C A_t A_s) -∗
-    phis_logrel ΠL ΠA bid bid Φ Φ' C A_t A_s.
+  Theorem phis_compat ΠA C bid Φ Φ' A_t A_s l_t l_s:
+    bid ∉ l_t ->
+    bid ∉ l_s ->
+    ([∗ list] ϕ;ϕ' ∈ Φ; Φ',
+       phi_logrel (local_bij_except l_t l_s)
+         ΠA bid bid ϕ ϕ' C A_t A_s) -∗
+    phis_logrel (local_bij_except l_t l_s)
+      ΠA bid bid Φ Φ' C A_t A_s.
   Proof with vsimp.
-    iIntros "HΦ" (??) "CI".
+    iIntros (Hnt Hns) "HΦ"; iIntros (??) "CI".
     iPoseProof (phi_list_compat with "HΦ CI") as "H".
     rewrite /denote_phis... Cut...
     mono: iApply "H"...
@@ -174,8 +304,7 @@ Section compatibility.
 
     iDestruct "CI1" as "(%Hl & #Hv)"; subst.
 
-    Cut...
-    destruct_code_inv_all.
+    Cut... destruct_code_inv_all.
 
     iApply (source_local_write with "[] CI").
     { iModIntro; iIntros (??????) "HI"; by iApply I_mono. }
