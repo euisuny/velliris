@@ -538,7 +538,7 @@ Section logical_invariant_properties.
   (*   destruct_local_inv; rewrite /local_bij; iFrame. *)
   (*   iSplitL "" *)
   (*   Search alist_add alist_remove. *)
-  (* Admitted. *)
+  (* Abort. *)
 
 End logical_invariant_properties.
 
@@ -1170,20 +1170,91 @@ Section logical_relations_properties.
     trigger (LocalRead x) ⪯ trigger (LocalRead x)
       [{ (v1, v2), uval_rel v1 v2 ∗ local_inv_bij e_t e_s i_t i_s L_t L_s C }].
   Proof.
-    iIntros (?) "Hb".
-  Admitted.
+    iIntros (He) "CI".
+    iApply sim_update_si.
+
+    iIntros "%σ_t %σ_s SI".
+    iDestruct (local_inv_SI with "CI SI") as %Heq.
+    destruct Heq as (?&?); subst; iFrame.
+
+    apply elem_of_list_lookup_1 in He. destruct He.
+    destruct_local_inv. rewrite /local_bij_at_exp /local_bij_at.
+
+    iDestruct (big_sepL_delete with "HL") as "(Helemt & Hl_t)"; eauto; cbn.
+    iDestruct "Helemt" as (????) "(Helemt & Helems & #Hv)".
+
+    do 3 destruct_frame.
+    iApply (sim_expr_bupd_mono with "[Hd_t Hd_s CI Hl_t]");
+      [ | iApply (sim_local_read with "Helemt Helems Hs_t Hs_s")].
+    iIntros (??) "Hp".
+    iDestruct "Hp" as (????) "(%Ht' & %Hs' & Ht' & Hs' & Hf_t' & Hf_s')";
+      subst.
+    iModIntro. sfinal. iFrame "Hv WF_frame"; iSplitL ""; [ done | ].
+    iFrame.
+
+    rewrite /local_bij_at_exp /local_bij_at.
+    (* rewrite Ht Hs; iFrame. *)
+    setoid_rewrite big_sepL_delete at 2; eauto; iFrame; iFrame. sfinal.
+  Qed.
+
+  Lemma sim_local_read_frame
+    (x_t x_s : LLVMAst.raw_id) (v_t v_s : uvalue) i_t i_s L_t L_s C:
+    ⊢ [ x_t := v_t ]t i_t -∗
+      [ x_s := v_s ]s i_s -∗
+      frame_inv i_t i_s L_t L_s C -∗
+    trigger (LocalRead x_t) ⪯ trigger (LocalRead x_s)
+      [{ (v_t', v_s'),
+        ⌜v_t = v_t'⌝ ∗ ⌜v_s = v_s'⌝
+         ∗ [ x_t := v_t ]t i_t ∗ [ x_s := v_s ]s i_s
+         ∗ frame_inv i_t i_s L_t L_s C }].
+  Proof.
+    iIntros "Ht Hs Hf".
+    destruct_frame.
+    iDestruct "Hft" as (?) "(Hs_t & Hd_t)".
+    iDestruct "Hfs" as (?) "(Hs_s & Hd_s)".
+    mono: iApply (sim_local_read with "Ht Hs Hs_t Hs_s") with "[CI Hd_t Hd_s]";
+      try set_solver.
+    iIntros (??) "H"; iDestruct "H" as (????) "(Ht & Hs & Hs_t & Hs_s & ? & ?)".
+    sfinal; by iFrame "WF_frame".
+  Qed.
 
   Lemma local_read_refl C x i_t i_s A_t A_s:
     ⊢ code_refl_inv C i_t i_s A_t A_s -∗
     trigger (LocalRead x) ⪯ trigger (LocalRead x)
       [{ (v1, v2), uval_rel v1 v2 ∗ code_refl_inv C i_t i_s A_t A_s }].
-  Proof. Admitted.
+  Proof.
+    iIntros "CI"; rewrite /code_refl_inv.
+    destruct_code_inv.
+
+    destruct (decide (x ∈ args_t.*1)).
+    { destruct_local_inv.
+      iDestruct (local_bij_dom_eq with "HL") as %Heq.
+      iDestruct (local_bij_remove x with "HL") as (??) "(Hxt & Hxs & #Hv & HL)";
+        auto.
+      mono: iApply (sim_local_read_frame with "Hxt Hxs Hf") with "[AI HL]".
+      (iIntros (??) "HΦ"; iDestruct "HΦ" as (??????) "(Ht & Hs & Hf & H)"); iFrame.
+      subst; sfinal. iFrame "Hv". iExists _,_; iFrame "HL"; iFrame.
+      iDestruct "H" as "(HC & Hf_t & Hf_s)"; iFrame.
+      admit. }
+    { destruct_local_inv.
+      iDestruct (local_bij_dom_eq with "HL") as %Heq.
+      do 3 destruct_frame.
+      iApply (sim_local_read_not_in_domain with "Hd_s Hs_s").
+      rewrite -Heq.
+      set_solver. }
+  Admitted.
 
   Lemma local_read_refl_cfg C x i_t i_s :
     ⊢ CFG_refl_inv C i_t i_s -∗
     trigger (LocalRead x) ⪯ trigger (LocalRead x)
       [{ (v1, v2), uval_rel v1 v2 ∗ CFG_refl_inv C i_t i_s }].
-  Proof. Admitted.
+  Proof.
+    iIntros "CI"; rewrite /CFG_refl_inv.
+    iPoseProof (CFG_inv_code_inv with "CI") as "H".
+    mono: iApply (local_read_refl with "H").
+    iIntros (??) "H". iDestruct "H" as (????) "(H & I)"; sfinal.
+    by iApply CFG_inv_code_inv.
+  Qed.
 
   Lemma call_refl v_t v_s e_t e_s d i_t i_s l A_t A_s C:
     code_refl_inv C i_t i_s A_t A_s -∗
@@ -1194,7 +1265,47 @@ Section logical_relations_properties.
     (trigger (ExternalCall d v_s e_s l))
     [{ (v_t, v_s), uval_rel v_t v_s ∗
         code_refl_inv C i_t i_s A_t A_s }].
-  Proof. Admitted.
+  Proof.
+    iIntros "CI #Hv #He". rewrite /code_refl_inv.
+    destruct_code_inv.
+
+    rewrite /instr_conv.
+
+    rewrite sim_expr_eq.
+
+    iIntros (σ_t σ_s) "SI".
+    unfold interp_L2.
+    rewrite /subevent /resum /ReSum_inl /cat /Cat_IFun /inl_ /Inl_sum1
+      /resum /ReSum_id /id_ /Id_IFun.
+    simp instrE_conv.
+    rewrite !interp_state_vis.
+    setoid_rewrite interp_state_ret.
+    cbn -[state_interp].
+    rewrite /handle_stateEff.
+    rewrite !bind_vis.
+
+    iApply sim_coindF_vis. iRight.
+    iModIntro.
+    rewrite /handle_event; cbn -[state_interp].
+    rewrite /resum /ReSum_id /id_ /Id_IFun.
+    simp handle_call_events. iLeft.
+    iFrame. destruct_local_inv. destruct_frame.
+    iExists (C, i_t, i_s).
+    do 2 destruct_frame.
+    iSplitL "Hs_t Hs_s CI".
+    { rewrite /call_args_eq / arg_val_rel; cbn; iFrame.
+      iFrame "WF_frame".
+      iSplitL ""; last done; iSplitL "Hv"; try done. }
+
+    iIntros (??) "(SI & V)".
+    iDestruct "V" as "(?&?&?&?)".
+    cbn -[state_interp].
+    iApply sim_coindF_tau; iApply sim_coindF_base.
+    rewrite /lift_expr_rel. iModIntro.
+    iExists v_t0.1, v_t0.2, v_s0.1, v_s0.2; iFrame.
+    rewrite -!itree_eta; repeat sfinal.
+    by iFrame "WF_frame".
+  Qed.
 
   Lemma load_must_be_addr_src τ x_t x_s Φ:
     ⊢ (∀ ptr, ⌜x_s = DVALUE_Addr ptr⌝ -∗
