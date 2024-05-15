@@ -277,6 +277,8 @@ Section compatibility.
       by rewrite Hdom. }
   Qed.
 
+  (* Phi instructions are compatible up to equivalent phi identifiers and that
+     the phi identifiers are in bijection. *)
   Theorem phis_compat ΠA C bid Φ Φ' A_t A_s l_t l_s:
     Φ.*1 ## l_t ->
     Φ'.*1 ## l_s ->
@@ -319,12 +321,12 @@ Section compatibility.
     do 2 vfinal.
   Admitted.
 
-  Theorem code_compat (c c' : code dtyp) A_t A_s:
+  Theorem code_compat ΠL ΠA (c c' : code dtyp) A_t A_s:
     code_WF c ->
     code_WF c' ->
     ([∗ list] '(id, i); '(id', i') ∈ c; c',
-        ∀ A_t A_s, instr_logrel I id i id' i' ∅ A_t A_s L_t L_s) -∗
-    code_logrel I c c' ∅ A_t A_s L_t L_s.
+        ∀ A_t A_s, instr_logrel ΠL ΠA id i id' i' ∅ A_t A_s) -∗
+    code_logrel ΠL ΠA c c' ∅ A_t A_s.
   Proof with vsimp.
     iIntros (Hwf Hwf') "Hi"; iIntros (??) "CI"; cbn.
     vsimp. setoid_rewrite instr_conv_ret.
@@ -336,17 +338,13 @@ Section compatibility.
 
     iDestruct (big_sepL2_cons_inv_l with "Hi") as (???) "(CI1 & CI2)".
     destruct a, x2; subst; cbn -[denote_instr]... Cut...
-
-    (* TODO: Pull out lemma *)
-    cbn in Hwf; apply andb_prop_elim in Hwf;
-      destruct Hwf as (HW1 & HW2).
-    cbn in Hwf'; apply andb_prop_elim in Hwf';
-      destruct Hwf' as (HW1' & HW2').
+    apply code_WF_cons_inv in Hwf; destruct Hwf as (Hwf1 & Hwf2).
+    apply code_WF_cons_inv in Hwf'; destruct Hwf' as (Hwf'1 & Hwf'2).
 
     Cut...
     mono: (iApply ("CI1" with "CI")) with "[CI2]"...
     Cut... iDestruct "HΦ" as (??) "CI".
-    iSpecialize ("IHl" $! HW2 _ HW2' with "CI2 CI").
+    iSpecialize ("IHl" $! Hwf2 _ Hwf'2 with "CI2 CI").
     iPoseProof (sim_expr_fmap_inv with "IHl") as "H".
 
     mono: iApply "H"...
@@ -356,22 +354,21 @@ Section compatibility.
     by rewrite !app_assoc.
   Qed.
 
-  Theorem block_compat b b' bid A_t A_s:
+  Theorem block_compat ΠL ΠA b b' bid A_t A_s:
     block_WF b ->
     block_WF b' ->
-    phis_logrel I
-      (denote_phis bid (blk_phis b))
-      (denote_phis bid (blk_phis b'))
-      ∅ A_t A_s L_t L_s-∗
-    code_logrel I
+    phis_logrel ΠL ΠA
+      bid bid (blk_phis b) (blk_phis b')
+      ∅ A_t A_s -∗
+    code_logrel ΠL ΠA
       (blk_code b)
       (blk_code b')
-      ∅ A_t A_s L_t L_s-∗
-    term_logrel I
+      ∅ A_t A_s -∗
+    term_logrel ΠL ΠA
       (blk_term b)
       (blk_term b')
-      ∅ L_t L_s -∗
-    block_logrel I b b' bid ∅ A_t A_s L_t L_s.
+      ∅ -∗
+    block_logrel ΠL ΠA b b' bid ∅ A_t A_s.
   Proof with vsimp.
     iIntros (WF_b WF_b') "HΦ Hc Ht".
     iIntros (??) "CI".
@@ -390,29 +387,28 @@ Section compatibility.
     mono: (iApply "Hc") with "[Ht]"...
     iDestruct "HΦ" as ([][] _ _ ??) "HI".
 
-    (* Well-formedness of block *)
-    apply andb_prop_elim in WF_b, WF_b';
-      destruct WF_b, WF_b'.
+    apply block_WF_inv in WF_b, WF_b'.
+    destruct WF_b as (WF_c & WF_t); destruct WF_b' as (WF_c' & WF_t').
 
     (* Terminator *)
     mono: iApply "Ht"...
 
     iIntros (??) "H".
     iDestruct "H" as (????) "(Hi & H)".
-    iExists _,_. rewrite H3 H4.
+    iExists _,_. rewrite H H0.
     do 2 (iSplitL ""; [ done | ]). iFrame.
     by iExists _, _.
   Qed.
 
-  Theorem ocfg_compat (c c' : CFG.ocfg dtyp) b1 b2 A_t A_s:
+  Theorem ocfg_compat ΠL ΠA (c c' : CFG.ocfg dtyp) b1 b2 A_t A_s:
     ocfg_WF c ->
     ocfg_WF c' ->
     □ ([∗ list] b; b' ∈ c; c',
         (* The blocks have the same block ids, in order  *)
         ⌜blk_id b = blk_id b'⌝ ∗
         (* and are logically related *)
-        ∀ A_t A_s be, block_logrel I b b' be ∅ A_t A_s L_t L_s) -∗
-    ocfg_logrel I c c' ∅ A_t A_s b1 b2 L_t L_s.
+        ∀ A_t A_s be, block_logrel ΠL ΠA b b' be ∅ A_t A_s) -∗
+    ocfg_logrel ΠL ΠA c c' ∅ A_t A_s b1 b2.
   Proof with vsimp.
     iIntros (WF WF') "#Hb"; iIntros (??) "CI".
     rewrite /ocfg_WF in WF.
@@ -499,7 +495,7 @@ Section compatibility.
     end.
 
     iApply (sim_expr_guarded_iter' _ _ (fun x y => ⌜x = y⌝
-      ∗ code_inv_post I ∅ i_t i_s A_t A_s L_t L_s)%I
+      ∗ code_inv_post ΠL ΠA ∅ i_t i_s A_t A_s)%I
             with "[Hb] [CI]"); cycle 1.
     { iSplitL ""; first done.
       by iExists ∅, ∅. }
@@ -513,14 +509,14 @@ Section compatibility.
     { (* Since the two OCFG's have the same block ids, a related block can be found
         for the other OCFG. *)
       iPoseProof (code_same_block_ids_find_block c c'
-        (fun b b' => ∀ A_t A_s be, block_logrel I b b' be ∅ A_t A_s L_t L_s) with "Hb")%I
+        (fun b b' => ∀ A_t A_s be, block_logrel ΠL ΠA b b' be ∅ A_t A_s) with "Hb")%I
         as "H".
       iSpecialize ("H" $! _ _ Hb0); iDestruct "H" as (??) "Hrel". rewrite H0.
 
       (* FIXME: Why doesn't [vsimp] work here? *)
       rewrite interp_bind (interp_bind _ (denote_block b b3)).
 
-      apply find_block_has_id in Hb0, H0.
+      apply ScopeTheory.find_block_has_id in Hb0, H0.
       Cut...
       iSpecialize ("Hrel" with "CI").
       rewrite /instr_conv.
@@ -557,13 +553,13 @@ Section compatibility.
     repeat iExists _; do 2 (iSplitL ""; eauto); done.
   Qed.
 
-  Theorem cfg_compat c c' A_t A_s:
+  Theorem cfg_compat ΠL ΠA c c' A_t A_s:
     cfg_WF c ->
     cfg_WF c' ->
     CFG.init c = CFG.init c' ->
-    ocfg_logrel I (blks c) (blks c') ∅ A_t A_s
-      (CFG.init c) (CFG.init c) L_t L_s -∗
-    cfg_logrel I c c' ∅ A_t A_s L_t L_s.
+    ocfg_logrel ΠL ΠA (blks c) (blks c') ∅ A_t A_s
+      (CFG.init c) (CFG.init c) -∗
+    cfg_logrel ΠL ΠA c c' ∅ A_t A_s.
   Proof with vsimp.
     iIntros (WF WF' Heq) "Hocfg". iIntros (??) "CI".
     setoid_rewrite interp_bind.
@@ -593,17 +589,17 @@ Section compatibility.
     iApply sim_expr_exception.
   Qed.
 
-  Theorem fun_compat f f':
+  Theorem fun_compat ΠL ΠA f f':
     fun_WF f ->
     fun_WF f' ->
     df_args f =  df_args f' ->
     (* Related arguments on the function imply the invariant *)
-    (∀ args_t args_s,
+    (∀ args_t args_s i_t i_s,
       ⌜length (df_args f) = length args_t⌝ -∗
       ⌜length (df_args f') = length args_s⌝ -∗
-      ([∗ list] y1;y2 ∈ args_t;args_s, uval_rel y1 y2) -∗
-      I (remove_ids L_t (combine (df_args f) args_t)) (remove_ids L_s (combine (df_args f') args_s))) -∗
-    (∀ A_t A_s, cfg_logrel I (df_instrs f) (df_instrs f') ∅ A_t A_s L_t L_s) -∗
+      ([∗ list] y1;y2 ∈ args_t.*2;args_s.*2, uval_rel y1 y2) -∗
+      ΠL i_t i_s args_t args_s) -∗
+    (∀ A_t A_s, cfg_logrel ΠL ΠA (df_instrs f) (df_instrs f') ∅ A_t A_s) -∗
     fun_logrel f f' ∅.
   Proof with vsimp.
     iIntros (WF WF' Hargs_eq) "HInv Hf".
@@ -662,132 +658,133 @@ Section compatibility.
       eapply eqit_Tau; intros; by tau_steps. }
 
     rewrite -!bind_bind. Cut. rewrite !bind_bind.
+  Admitted.
 
-    apply PeanoNat.Nat.eqb_eq in Hlen_args, Hlen_f.
-    apply andb_prop_elim in WF. destruct WF.
-    apply andb_prop_elim in WF'. destruct WF'.
-    assert (Hnd: NoDup_b (df_args f) = true).
-    { destruct (NoDup_b (df_args f)); done. }
-    assert (Hnd': NoDup_b (df_args f') = true).
-    { destruct (NoDup_b (df_args f')); done. }
-    apply NoDup_b_NoDup in Hnd, Hnd'. clear H. rename H0 into WF.
-    iCombine "Hs_t Hs_s" as "Hst".
-    iApply (sim_expr'_bupd_mono with "[Hv HC Hf HInv]");
-      [ | iApply sim_expr_lift; iApply (frame_laws.sim_push_frame' with "Hst") ];
-      [ | rewrite combine_fst | rewrite combine_fst ]; eauto.
+  (*   apply PeanoNat.Nat.eqb_eq in Hlen_args, Hlen_f. *)
+  (*   apply andb_prop_elim in WF. destruct WF. *)
+  (*   apply andb_prop_elim in WF'. destruct WF'. *)
+  (*   assert (Hnd: NoDup_b (df_args f) = true). *)
+  (*   { destruct (NoDup_b (df_args f)); done. } *)
+  (*   assert (Hnd': NoDup_b (df_args f') = true). *)
+  (*   { destruct (NoDup_b (df_args f')); done. } *)
+  (*   apply NoDup_b_NoDup in Hnd, Hnd'. clear H. rename H0 into WF. *)
+  (*   iCombine "Hs_t Hs_s" as "Hst". *)
+  (*   iApply (sim_expr'_bupd_mono with "[Hv HC Hf HInv]"); *)
+  (*     [ | iApply sim_expr_lift; iApply (frame_laws.sim_push_frame' with "Hst") ]; *)
+  (*     [ | rewrite combine_fst | rewrite combine_fst ]; eauto. *)
 
-    (* cbn -[denote_cfg]. *)
-    iIntros (??) "H".
-    iDestruct "H" as (??????)
-        "(Hs_t & Hs_s & Ha_t & Ha_s & Hd_t & Hd_s & Harg_t & Harg_s)".
-    rewrite H H0; clear H H0.
-    vsimp. Tau. iApply sim_expr'_base...
-    Cut... iApply instr_to_L0'.
+  (*   (* cbn -[denote_cfg]. *) *)
+  (*   iIntros (??) "H". *)
+  (*   iDestruct "H" as (??????) *)
+  (*       "(Hs_t & Hs_s & Ha_t & Ha_s & Hd_t & Hd_s & Harg_t & Harg_s)". *)
+  (*   rewrite H H0; clear H H0. *)
+  (*   vsimp. Tau. iApply sim_expr'_base... *)
+  (*   Cut... iApply instr_to_L0'. *)
 
-    iDestruct "Hv" as "#Hv".
-    iApply sim_expr'_bupd_mono;
-      [ | iApply ("Hf" with
-          "[HInv HC Hs_t Hs_s Ha_t Ha_s Hd_t Hd_s Harg_t Harg_s]") ];
-      eauto; cycle 1.
-    { Unshelve.
-      4 : exact (j_t :: i_t). 4 : exact (j_s :: i_s).
-      2 : exact ∅. 2 : exact ∅.
-      iExists (combine (df_args f) args_t),
-              (combine (df_args f') args_s); iFrame.
-      iSplitL "".
-      { iPureIntro; eauto. }
+  (*   iDestruct "Hv" as "#Hv". *)
+  (*   iApply sim_expr'_bupd_mono; *)
+  (*     [ | iApply ("Hf" with *)
+  (*         "[HInv HC Hs_t Hs_s Ha_t Ha_s Hd_t Hd_s Harg_t Harg_s]") ]; *)
+  (*     eauto; cycle 1. *)
+  (*   { Unshelve. *)
+  (*     4 : exact (j_t :: i_t). 4 : exact (j_s :: i_s). *)
+  (*     2 : exact ∅. 2 : exact ∅. *)
+  (*     iExists (combine (df_args f) args_t), *)
+  (*             (combine (df_args f') args_s); iFrame. *)
+  (*     iSplitL "". *)
+  (*     { iPureIntro; eauto. } *)
 
-      iSplitL "HInv".
-      { by iApply "HInv". }
-      { cbn; by rewrite NoDup_nil. } }
+  (*     iSplitL "HInv". *)
+  (*     { by iApply "HInv". } *)
+  (*     { cbn; by rewrite NoDup_nil. } } *)
 
-    clear e_t0 e_s0.
+  (*   clear e_t0 e_s0. *)
 
-    iIntros (e_t e_s) "H".
-    iDestruct "H" as (????) "(#Hr & HC)".
-    rewrite H H0 !bind_ret_l.
-    iDestruct "HC" as (??) "HC".
+  (*   iIntros (e_t e_s) "H". *)
+  (*   iDestruct "H" as (????) "(#Hr & HC)". *)
+  (*   rewrite H H0 !bind_ret_l. *)
+  (*   iDestruct "HC" as (??) "HC". *)
 
-    iDestruct "HC" as (??) "CI".
-    rewrite !app_nil_r.
+  (*   iDestruct "HC" as (??) "CI". *)
+  (*   rewrite !app_nil_r. *)
 
-    iDestruct "CI" as
-      "(Hd_t&Hd_s&Hs_t&Hs_s&#HWF&Hargs_t&Hargs_s&CI&HC&Ha_t&Ha_s&#Hbij)".
-    iApply sim_expr_lift.
+  (*   iDestruct "CI" as *)
+  (*     "(Hd_t&Hd_s&Hs_t&Hs_s&#HWF&Hargs_t&Hargs_s&CI&HC&Ha_t&Ha_s&#Hbij)". *)
+  (*   iApply sim_expr_lift. *)
 
-    iApply sim_update_si; iModIntro.
-    iIntros (??) "SI".
-    iDestruct (bij_laws.state_interp_WF with "SI") as "%WF_S".
-    iFrame.
-    iDestruct "HWF" as %HWF.
+  (*   iApply sim_update_si; iModIntro. *)
+  (*   iIntros (??) "SI". *)
+  (*   iDestruct (bij_laws.state_interp_WF with "SI") as "%WF_S". *)
+  (*   iFrame. *)
+  (*   iDestruct "HWF" as %HWF. *)
 
-    repeat setoid_rewrite interp_bind.
-    setoid_rewrite interp_ret.
-    rewrite !interp_vis !bind_bind.
-    setoid_rewrite interp_ret.
-    setoid_rewrite bind_tau;
-    setoid_rewrite bind_ret_l.
-    setoid_rewrite interp_vis.
-    setoid_rewrite bind_bind.
-    setoid_rewrite interp_ret.
-    setoid_rewrite bind_tau.
-    setoid_rewrite bind_ret_l.
-    setoid_rewrite <- bind_tau.
-    rewrite -!bind_bind.
-    iApply sim_expr_bind.
-    iApply sim_expr_bupd_mono; cycle 1.
-    { iDestruct "Hbij" as (Hnd_t Hnd_s) "Hbij".
-      iPoseProof (frame_laws.sim_pop_frame_bij with
-                  "Hs_t Hs_s Ha_t Ha_s HC Hbij") as "H";
-        eauto.
-      { intros. cbn in H1.
-        assert (length i_s > 0).
-        { cbn in H3. lia. } cbn; lia. } }
+  (*   repeat setoid_rewrite interp_bind. *)
+  (*   setoid_rewrite interp_ret. *)
+  (*   rewrite !interp_vis !bind_bind. *)
+  (*   setoid_rewrite interp_ret. *)
+  (*   setoid_rewrite bind_tau; *)
+  (*   setoid_rewrite bind_ret_l. *)
+  (*   setoid_rewrite interp_vis. *)
+  (*   setoid_rewrite bind_bind. *)
+  (*   setoid_rewrite interp_ret. *)
+  (*   setoid_rewrite bind_tau. *)
+  (*   setoid_rewrite bind_ret_l. *)
+  (*   setoid_rewrite <- bind_tau. *)
+  (*   rewrite -!bind_bind. *)
+  (*   iApply sim_expr_bind. *)
+  (*   iApply sim_expr_bupd_mono; cycle 1. *)
+  (*   { iDestruct "Hbij" as (Hnd_t Hnd_s) "Hbij". *)
+  (*     iPoseProof (frame_laws.sim_pop_frame_bij with *)
+  (*                 "Hs_t Hs_s Ha_t Ha_s HC Hbij") as "H"; *)
+  (*       eauto. *)
+  (*     { intros. cbn in H1. *)
+  (*       assert (length i_s > 0). *)
+  (*       { cbn in H3. lia. } cbn; lia. } } *)
 
-    iIntros (??) "H".
-    iDestruct "H" as (??->->) "(HC & Hst & Hss)".
-    final.
-    iFrame. iExists _, _; iFrame "Hr"; done.
-  Qed.
+  (*   iIntros (??) "H". *)
+  (*   iDestruct "H" as (??->->) "(HC & Hst & Hss)". *)
+  (*   final. *)
+  (*   iFrame. iExists _, _; iFrame "Hr"; done. *)
+  (* Qed. *)
 
-  Theorem fundefs_compat r r' Attr:
-    ⌜fundefs_WF r Attr⌝ -∗
-    ⌜fundefs_WF r' Attr⌝ -∗
-    ([∗ list] '(v, f); '(v', f') ∈ r; r', fun_logrel f f' ∅) -∗
-    fundefs_logrel r r' Attr Attr ∅.
-  Proof with vsimp.
-    rewrite /fundefs_logrel.
-    iInduction r as [ | f l] "H" forall (r' Attr); first (iIntros; done).
-    iIntros (WF WF') "Hf".
-    iIntros (i f_t' f_s'
-      addr_t addr_s attr Hlu_t Hlu_s Hattr_t Hattr_s) "#Hrel".
-    iIntros (i_t i_s args_t args_s Hlen) "Hs_t Hs_s #Hargs HC".
-    (* iIntros (τ Hcall). *)
-    pose proof fundefs_WF_cons_inv. destruct Attr.
-    { clear -Hattr_t. set_solver. }
-    clear H.
-    pose proof (fundefs_WF_cons_inv _ _ _ _ WF) as HWF_t.
-    destruct HWF_t as (?&?).
+  (* Theorem fundefs_compat r r' Attr: *)
+  (*   ⌜fundefs_WF r Attr⌝ -∗ *)
+  (*   ⌜fundefs_WF r' Attr⌝ -∗ *)
+  (*   ([∗ list] '(v, f); '(v', f') ∈ r; r', fun_logrel f f' ∅) -∗ *)
+  (*   fundefs_logrel r r' Attr Attr ∅. *)
+  (* Proof with vsimp. *)
+  (*   rewrite /fundefs_logrel. *)
+  (*   iInduction r as [ | f l] "H" forall (r' Attr); first (iIntros; done). *)
+  (*   iIntros (WF WF') "Hf". *)
+  (*   iIntros (i f_t' f_s' *)
+  (*     addr_t addr_s attr Hlu_t Hlu_s Hattr_t Hattr_s) "#Hrel". *)
+  (*   iIntros (i_t i_s args_t args_s Hlen) "Hs_t Hs_s #Hargs HC". *)
+  (*   (* iIntros (τ Hcall). *) *)
+  (*   pose proof fundefs_WF_cons_inv. destruct Attr. *)
+  (*   { clear -Hattr_t. set_solver. } *)
+  (*   clear H. *)
+  (*   pose proof (fundefs_WF_cons_inv _ _ _ _ WF) as HWF_t. *)
+  (*   destruct HWF_t as (?&?). *)
 
-    iDestruct (big_sepL2_cons_inv_l with "Hf") as (???)
-      "(CI1 & CI2)". destruct x2; subst.
-    pose proof (fundefs_WF_cons_inv _ _ _ _ WF') as HWF_s.
-    destruct HWF_s as (?&?).
-    destruct f.
+  (*   iDestruct (big_sepL2_cons_inv_l with "Hf") as (???) *)
+  (*     "(CI1 & CI2)". destruct x2; subst. *)
+  (*   pose proof (fundefs_WF_cons_inv _ _ _ _ WF') as HWF_s. *)
+  (*   destruct HWF_s as (?&?). *)
+  (*   destruct f. *)
 
-    destruct i.
-    { cbn in Hlu_t, Hlu_s, Hattr_t, Hattr_s.
-      inversion Hlu_t; subst.
-      inversion Hlu_s; subst.
-      inversion Hattr_t; subst.
-      iApply ("CI1" with "[] [Hs_t] [Hs_s]"); eauto. }
-    { rewrite /fundefs_WF in H, H1.
-      cbn in H, H1.
-      iSpecialize ("H" $! _ _ H0 H2 with "CI2").
-      inversion Hlu_t; inversion Hlu_s; inversion Hattr_t.
-      iSpecialize ("H" $! i _ _ _ _ _ H4 H5 H6 H6
-                  with "Hrel").
-      iSpecialize ("H" $! _ _ _ _ Hlen with "Hs_t Hs_s Hargs HC"). done. }
-  Qed.
+  (*   destruct i. *)
+  (*   { cbn in Hlu_t, Hlu_s, Hattr_t, Hattr_s. *)
+  (*     inversion Hlu_t; subst. *)
+  (*     inversion Hlu_s; subst. *)
+  (*     inversion Hattr_t; subst. *)
+  (*     iApply ("CI1" with "[] [Hs_t] [Hs_s]"); eauto. } *)
+  (*   { rewrite /fundefs_WF in H, H1. *)
+  (*     cbn in H, H1. *)
+  (*     iSpecialize ("H" $! _ _ H0 H2 with "CI2"). *)
+  (*     inversion Hlu_t; inversion Hlu_s; inversion Hattr_t. *)
+  (*     iSpecialize ("H" $! i _ _ _ _ _ H4 H5 H6 H6 *)
+  (*                 with "Hrel"). *)
+  (*     iSpecialize ("H" $! _ _ _ _ Hlen with "Hs_t Hs_s Hargs HC"). done. } *)
+  (* Qed. *)
 
 End compatibility.

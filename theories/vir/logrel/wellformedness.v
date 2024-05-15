@@ -88,6 +88,22 @@ Ltac destructb :=
 
 Section WF_def_properties.
 
+  Lemma block_WF_inv b :
+    block_WF b ->
+    code_WF (LLVMAst.blk_code b) /\
+    term_WF (blk_term b).
+  Proof.
+    destruct b; rewrite /block_WF;
+      intros; destructb; eauto.
+  Qed.
+
+  Lemma code_WF_cons_inv a c :
+    code_WF (a :: c) ->
+    instr_WF a.2 /\ code_WF c.
+  Proof.
+    cbn; intros; destructb; destruct a; eauto.
+  Qed.
+
   Lemma fundefs_WF_cons_inv f F a Attr:
     fundefs_WF (f :: F) (a :: Attr) ->
     fun_WF f.2 /\ fundefs_WF F Attr.
