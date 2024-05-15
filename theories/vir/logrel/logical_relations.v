@@ -33,17 +33,17 @@ Section logical_relations_def.
   (* ------------------------------------------------------------------------ *)
   (** *Invariants *)
   (* Invariant for expressions. *)
-  Definition frame_γ γ i (L : local_env) :=
-    (⌜NoDup L.*1⌝ ∗
+  Definition frame_γ γ i (L : list local_id) :=
+    (⌜NoDup L⌝ ∗
     (* Current stack frame *)
     vir_state.stack γ i ∗
     (* Domain of local environments on source and target *)
-    ldomain γ (current_frame i) (list_to_set L.*1))%I.
+    ldomain γ (current_frame i) (list_to_set L))%I.
 
   Definition frame_tgt := (frame_γ sheapG_heap_target).
   Definition frame_src := (frame_γ sheapG_heap_source).
 
-  Definition frame_inv i_t i_s (L_t L_s : local_env) C : iProp Σ :=
+  Definition frame_inv i_t i_s (L_t L_s : list local_id) C : iProp Σ :=
     (* Current stack frame *)
     frame_WF i_t i_s ∗
     (* Checkout set *)
@@ -52,7 +52,7 @@ Section logical_relations_def.
     frame_tgt i_t L_t ∗ frame_src i_s L_s.
 
   Definition local_inv i_t i_s L_t L_s C : iProp Σ :=
-    frame_inv i_t i_s L_t L_s C ∗ ΠL i_t i_s L_t L_s.
+    frame_inv i_t i_s L_t.*1 L_s.*1 C ∗ ΠL i_t i_s L_t L_s.
 
   Definition alloca_inv
     (i_t i_s : list frame_names) (A_t A_s : list Z)
@@ -419,17 +419,36 @@ Section logical_invariant_properties.
     iFrame.
   Qed.
 
+  Lemma CFG_inv_code_inv ΠL C i_t i_s:
+    CFG_inv ΠL C i_t i_s ∗-∗
+    code_inv ΠL alloca_bij C i_t i_s ∅ ∅.
+  Proof.
+    iSplit; iIntros "HI".
+    { destruct_CFG_inv; sfinal; cbn;
+        iPureIntro; repeat split; by try apply NoDup_nil. }
+    { destruct_code_inv; sfinal; cbn.
+      destruct_alloca_inv; iFrame. }
+  Qed.
+
   (* Utility about frame resources *)
   Lemma heap_ctx_frame_γ_agrees γ σ G i L:
     heap_ctx γ
         (⊙ vmem σ, vir_dyn (vmem σ)) (frames (vmem σ)) G (vlocal σ).1 (vlocal σ).2 -∗
     frame_γ γ i L -∗
-    ⌜(list_to_set L.*1 : gset _) = (list_to_set (vlocal σ).1.*1 : gset _)⌝.
+    ⌜(list_to_set L : gset _) = (list_to_set (vlocal σ).1.*1 : gset _)⌝.
   Proof.
     iIntros "HC HF".
     destruct_HC "HC". destruct_frame.
     iDestruct (ghost_var_agree with "Hs HCF") as %Hf_s; subst.
     iDestruct (ghost_var_agree with "Hd HD") as %Hd; by subst.
+  Qed.
+
+  Lemma local_bij_dom_eq {i_t i_s L_t L_s}:
+    local_bij i_t i_s L_t L_s -∗
+    ⌜L_t.*1 = L_s.*1⌝.
+  Proof.
+    iIntros "HB". iDestruct "HB" as (?) "HB";
+      iPureIntro; eauto.
   Qed.
 
   Lemma local_bij_elem_of {i_t i_s L_t L_s x}:
@@ -486,44 +505,40 @@ Section logical_invariant_properties.
       as "HR"; eauto.
   Qed.
 
-  (* Remove an id that's in the local bijection. *)
+  (* Add an new related id pair to the local bijection. *)
   Lemma local_bij_add {i_t i_s L_t L_s} x v_t v_s:
+    x ∉ L_t.*1 ->
     [ x := v_t ]t i_t -∗
     [ x := v_s ]s i_s -∗
     uval_rel v_t v_s -∗
     local_bij i_t i_s L_t L_s -∗
     local_bij i_t i_s (alist_add x v_t L_t) (alist_add x v_s L_s).
   Proof.
-    iIntros "Hvt Hvs Hv Hbij". destruct_local_inv; iFrame.
+    iIntros (Hne) "Hvt Hvs Hv Hbij". destruct_local_inv; iFrame.
     iSplitL "".
     { iPureIntro; by eapply alist_add_fst_eq. }
 
     iDestruct (lmapsto_no_dup with "Hl_t") as "%Hdup_t".
     iDestruct (lmapsto_no_dup with "Hl_s") as "%Hdup_s".
-    destruct (decide (x ∈ L_t)).
 
-    (* iDestruct (big_sepL_delete with "Hl_t") as "(Helemt & Hl_t)"; *)
-    (*   eauto; cbn. *)
-    (* iDestruct (big_sepL_delete with "Hl_s") as "(Helems & Hl_s)"; *)
-    (*   eauto; cbn. *)
-    (* pose proof (no_dup_fst_list_some _ _ _ _ _ _ _ Hdup_t Hdup_s H0 H1 H2); *)
-    (*   subst. *)
-    (* iExists x1, x3; iFrame. *)
+    rewrite !alist_remove_not_in; try rewrite -H; eauto.
+    iFrame.
+  Qed.
 
-    (* iAssert (uval_rel x1 x3) as "#Hv'". *)
-    (* { iDestruct (big_sepL2_lookup _ _ _ x2 with "Hl_bij") as "H"; eauto. *)
-    (*   { by eapply list_lookup_snd. } *)
-    (*   { by eapply list_lookup_snd. } } *)
-  Admitted.
-
-  Lemma local_bij_add_remove {i_t i_s x v_t v_s L_t L_s}:
-    x ∈ L_t.*1 ->
-    uval_rel v_t v_s -∗
-    local_bij i_t i_s
-      (alist_add x v_t (alist_remove x L_t))
-      (alist_add x v_s (alist_remove x L_s)) -∗
-    local_bij i_t i_s L_t L_s.
-  Proof. Admitted.
+  (* (* Adding a new related element restores the original local bijection. *) *)
+  (* Lemma local_bij_add_remove {i_t i_s x v_t v_s L_t L_s}: *)
+  (*   x ∈ L_t.*1 -> *)
+  (*   uval_rel v_t v_s -∗ *)
+  (*   local_bij i_t i_s *)
+  (*     (alist_add x v_t (alist_remove x L_t)) *)
+  (*     (alist_add x v_s (alist_remove x L_s)) -∗ *)
+  (*   local_bij i_t i_s L_t L_s. *)
+  (* Proof. *)
+  (*   iIntros (?) "Hv Hbij". *)
+  (*   destruct_local_inv; rewrite /local_bij; iFrame. *)
+  (*   iSplitL "" *)
+  (*   Search alist_add alist_remove. *)
+  (* Admitted. *)
 
 End logical_invariant_properties.
 
@@ -681,7 +696,7 @@ Section logical_relations_properties.
     {T : Set} i_t i_s L_t L_s (elts: list (T * exp T)) C:
     local_inv_bij (EXP_Cstring elts) (EXP_Cstring elts)
       i_t i_s L_t L_s C -∗
-    frame_inv i_t i_s L_t L_s C ∗
+    frame_inv i_t i_s L_t.*1 L_s.*1 C ∗
     (∀ x,
         ⌜In x elts⌝ -∗
         local_bij_at_exp x.2 x.2 i_t i_s L_t L_s).
@@ -731,7 +746,7 @@ Section logical_relations_properties.
   Lemma expr_local_bij_struct_invert
     {T : Set} i_t i_s L_t L_s (elts: list (T * exp T)) C:
     local_inv_bij (EXP_Struct elts) (EXP_Struct elts) i_t i_s L_t L_s C -∗
-    frame_inv i_t i_s L_t L_s C ∗
+    frame_inv i_t i_s L_t.*1 L_s.*1 C ∗
     (∀ x,
         ⌜In x elts⌝ -∗
       local_bij_at_exp x.2 x.2 i_t i_s L_t L_s).
@@ -778,7 +793,7 @@ Section logical_relations_properties.
   Lemma expr_local_bij_array_invert
     {T : Set} i_t i_s L_t L_s (elts: list (T * exp T)) C:
     local_inv_bij (EXP_Array elts) (EXP_Array elts) i_t i_s L_t L_s C -∗
-    frame_inv i_t i_s L_t L_s C ∗
+    frame_inv i_t i_s L_t.*1 L_s.*1 C ∗
     (∀ x,
         ⌜In x elts⌝ -∗
         local_bij_at_exp x.2 x.2 i_t i_s L_t L_s).
@@ -986,6 +1001,44 @@ Section logical_relations_properties.
     destruct Heq; iExists _, _; by iFrame.
   Qed.
 
+  (* TODO Move to Utils. *)
+  Lemma alist_remove_not_elem_of :
+    ∀ [K : Type] `{RelDec.RelDec K eq} `{RelDec.RelDec_Correct _ eq} [V : Type]
+      (x : K) (l : alist K V),
+      x ∉ (alist_remove x l).*1.
+  Proof.
+    intros; induction l; cbn; try set_solver.
+    destruct_if_goal; eauto.
+    cbn. intro; apply IHl.
+    apply elem_of_cons in H2. destruct H2; eauto.
+    subst. exfalso.
+    apply negb_true_iff in H3.
+    rewrite <- RelDec.neg_rel_dec_correct in H3.
+    apply H3; auto.
+  Qed.
+
+  (* TODO Move to Utils. *)
+  Lemma alist_remove_twice :
+    ∀ [K : Type] `{RelDec.RelDec K eq} `{RelDec.RelDec_Correct _ eq} [V : Type]
+      (x : K) (l : alist K V),
+      alist_remove x (alist_remove x l) = alist_remove x l.
+  Proof.
+    intros; induction l; cbn; eauto.
+    destruct_if_goal; eauto.
+    apply negb_true_iff in H3.
+    rewrite <- RelDec.neg_rel_dec_correct in H3.
+    cbn. rewrite H1; eauto; f_equiv; eauto.
+  Qed.
+
+  Lemma frame_alist_add_remove {B} γ i x (l : list (_ * B)):
+    frame_γ γ i l.*1 -∗
+    frame_γ γ i (x :: (alist_remove x l).*1).
+  Proof.
+    iIntros "Hf".
+    destruct_frame; iFrame; iSplitL "".
+    { iPureIntro. admit. }
+  Admitted.
+
   Lemma sim_local_write_frame
     (x_t x_s : LLVMAst.raw_id) (v_t v_s : uvalue) v_t' v_s' i_t i_s L_t L_s C:
     ⊢ frame_inv i_t i_s L_t L_s C -∗
@@ -1003,12 +1056,33 @@ Section logical_relations_properties.
     iExists _, _; iFrame; by iFrame "WF_frame".
   Qed.
 
+  Lemma sim_local_write_frame_alloc
+    (x_t x_s : LLVMAst.raw_id) (v_t v_s : uvalue) L_t L_s i_t i_s C:
+    x_t ∉ L_t ->
+    x_s ∉ L_s ->
+    ⊢ frame_inv i_t i_s L_t L_s C -∗
+    trigger (LocalWrite x_t v_t) ⪯ trigger (LocalWrite x_s v_s)
+      [{ (v1, v2),
+          [ x_t := v_t ]t i_t ∗ [ x_s := v_s ]s i_s ∗
+          frame_inv i_t i_s (x_t :: L_t) (x_s :: L_s) C }].
+  Proof.
+    iIntros (Hnt Hns) "Hf".
+    destruct_frame.
+    iDestruct "Hft" as (?) "(Hs_t & Hd_t)".
+    iDestruct "Hfs" as (?) "(Hs_s & Hd_s)".
+    mono: iApply (sim_local_write_alloc with "Hd_t Hd_s Hs_t Hs_s") with "[CI]";
+      try set_solver.
+    iIntros (??) "H"; iDestruct "H" as (????) "(Ht & Hs & Hs_t & Hs_s & ? & ?)".
+    sfinal. iFrame "WF_frame".
+    iSplitL ""; iPureIntro; eapply NoDup_cons; eauto.
+  Qed.
+
   (* Local write reflexivity *)
   Lemma local_write_refl C x v_t v_s i_t i_s A_t A_s:
     ⊢ code_refl_inv C i_t i_s A_t A_s -∗
        uval_rel v_t v_s -∗
       trigger (LocalWrite x v_t) ⪯ trigger (LocalWrite x v_s)
-        [{ (v1, v2), code_refl_inv C i_t i_s A_t A_s }].
+      [{ (v1, v2), code_refl_inv C i_t i_s A_t A_s }].
   Proof.
     iIntros "CI #Hrel"; rewrite /code_refl_inv.
     destruct_code_inv.
@@ -1020,20 +1094,38 @@ Section logical_relations_properties.
 
       mono: iApply (sim_local_write_frame with "Hf Hxt Hxs") with "[AI HL]".
       (iIntros (??) "HΦ"; iDestruct "HΦ" as (????) "(Ht & Hs & Hf & H)"); iFrame.
-      do 2 sfinal.
+      sfinal. iExists _, _.
       iPoseProof (local_bij_add with "Ht Hs Hrel HL") as "HL".
-      iApply (local_bij_add_remove e with "Hrel HL").  }
+      { apply alist_remove_not_elem_of; try typeclasses eauto. }
+      iFrame. iDestruct "H" as "(HC & Hf_t & Hf_s)"; iFrame.
+      iSplitL "Hf_t"; cbn; rewrite alist_remove_twice.
+      - iApply (frame_alist_add_remove with "Hf_t").
+      - iApply (frame_alist_add_remove with "Hf_s"). }
 
     { destruct_local_inv.
-  Admitted.
+
+      assert (n' := n).
+      iDestruct (local_bij_dom_eq with "HL") as %Heq. rewrite Heq in n.
+      mono: iApply (sim_local_write_frame_alloc with "Hf") with "[AI HL]".
+      iIntros (??) "HΦ";
+       iDestruct "HΦ" as (????) "(Ht & Hs & Hf & (HC & Hf_t & Hf_s))"; iFrame.
+      sfinal.
+      iExists (alist_add x v_t args_t), (alist_add x v_s args_s).
+      cbn -[local_bij]; rewrite !alist_remove_not_in; eauto; iFrame "Hf_t Hf_s".
+      by iApply (local_bij_add with "Ht Hs Hrel HL"). }
+  Qed.
 
   Lemma local_write_refl_cfg C x v_t v_s i_t i_s :
     ⊢ CFG_refl_inv C i_t i_s -∗ uval_rel v_t v_s -∗
     trigger (LocalWrite x v_t) ⪯ trigger (LocalWrite x v_s)
       [{ (v1, v2), CFG_refl_inv C i_t i_s }].
   Proof.
-    iIntros "CI #Hrel".
-  Admitted.
+    iIntros "CI #Hrel"; rewrite /CFG_refl_inv.
+    iPoseProof (CFG_inv_code_inv with "CI") as "H".
+    mono: iApply (local_write_refl with "H").
+    iIntros (??) "H". iDestruct "H" as (????) "H"; sfinal.
+    by iApply CFG_inv_code_inv.
+  Qed.
 
   Lemma expr_local_read_refl {T} x i_t i_s L_t L_s (e_t e_s : exp T) C :
     x ∈ intersection_local_ids e_t e_s ->
