@@ -1,7 +1,7 @@
 From iris.prelude Require Import options.
 
 From velliris.vir.lang Require Import lang.
-From velliris.vir.logrel Require Import wellformedness logical_relations.
+From velliris.vir.logrel Require Import wellformedness logical_relations compatibility.
 
 (* Import DenoteTactics. *)
 Import CFG.
@@ -200,37 +200,37 @@ Section las_example_proof.
 Context `{vellirisGS Σ}.
 
 Lemma block_WF_las a0 a s:
-  Is_true (block_WF a) ->
-  Is_true (block_WF (las_block a0 s a)).
+  block_WF a ->
+  block_WF (las_block a0 s a).
 Proof. Admitted.
 
 Lemma code_WF_las a0 a s:
-  Is_true (code_WF a0) ->
-  Is_true (code_WF (las_code a0 a s)).
-Proof.
-  intros.
-  revert s.
-  induction a0; eauto; cbn -[instr_WF] in *; intros.
-  destruct a0; eauto. util.destructb; cbn.
-  apply forallb_True in H1.
-  destruct i0; eauto; cbn; util.destructb; eauto;
-  apply forallb_True in H1.
-  { eapply IHa0; eauto. }
-  { apply andb_prop_intro; split; eauto. }
-  { apply andb_prop_intro; split; eauto. }
-  { destruct ptr, e; cbn; eauto.
-    destruct id; cbn; eauto. destruct_if_goal; cbn; eauto.
-    destruct s; cbn; eauto. }
-  { destruct val, e; cbn; eauto.
-    destruct id; cbn; eauto.
-    destruct ptr, e; cbn; eauto.
-    destruct id0; destruct_if_goal; cbn; eauto. }
-Qed.
+  code_WF a0 ->
+  code_WF (las_code a0 a s).
+Proof. Admitted.
+(*   intros. *)
+(*   revert s. *)
+(*   induction a0; eauto; cbn -[instr_WF] in *; intros. *)
+(*   destruct a0; eauto. util.destructb; cbn. *)
+(*   apply forallb_True in H1. *)
+(*   destruct i0; eauto; cbn; util.destructb; eauto; *)
+(*   apply forallb_True in H1. *)
+(*   { eapply IHa0; eauto. } *)
+(*   { apply andb_prop_intro; split; eauto. } *)
+(*   { apply andb_prop_intro; split; eauto. } *)
+(*   { destruct ptr, e; cbn; eauto. *)
+(*     destruct id; cbn; eauto. destruct_if_goal; cbn; eauto. *)
+(*     destruct s; cbn; eauto. } *)
+(*   { destruct val, e; cbn; eauto. *)
+(*     destruct id; cbn; eauto. *)
+(*     destruct ptr, e; cbn; eauto. *)
+(*     destruct id0; destruct_if_goal; cbn; eauto. } *)
+(* Qed. *)
 
 (* Well-formedness of ocfg is preserved in the LAS transformation. *)
 Lemma ocfg_WF_las f a:
-  Is_true (ocfg_WF f) ->
-  Is_true (ocfg_WF (las_ocfg f a)).
+  ocfg_WF f ->
+  ocfg_WF (las_ocfg f a).
 Proof.
   intros. induction f; eauto.
   (* Why is [is_true] being weird here.. *)
@@ -249,12 +249,11 @@ Lemma ocfg_is_SSA_cons_inv a0 f :
 Proof. Admitted.
 
 Lemma promotable_ocfg_cons_inv {T} a0 (f : _ T) a:
-  Is_true (promotable_ocfg (a0 :: f) a) ->
-  Is_true (promotable_ocfg f a).
+  promotable_ocfg (a0 :: f) a ->
+  promotable_ocfg f a.
 Proof.
   rewrite /promotable_ocfg; cbn; intros.
-  util.destructb.
-  apply forallb_True in H1; auto.
+  destructb. auto.
 Qed.
 
 (* The [las] algorithm does not change the phi nodes. *)
@@ -360,26 +359,6 @@ Definition local_env_spec_sep (ΠL ΠL1 : local_env_spec) ΠL2: iProp Σ:=
 
 (* TODO Move to [logical_relations] *)
 (* Monotonicity of logical relations w.r.t. invariants *)
-(* TODO: Add a post condition on [phi_logrel] so that it can restate
-    ΠL2. *)
-Lemma phi_logrel_mono ΠL ΠL1 ΠL2 ΠA ϕ_t ϕ_s C A_t A_s:
-  □ (local_env_spec_sep ΠL ΠL1 ΠL2) -∗
-  ΠL2 -∗
-  phi_logrel ΠL ΠA ϕ_t ϕ_s C A_t A_s -∗
-  phi_logrel ΠL1 ΠA ϕ_t ϕ_s C A_t A_s.
-Proof.
-  iIntros "#(HΠL1 & HΠL2) H HΦ".
-  iIntros (????) "(HL & HA)".
-  iCombine "HL H" as "HL"; iSpecialize ("HΠL2" with "HL").
-
-  iCombine "HΠL2 HA" as "HI".
-  mono: iApply ("HΦ" with "HI").
-  iIntros (??) "H".
-  iDestruct "H" as (?????) "(Hv & HC)".
-  iExists _, _, _; iFrame.
-  subst; do 2 (iSplitL ""; first done).
-Admitted.
-
 (* Lemma block_compat_relaxed *)
 (*   {A_t A_s b_t b_s bid I}: *)
 (*   block_WF b_t -> *)
@@ -401,84 +380,162 @@ Admitted.
 (* Proof with vsimp. *)
 (* Admitted. *)
 
+
+(* TODO *)
+Theorem expr_logrel_relaxed_refl C dt e A_t A_s:
+  (⊢ expr_logrel_relaxed C dt dt e e A_t A_s)%I.
+Proof. Admitted.
+
+(* Lemma local_bij_except_at_exp_implies {T} i_t i_s a e L_t L_s : *)
+(*   exp_local_ids e ⊆ L_t.*1 -> *)
+(*   exp_local_ids e ⊆ L_s.*1 -> *)
+(*   a ∉ exp_local_ids e -> *)
+(*   local_bij_except [a] [a] i_t i_s L_t L_s -∗ *)
+(*   local_bij_at_exp (T := T) e e i_t i_s L_t L_s. *)
+(* Proof. *)
+(*   iIntros (Het Hes Hne) "HL". *)
+(*   rewrite /local_bij_except /local_bij_at_exp; *)
+(*     destruct_local_inv. *)
+(*   rewrite /local_bij_at intersection_local_ids_eq. *)
+(* Admitted. *)
+
+(* Lemma code_inv_except_at_exp *)
+(* {T} C i_t i_s A_t A_s a e : *)
+(*   code_inv (local_bij_except [a] [a]) alloca_bij C i_t i_s A_t A_s ∗-∗ *)
+(*   code_inv (local_bij_at_exp (T := T) e e) alloca_bij C i_t i_s A_t A_s. *)
+(* Proof. *)
+(*   iSplit; iIntros "CI"; *)
+(*   destruct_code_inv_all; iFrame; *)
+(*   iExists _, _; iFrame; iFrame "WF_frame". *)
+(* Admitted. *)
+
+Theorem expr_logrel_refl' C dt e A_t A_s l:
+  exp_local_ids e ## l ->
+  (⊢ expr_logrel (local_bij_except l l) alloca_bij
+     C dt dt e e A_t A_s)%I.
+Proof. Admitted.
+
+Definition term_local_ids {T} (e : terminator T) : list raw_id.
+Admitted.
+
+Theorem term_logrel_refl ϒ C l:
+  term_local_ids ϒ ## l ->
+  (⊢ term_logrel (local_bij_except l l) alloca_bij ϒ ϒ C)%I.
+Proof with vsimp.
+  iIntros (???????) "HI".
+  destruct ϒ eqn: Hϒ; try solve [iDestruct "WF" as "[]"]; cbn.
+  5-8: iApply exp_conv_raise.
+  5 : iApply exp_conv_raiseUB.
+  { (* TERM_Ret *)
+    destruct v. vsimp. Cut.
+    mono: iApply expr_logrel_refl'...
+    { iDestruct "HΦ" as "(Hv & HΦ)"; vfinal. }
+    admit. }
+  { (* TERM_Ret_void *)
+    vfinal. iApply uval_rel_none. }
+  { (* TERM_Br *)
+    destruct v; vsimp...
+    Cut...
+    mono: iApply expr_logrel_refl'...
+    2 : { admit. }
+    Cut... iDestruct "HΦ" as "(Hv & HI)".
+    mono: (iApply (exp_conv_concretize_or_pick with "Hv")) with "[HI]"...
+    destruct dv_s; try iApply exp_conv_raise; [ | iApply exp_conv_raiseUB ].
+    iDestruct (dval_rel_I1_inv with "HΦ") as %->.
+    destruct (DynamicValues.Int1.eq x DynamicValues.Int1.one); vfinal. }
+  { (* TERM_Br_1 *)
+    vfinal. }
+Admitted.
+
+Lemma las_instr_sim b a:
+  ⊢ [∗ list] '(id, i);'(id', i') ∈
+      las_code b a None;
+      b,
+      ∀ A_t0 A_s0,
+        instr_logrel
+          (local_bij_except [a] [a])
+          alloca_bij id i id' i' ∅ A_t0 A_s0.
+Proof. Admitted.
+
+Definition phis_local_ids {T} (e : list (local_id * phi T)) : list raw_id.
+Admitted.
+
+Lemma phis' {T} (Φ : list (local_id * phi T)) l:
+  phis_local_ids Φ ## l ->
+  Φ.*1 ## l /\
+  (forall be ϕ,
+      In ϕ Φ ->
+      let '(Phi _ args) := ϕ.2 in
+      forall e, Util.assoc be args = Some e ->
+      exp_local_ids e ## l).
+Proof. Admitted.
+
 Lemma las_block_sim A_t A_s be b a:
   block_WF b ->
+  term_local_ids (blk_term b) ## a :: nil ->
+  phis_local_ids (blk_phis b) ## a :: nil ->
   ⊢ block_logrel (local_bij_except [a] [a]) alloca_bij
       (las_block a None b) b be ∅ A_t A_s.
 Proof with vsimp.
-  iIntros (WF ??) "CI".
-  cbn -[denote_phis]...
-  setoid_rewrite instr_conv_bind at 3. Cut...
+  iIntros (WF Ht Hp).
+  apply phis' in Hp; destruct Hp as (Hp1&Hp2).
+  iApply block_compat; eauto.
+  { by apply block_WF_las. }
+  { iApply phis_compat; eauto.
+    cbn. remember (blk_phis b); clear Heql.
+    iInduction l as [ | ] "IH"; eauto.
+    cbn; iSplitL.
+    { destruct a0. iApply phi_compat; destruct p; cbn.
+      destruct (Util.assoc be args) eqn: He; eauto.
+      iApply expr_logrel_refl'.
+      specialize (Hp2 be (l0, Phi t args)); cbn in *.
+      eapply Hp2; eauto. }
 
-  (* Phis *)
-  mono: (iApply ("HΦ" with "CI")) with "[Hc Ht]"...
-  rewrite instr_conv_bind... Cut...
+    iApply "IH"; iPureIntro; eauto.
+    { set_solver. }
+    { intros. destruct ϕ.
+      specialize (Hp2 be0 (l0, p)); destruct p; cbn.
+      intros. eapply Hp2; eauto.
+      by apply in_cons. } }
 
-  (* Code block *)
-  iSpecialize ("Hc" with "HΦ").
-  rewrite /denote_code /map_monad_.
-  rewrite !instr_conv_bind ; setoid_rewrite instr_conv_ret.
-  iPoseProof (sim_expr_fmap_inv with "Hc") as "Hc".
-  mono: (iApply "Hc") with "[Ht]"...
-  iDestruct "HΦ" as ([][] _ _ ??) "HI".
+  { apply block_WF_inv in WF; destruct WF.
+    iApply code_compat; eauto.
+    { by apply code_WF_las. }
+    cbn. iApply las_instr_sim. }
 
-  (* Well-formedness of block *)
-  apply andb_prop_elim in WF_b, WF_b';
-    destruct WF_b, WF_b'.
-
-  (* Terminator *)
-  mono: iApply "Ht"...
-
-  iIntros (??) "H".
-  iDestruct "H" as (????) "(Hi & H)".
-  iExists _,_. rewrite H3 H4.
-  do 2 (iSplitL ""; [ done | ]). iFrame.
-  by iExists _, _.
+  { cbn; by iApply term_logrel_refl. }
 Qed.
 
-  iApply (block_compat_relaxed local_bij).
-  3 : iIntros; by iApply local_bij_implies_except.
-  1-2 : admit.
-  1, 2 : cbn -[denote_phis].
-  { admit. }
-  (* { admit. eapply block_WF_las. } *)
-
-  (* Invariant *)
-  { iIntros (??) "CI". admit. }
-
-  (* Invariant *)
-  { admit. }
-
-  (* Phi compat *)
-  { rewrite las_phi_stable.
-    iApply phis_compat.
-    { iIntros (????); iApply refl_inv_mono. }
-    
-
-
-Admitted.
-
+Lemma ocfg_SSA_promotable f a a0:
+  ocfg_is_SSA (a0 :: f) ->
+  promotable_ocfg (a0 :: f) a ->
+  term_local_ids (blk_term a0) ## (a :: nil) /\
+  phis_local_ids (blk_phis a0) ## (a :: nil).
+Proof. Admitted.
 
 Lemma las_simulation_ocfg
   (f : ocfg dtyp) a A_t A_s b1 b2 :
-  Is_true (ocfg_WF f) ->
+  ocfg_WF f ->
   ocfg_is_SSA f ->
-  Is_true (promotable_ocfg f a) ->
-  ⊢ ocfg_logrel (fun _ _ => True)
-    (las_ocfg f a) f ∅ A_t A_s b1 b2 nil nil.
+  promotable_ocfg f a ->
+  ⊢ ocfg_logrel
+      (local_bij_except [a] [a])
+      alloca_bij (las_ocfg f a) f ∅ A_t A_s b1 b2.
 Proof.
   iIntros (???).
-  iApply ocfg_compat; first (iIntros; done); eauto.
-  { eapply ocfg_WF_las in H0; eauto. }
+  iApply ocfg_compat; try done.
+  { by eapply ocfg_WF_las. }
   iModIntro.
   iInduction f as [ | ] "IH"; eauto.
   apply ocfg_WF_cons_inv in H0. destruct H0.
   cbn. iSplitL "".
   { iSplitL ""; first done.
+    pose proof (ocfg_SSA_promotable _ _ _ H1 H2).
+    destruct H4.
     iIntros (???); iApply las_block_sim; eauto. }
   { iApply "IH"; eauto.
     { iPureIntro; eapply ocfg_is_SSA_cons_inv; eauto. }
-    { iPureIntro; eapply promotable_ocfg_cons_inv; eauto. } }
+    { iPureIntro. eapply promotable_ocfg_cons_inv; eauto. } }
 Qed.
 
 Lemma las_simulation (f : function) :
