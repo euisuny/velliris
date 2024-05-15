@@ -13,6 +13,29 @@ Section las_example.
 
   (* [a] is the register that will be analyzed for load after store
      [v] is the current register whose value is stored in the address at [a]. *)
+ Definition las_code_body {A : Set} {T} (x: A * instr T) (c : code T) (a : raw_id) (v : option raw_id) :=
+    match x with
+    (* A load instruction from a stored [raw_id] that hasn't been modified *)
+    | (id, INSTR_Load _ _ (_, EXP_Ident (ID_Local ptr)) _) =>
+      if decide (a = ptr) then
+        match v with
+          | Some c =>
+              ((id, INSTR_Op (EXP_Ident (ID_Local c))), v)
+          | None => (x, v)
+        end
+      else (x, v)
+    (* A store instruction to the promoted local identifier *)
+    | (id, INSTR_Store _
+              (* TODO Warning! this is enforced by the syntactic
+                  condition in the [TODO] above *)
+              (_, EXP_Ident (ID_Local v'))
+              (_, EXP_Ident (ID_Local ptr)) _) =>
+        if decide (a = ptr) then
+          (x, Some v')
+        else
+          (x, v)
+    | x => (x, v)
+    end.
 
   (* LATER: Can generalize the [v] values being stored (e.g. storing constants).
      FIXME: Generalize [v] to expressions *)
@@ -23,29 +46,8 @@ Section las_example.
     match c with
     | nil => nil
     | x :: tl =>
-        match x with
-        (* A load instruction from a stored [raw_id] that hasn't been modified *)
-        | (id, INSTR_Load _ _ (_, EXP_Ident (ID_Local ptr)) _) =>
-          if decide (a = ptr) then
-            match v with
-              | Some c =>
-                  (id, INSTR_Op (EXP_Ident (ID_Local c))) ::
-                  las_code tl a v
-              | None => x :: las_code tl a v
-            end
-          else x :: las_code tl a v
-        (* A store instruction to the promoted local identifier *)
-        | (id, INSTR_Store _
-                  (* TODO Warning! this is enforced by the syntactic
-                      condition in the [TODO] above *)
-                  (_, EXP_Ident (ID_Local v'))
-                  (_, EXP_Ident (ID_Local ptr)) _) =>
-            if decide (a = ptr) then
-              x :: las_code tl a (Some v')
-            else
-              x :: las_code tl a v
-        | x => x :: las_code tl a v
-        end
+        let '(x, v) := las_code_body x c a v in
+      x :: las_code tl a v
     end.
 
   Definition las_block {T} (a : raw_id) (v : option raw_id) (b : LLVMAst.block T) :
@@ -238,12 +240,6 @@ Section las_example_proof.
 
 Context `{vellirisGS Σ}.
 
-Lemma local_bij_equiv_except l_t l_s:
- ∀ (i_t i_s : list frame_names) (L_t L_s : local_env) Π,
-   local_bij i_t i_s L_t L_s ∗-∗
-   local_bij_except l_t l_s i_t i_s L_t L_s ∗ Π.
-Proof. Admitted.
-
 (* TODO *)
 Theorem expr_logrel_relaxed_refl C dt e A_t A_s:
   (⊢ expr_logrel_relaxed C dt dt e e A_t A_s)%I.
@@ -287,29 +283,53 @@ Proof with vsimp.
     vfinal. }
 Admitted.
 
+Lemma las_code_body_cases {A T} i c a v id i' v':
+  (id, i', v') = las_code_body (A := A) (T := T) i c a v ->
+  (∃ b t id' e c,
+    i = (id, INSTR_Load b t (id', EXP_Ident (ID_Local a)) e) /\
+    v = Some c /\
+    (id, i') = (id, INSTR_Op (EXP_Ident (ID_Local c))) /\
+    v = v')
+
+  \/
+
+  (exists b id1 id2 e ve,
+    i = (id, INSTR_Store b
+          (id1, EXP_Ident (ID_Local ve))
+          (id2, EXP_Ident (ID_Local a)) e) /\
+    i = (id, i') /\ v' = Some ve)
+
+  \/
+
+  (i = (id, i') /\ v = v').
+Proof. Admitted.
+
+(* TODO Where local_bij_except on the local_ids on the instruction *)
+(* Theorem instr_logrel_refl  *)
+
 Lemma las_instr_sim b a:
-  ⊢ [∗ list] '(id, i);'(id', i') ∈ las_code b a None; b,
+  ⊢ (* State the ownership over [a] *)
+    [∗ list] '(id, i);'(id', i') ∈ las_code b a None; b,
     ∀ A_t0 A_s0,
     instr_logrel
       (local_bij_except [a] [a])
         alloca_bij id i id' i' ∅ A_t0 A_s0.
 Proof.
-  iInduction b as [ | ] "IH"; eauto.
-  { destruct a0. cbn.
-    destruct i0; cbn; eauto; try iFrame "IH"; last first.
-    all :
-      try (iIntros (????) "HI";
-      destruct i; try iApply instr_conv_raise).
-    (* Follows by weakened reflexivity over instructions *)
-    3-7 : admit.
-    { (* Load *)
-      destruct val.
-      destruct e. 2-16: admit. (* weakened reflexivity? *)
-      destruct id. 1 : admit. (* weakened reflexivity? *)
-      destruct ptr.
-      destruct e. 2-16: admit. (* weakened reflexivity? *)
-      destruct id0. 1 : admit. (* weakened reflexivity? *)
-      
+  remember None.
+  iAssert (∀ v, ⌜o = Some v⌝ -∗ ∃ i_t v_t, [ v := v_t ]t i_t )%I as "H".
+  { iIntros; subst; inv H0. }
+  clear Heqo.
+
+  iInduction b as [ | ] "IH" forall (o) "H"; eauto; cbn.
+
+  remember (las_code_body a0 (a0 :: b) a o).
+  destruct p; cbn; destruct p, a0.
+  apply las_code_body_cases in Heqp.
+  destruct Heqp as [ | [ | (?&?)]]; last first.
+
+  (* Unchanged *)
+  { inv H0; iSpecialize ("IH" $! o0 with "H"); iFrame "IH".
+    admit. }
 Admitted.
 
 Definition phis_local_ids {T} (e : list (local_id * phi T)) : list raw_id.
