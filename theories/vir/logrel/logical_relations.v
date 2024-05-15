@@ -108,19 +108,19 @@ Section logical_relations_def.
         [{ (r_t, r_s),
             code_inv_post C i_t i_s A_t A_s }])%I.
 
-   Definition phi_logrel (ϕ_t ϕ_s : itree exp_E (local_id * uvalue)) C A_t A_s : iPropI Σ :=
+   Definition phi_logrel bid_t bid_s ϕ_t ϕ_s C A_t A_s : iPropI Σ :=
     (∀ args_t args_s i_t i_s,
         local_inv i_t i_s args_t args_s C ∗
         alloca_inv i_t i_s A_t A_s C -∗
-        exp_conv ϕ_t ⪯ exp_conv ϕ_s
+        exp_conv (denote_phi bid_t ϕ_t) ⪯ exp_conv (denote_phi bid_s ϕ_s)
         [{ fun e_t e_s => ∃ l v_t v_s,
-                ⌜e_t = Ret (l, v_t)⌝ ∗ ⌜e_s = Ret (l, v_s)⌝ ∗
-                uval_rel v_t v_s ∗
-                code_inv C i_t i_s A_t A_s }])%I.
+            ⌜e_t = Ret (l, v_t)⌝ ∗ ⌜e_s = Ret (l, v_s)⌝ ∗
+            uval_rel v_t v_s ∗
+            code_inv C i_t i_s A_t A_s }])%I.
 
-   Definition phis_logrel (Φ_t Φ_s : itree instr_E ()) C A_t A_s : iPropI Σ :=
+   Definition phis_logrel bid_t bid_s Φ_t Φ_s C A_t A_s : iPropI Σ :=
     (∀ i_t i_s, code_inv C i_t i_s A_t A_s -∗
-       instr_conv Φ_t ⪯ instr_conv Φ_s
+       instr_conv (denote_phis bid_t Φ_t) ⪯ instr_conv (denote_phis bid_s Φ_s)
        [{ (r_t, r_s), code_inv C i_t i_s A_t A_s }])%I.
 
    Definition code_logrel c_t c_s C A_t A_s : iPropI Σ :=
@@ -256,7 +256,7 @@ Arguments local_bij_at : simpl never.
 
 (* ------------------------------------------------------------------------ *)
 (* Some tactics for destructing invariants *)
-Local Ltac destruct_code_inv :=
+Ltac destruct_code_inv :=
   match goal with
   | |- context [environments.Esnoc _ ?CI (code_inv _ _ _ _ _ _ _)] =>
       iDestruct CI as (args_t args_s) "(LI & AI)"
@@ -264,13 +264,13 @@ Local Ltac destruct_code_inv :=
       iDestruct CI as (nA_t nA_s args_t args_s) "(LI & AI)"
   end.
 
-Local Ltac destruct_CFG_inv :=
+Ltac destruct_CFG_inv :=
   match goal with
   | |- context [environments.Esnoc _ ?CI (CFG_inv _ _ _ _)] =>
       iDestruct CI as (args_t args_s) "(LI & Ha_t & Ha_s)"
   end.
 
-Local Ltac destruct_local_inv :=
+Ltac destruct_local_inv :=
   match goal with
   | |- context [environments.Esnoc _ ?RI (local_inv_bij _ _ _ _ _ _ _)]=>
       iDestruct RI as "(Hf & HL)"
@@ -280,19 +280,19 @@ Local Ltac destruct_local_inv :=
       iDestruct RI as (?) "(Hl_t & Hl_s & Hl_bij)"
   end.
 
-Local Ltac destruct_alloca_inv :=
+Ltac destruct_alloca_inv :=
   match goal with
   | |- context [environments.Esnoc _ ?RI (alloca_inv _ _ _ _ _ _)]=>
       iDestruct RI as "(Ha_t & Ha_s & %Hd_t & %Hd_s & AI)"
   end.
 
-Local Ltac destruct_SI :=
+Ltac destruct_SI :=
   match goal with
   | |- context [environments.Esnoc _ ?SI (state_interp _ _)]=>
       iDestruct SI as (???) "(Hh_s & Hh_t & H_c & Hbij & %Hdom_c & SI)"
   end.
 
-Local Ltac destruct_frame :=
+Ltac destruct_frame :=
   match goal with
   | |- context [environments.Esnoc _ ?SI (frame_tgt _ _)]=>
       iDestruct SI as (Hnd_t) "(Hs_t & Hd_t)"
@@ -303,6 +303,17 @@ Local Ltac destruct_frame :=
   | |- context [environments.Esnoc _ ?SI (frame_inv _ _ _ _ _)]=>
       iDestruct SI as "(#WF_frame & CI & Hft & Hfs)"
   end.
+
+Ltac local_bij_cbn :=
+  rewrite /local_bij_at_exp !intersection_local_ids_eq; cbn.
+
+Ltac destruct_CFG_inv_all :=
+  rewrite ?/CFG_refl_inv;
+  destruct_CFG_inv; destruct_local_inv; destruct_frame.
+
+Ltac destruct_code_inv_all :=
+  rewrite ?/code_refl_inv;
+  destruct_code_inv; destruct_local_inv; destruct_frame.
 
 (* ------------------------------------------------------------------------ *)
 
@@ -741,9 +752,6 @@ Section logical_relations_properties.
       by iApply "IH". }
   Qed.
 
-  Local Ltac local_bij_cbn :=
-    rewrite /local_bij_at_exp !intersection_local_ids_eq; cbn.
-
   Lemma expr_local_bij_struct_cons:
     ∀ (i_t i_s : list frame_names)
       (L_t L_s : local_env)
@@ -1115,14 +1123,6 @@ Section logical_relations_properties.
     iDestruct "H" as (????) "(H1 & H2)"; iFrame.
     iModIntro; repeat sfinal.
   Qed.
-
-  Ltac destruct_CFG_inv_all :=
-    rewrite ?/CFG_refl_inv;
-    destruct_CFG_inv; destruct_local_inv; destruct_frame.
-
-  Ltac destruct_code_inv_all :=
-    rewrite ?/code_refl_inv;
-    destruct_code_inv; destruct_local_inv; destruct_frame.
 
   Lemma load_refl_cfg x_t x_s τ C i_t i_s:
     dtyp_WF τ ->
