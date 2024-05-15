@@ -261,7 +261,7 @@ Section fundamental.
   Proof with vsimp.
     iApply phi_compat; destruct ϕ.
     destruct (Util.assoc bid args); try done.
-    iApply expr_logrel_refl.
+    iApply expr_logrel_relaxed_refl.
   Qed.
 
   Theorem phis_logrel_refl C bid (Φ : list (local_id * phi dtyp)) A_t A_s:

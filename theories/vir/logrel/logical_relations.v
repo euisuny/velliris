@@ -1030,13 +1030,49 @@ Section logical_relations_properties.
     cbn. rewrite H1; eauto; f_equiv; eauto.
   Qed.
 
+  Lemma alist_remove_elem_of :
+    ∀ [K : Type] `{RelDec.RelDec K eq} `{RelDec.RelDec_Correct _ eq} [V : Type]
+      (a x : K) (l : alist K V),
+      a ∈ (alist_remove x l).*1 ->
+      a ∈ l.*1.
+  Proof.
+    intros; induction l; eauto.
+    cbn in *. destruct (negb (RelDec.rel_dec x a0.1)) eqn: H';
+    first apply negb_true_iff in H';
+    first rewrite <- RelDec.neg_rel_dec_correct in H'; first set_solver.
+    apply negb_false_iff in H'.
+    rewrite <- RelDec.rel_dec_correct in H'; first set_solver.
+  Qed.
+
+  Lemma NoDup_fst_alist_remove
+    [K : Type] `{RelDec.RelDec_Correct K eq}
+    {B} x (l : list (K * B)):
+    NoDup l.*1 ->
+    NoDup (x :: (alist_remove x l).*1).
+  Proof.
+    rename H into Correct.
+    induction l; cbn; intros.
+    { apply NoDup_singleton. }
+    apply NoDup_cons in H. destruct H.
+    specialize (IHl H0); apply NoDup_cons in IHl.
+    destruct IHl.
+    destruct_if_goal; apply NoDup_cons; split; eauto;
+    apply negb_true_iff in H3;
+    rewrite <- RelDec.neg_rel_dec_correct in H3; first set_solver.
+    apply NoDup_cons; split; eauto.
+    intro; apply H.
+    assert (a.1 ∈ (alist_remove x l).*1); eauto.
+    eapply alist_remove_elem_of; eauto; typeclasses eauto.
+  Qed.
+
   Lemma frame_alist_add_remove {B} γ i x (l : list (_ * B)):
+    x ∈ l.*1 ->
     frame_γ γ i l.*1 -∗
     frame_γ γ i (x :: (alist_remove x l).*1).
   Proof.
-    iIntros "Hf".
+    iIntros (He) "Hf".
     destruct_frame; iFrame; iSplitL "".
-    { iPureIntro. admit. }
+    { iPureIntro. eapply NoDup_fst_alist_remove; eauto. typeclasses eauto. }
   Admitted.
 
   Lemma sim_local_write_frame
@@ -1089,6 +1125,7 @@ Section logical_relations_properties.
 
     destruct (decide (x ∈ args_t.*1)).
     { destruct_local_inv.
+      iDestruct (local_bij_dom_eq with "HL") as %Heq.
       iDestruct (local_bij_remove x with "HL") as (??) "(Hxt & Hxs & #Hv & HL)";
         auto.
 
@@ -1099,8 +1136,8 @@ Section logical_relations_properties.
       { apply alist_remove_not_elem_of; try typeclasses eauto. }
       iFrame. iDestruct "H" as "(HC & Hf_t & Hf_s)"; iFrame.
       iSplitL "Hf_t"; cbn; rewrite alist_remove_twice.
-      - iApply (frame_alist_add_remove with "Hf_t").
-      - iApply (frame_alist_add_remove with "Hf_s"). }
+      - iApply (frame_alist_add_remove with "Hf_t"); eauto.
+      - iApply (frame_alist_add_remove with "Hf_s"); rewrite -Heq; eauto. }
 
     { destruct_local_inv.
 
@@ -1132,7 +1169,9 @@ Section logical_relations_properties.
     ⊢ local_inv_bij e_t e_s i_t i_s L_t L_s C -∗
     trigger (LocalRead x) ⪯ trigger (LocalRead x)
       [{ (v1, v2), uval_rel v1 v2 ∗ local_inv_bij e_t e_s i_t i_s L_t L_s C }].
-  Proof. Admitted.
+  Proof.
+    iIntros (?) "Hb".
+  Admitted.
 
   Lemma local_read_refl C x i_t i_s A_t A_s:
     ⊢ code_refl_inv C i_t i_s A_t A_s -∗

@@ -103,13 +103,13 @@ Section mcfg_contextual.
     intros x y *. solve_proper_prepare.
   (*   repeat f_equiv; try solve_proper. *)
   (* Qed. *)
-  Admitted.
+  Abort.
 
   Local Instance mrec_rec_ne {R}:
     NonExpansive (mrec_rec: st_expr_rel' _ _ -d> st_expr_rel' _ R).
   Proof.
     intros x y *. solve_proper_prepare.
-  Admitted.
+  Abort.
 
   (* -------------------------------------------------------------------------- *)
   (* Local notations to make life "easier".. *)
@@ -158,7 +158,7 @@ Section mcfg_contextual.
     NonExpansive (mrec_ind: st_expr_rel' _ _ -d> st_expr_rel' _ R).
   Proof.
     solve_proper_prepare. clear -H. repeat f_equiv.
-  Admitted.
+  Abort.
 
   Lemma Proper_mrec_pred
     {f g : mrec_body} {i_t i_s t dv args σ_t σ_s}:
@@ -262,7 +262,7 @@ Section mcfg_contextual.
 
     simpobs_eqit.
     apply interp_L2_conv_tau_inv in Hf.
-  Admitted.
+  Abort.
 
   Lemma Proper_mrec_stutter_r {f g : mrec_body} {e_s t dv args attr σ_t σ_s Ψ}:
     o⟦ ⟅ g uvalue (Call t dv args attr) ⟆ ⟧ σ_s = TauF e_s ->
@@ -276,7 +276,7 @@ Section mcfg_contextual.
     sim_mrec_ind Ψ
       (o⟦ mrec f (Call t dv args attr) ⟧ σ_t)
       (o⟦ mrec g (Call t dv args attr) ⟧ σ_s).
-  Proof. Admitted.
+  Proof. Abort.
 
   (* -------------------------------------------------------------------------- *)
 
@@ -291,7 +291,7 @@ Section mcfg_contextual.
       (o⟦ mrec f (Call t dv args attr) ⟧ σ_t)
       (o⟦ mrec g (Call t dv args attr) ⟧ σ_s).
   Proof.
-  Admitted.
+  Abort.
 
   From ITree Require Import Interp.InterpFacts Events.StateFacts.
 
@@ -378,7 +378,7 @@ Section mcfg_contextual.
     (*   { iDestruct "Hev" as (?) "(SI & Hev & Hinner)". *)
     (*     provide_case: TAU_STEP. *)
     (*     iLeft. iExists f, g, _, _. *)
-  Admitted.
+  Abort.
 
   (* -------------------------------------------------------------------------- *)
 
@@ -527,7 +527,7 @@ Section mcfg_contextual.
         (* by iApply (Proper_mrec_vis with "Hargs Hbase Hcrel Hinner"). } *)
 
     (* ------------------------------------------------------------------ *)
-  Admitted.
+  Abort.
 
 (* -------------------------------------------------------------------------- *)
 
@@ -560,7 +560,7 @@ Section mcfg_contextual.
       [[ (fun x y =>
             uval_rel x y ∗ stack_tgt i_t ∗ stack_src i_s ∗
               checkout ∅) ⤉ ]].
-  Proof. Admitted.
+  Proof. Abort.
 
   (* -------------------------------------------------------------------------- *)
 
@@ -681,6 +681,6 @@ Section mcfg_contextual.
     (* { destruct Hlu as (f_t & f_s & Hlu_t & Hlu_s & -> & ->). *)
     (*   admit. } (* Should follow trivially. *) *)
 
-  Admitted.
+  Abort.
 
 End mcfg_contextual.

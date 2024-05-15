@@ -13,7 +13,8 @@ Section las_example.
 
   (* [a] is the register that will be analyzed for load after store
      [v] is the current register whose value is stored in the address at [a]. *)
- Definition las_code_body {A : Set} {T} (x: A * instr T) (c : code T) (a : raw_id) (v : option raw_id) :=
+ Definition las_code_body {A : Set} {T}
+   (x: A * instr T) (c : code T) (a : raw_id) (v : option raw_id) :=
     match x with
     (* A load instruction from a stored [raw_id] that hasn't been modified *)
     | (id, INSTR_Load _ _ (_, EXP_Ident (ID_Local ptr)) _) =>
@@ -307,16 +308,22 @@ Proof. Admitted.
 (* TODO Where local_bij_except on the local_ids on the instruction *)
 (* Theorem instr_logrel_refl  *)
 
-Lemma las_instr_sim b a:
-  ⊢ (* State the ownership over [a] *)
-    [∗ list] '(id, i);'(id', i') ∈ las_code b a None; b,
-    ∀ A_t0 A_s0,
-    instr_logrel
-      (local_bij_except [a] [a])
-        alloca_bij id i id' i' ∅ A_t0 A_s0.
+(* TODO: Promotable block implies points-to *)
+(* Lemma promotable_block_id b id: *)
+(*   promotable_block b id -> *)
+
+Lemma las_instr_sim b a v_s i_s ptr:
+  [ a := UVALUE_Addr ptr ]s i_s -∗
+  ptr.1 ↦s v_s  -∗
+  (* State the ownership over [a] *)
+  [∗ list] '(id, i);'(id', i') ∈ las_code b a None; b,
+    ∀ A_t A_s,
+    instr_logrel local_bij alloca_bij id i id' i' ∅ A_t A_s.
 Proof.
   remember None.
-  iAssert (∀ v, ⌜o = Some v⌝ -∗ ∃ i_t v_t, [ v := v_t ]t i_t )%I as "H".
+  iAssert (∀ v, ⌜o = Some v⌝ -∗
+      ∃ ptr', [ v := UVALUE_Addr ptr' ]s i_s ∗
+              ptr'.1 ↦s v_s )%I as "H".
   { iIntros; subst; inv H0. }
   clear Heqo.
 
@@ -327,9 +334,10 @@ Proof.
   apply las_code_body_cases in Heqp.
   destruct Heqp as [ | [ | (?&?)]]; last first.
 
-  (* Unchanged *)
-  { inv H0; iSpecialize ("IH" $! o0 with "H"); iFrame "IH".
-    admit. }
+  (* (* Unchanged *) *)
+  (* { inv H0; iSpecialize ("IH" $! o0 with "H"); iFrame "IH". *)
+  (*   admit. } *)
+
 Admitted.
 
 Definition phis_local_ids {T} (e : list (local_id * phi T)) : list raw_id.
