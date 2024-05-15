@@ -189,15 +189,11 @@ Notation function := (definition dtyp (cfg dtyp)).
 Axiom ctx_ref : function -> function -> Prop.
 Axiom fun_is_SSA : function -> Prop.
 Axiom ocfg_is_SSA : ocfg dtyp -> Prop.
+Axiom cfg_is_SSA : cfg dtyp -> Prop.
 Axiom code_is_SSA : code dtyp -> Prop.
 
 From velliris.program_logic Require Import program_logic.
-
 From velliris.vir Require Import logical_relations tactics.
-
-Section las_example_proof.
-
-Context `{vellirisGS Σ}.
 
 Lemma block_WF_las a0 a s:
   block_WF a ->
@@ -208,24 +204,13 @@ Lemma code_WF_las a0 a s:
   code_WF a0 ->
   code_WF (las_code a0 a s).
 Proof. Admitted.
-(*   intros. *)
-(*   revert s. *)
-(*   induction a0; eauto; cbn -[instr_WF] in *; intros. *)
-(*   destruct a0; eauto. util.destructb; cbn. *)
-(*   apply forallb_True in H1. *)
-(*   destruct i0; eauto; cbn; util.destructb; eauto; *)
-(*   apply forallb_True in H1. *)
-(*   { eapply IHa0; eauto. } *)
-(*   { apply andb_prop_intro; split; eauto. } *)
-(*   { apply andb_prop_intro; split; eauto. } *)
-(*   { destruct ptr, e; cbn; eauto. *)
-(*     destruct id; cbn; eauto. destruct_if_goal; cbn; eauto. *)
-(*     destruct s; cbn; eauto. } *)
-(*   { destruct val, e; cbn; eauto. *)
-(*     destruct id; cbn; eauto. *)
-(*     destruct ptr, e; cbn; eauto. *)
-(*     destruct id0; destruct_if_goal; cbn; eauto. } *)
-(* Qed. *)
+
+(* The [las] algorithm does not change the phi nodes. *)
+Lemma las_phi_stable {T} a b :
+  blk_phis (las_block a None b) = blk_phis (T := T) b.
+Proof.
+  eauto.
+Qed.
 
 (* Well-formedness of ocfg is preserved in the LAS transformation. *)
 Lemma ocfg_WF_las f a:
@@ -233,13 +218,6 @@ Lemma ocfg_WF_las f a:
   ocfg_WF (las_ocfg f a).
 Proof.
   intros. induction f; eauto.
-  (* Why is [is_true] being weird here.. *)
-(*   pose proof (ocfg_WF_cons_inv _ _ H0) as H0'. destruct H0'. *)
-(*   cbn. eapply andb_prop_intro; split; auto. *)
-(*   apply andb_prop_elim in H1; destruct H1. *)
-(*   eapply andb_prop_intro; split; auto. *)
-(*   cbn -[code_WF]. apply code_WF_las; eauto. *)
-(* Qed. *)
 Admitted.
 
 (* TODO: Instantiate [ocfg_is_SSA]. *)
@@ -256,88 +234,9 @@ Proof.
   destructb. auto.
 Qed.
 
-(* The [las] algorithm does not change the phi nodes. *)
-Lemma las_phi_stable {T} a b :
-  blk_phis (las_block a None b) = blk_phis (T := T) b.
-Proof.
-  eauto.
-Qed.
+Section las_example_proof.
 
-(* Theorem phi_logrel_refl bid id ϕ C A_t A_s L_t L_s: *)
-(*   ⊢ (phi_logrel expr_inv (denote_phi bid (id, ϕ)) (denote_phi bid (id, ϕ)) C A_t A_s L_t L_s)%I. *)
-(* Proof with vsimp. *)
-(*   iApply phi_compat; destruct ϕ. *)
-(*   { iIntros (????); iApply refl_inv_mono. } *)
-(*   destruct (Util.assoc bid args); try done. *)
-(*   iApply expr_logrel_relaxed_refl. *)
-(* Qed. *)
-
-(* Theorem phis_logrel_refl C bid (Φ : list (local_id * phi dtyp)) A_t A_s a: *)
-(*   (⊢ phis_logrel refl_inv (denote_phis bid Φ) (denote_phis bid Φ) C A_t A_s [a] [a])%I. *)
-(* Proof with vsimp. *)
-(*   iApply phis_compat. *)
-(*   { iIntros (????); iApply refl_inv_mono. } *)
-(*   iInduction Φ as [ | ] "IH"; first done. *)
-(*   cbn; iSplitL; [ destruct a; iApply phi_logrel_refl | done ]. *)
-(* Qed. *)
-
-(* Lemma block_compat_relaxed *)
-(*   (a : raw_id) Φ I A_t A_s b_t b_s bid L L_t L_s: *)
-(*   Is_true (block_WF b_t) -> *)
-(*   Is_true (block_WF b_s) -> *)
-(*   ⊢ (∀ i_t i_s, code_inv L ∅ i_t i_s A_t A_s L_t L_s -∗ I) -∗ *)
-(*     (∀ i_t i_s, I -∗ code_inv_post L ∅ i_t i_s A_t A_s L_t L_s) -∗ *)
-(*     (* Related phi nodes *) *)
-(*     (phis_logrel L *)
-(*         (denote_phis bid (blk_phis b_t)) *)
-(*         (denote_phis bid (blk_phis b_s)) *)
-(*        ∅ A_t A_s L_t L_s) -∗ *)
-(*     (* Related terminators *) *)
-(*     (term_logrel L (blk_term b_t) (blk_term b_s) ∅ L_t L_s) -∗ *)
-(*     (* Related instructions *) *)
-(*     (I -∗ *)
-(*       instr_conv (denote_code (blk_code b_t)) ⪯ *)
-(*       instr_conv (denote_code (blk_code b_s)) *)
-(*       [{ (r_t, r_s), I ∗ Φ r_t r_s }]) -∗ *)
-(*    (* TODO: state [phi_logrel] related for a weakened [phi_logrel] *) *)
-(*    (* Weaken the postcondition for [ocfg_logrel] *) *)
-(*    block_logrel L b_t b_s bid ∅ A_t A_s L_t L_s. *)
-(* Proof with vsimp. *)
-(*   iIntros (WF_b WF_b') "Hinv I HΦ Hterm Hinst". *)
-(*   iIntros (??) "CI". *)
-(*   cbn -[denote_phis]... *)
-(*   setoid_rewrite instr_conv_bind at 3. *)
-(*   Cut... *)
-
-(*   (* Phis *) *)
-(*   mono: (iApply ("HΦ" with "CI")) with "[Hinv I Hterm Hinst]"... *)
-(*   setoid_rewrite instr_conv_bind... *)
-(*   rewrite <- !bind_bind. Cut... *)
-
-(*   (* Code block *) *)
-(*   iSpecialize ("Hinv" with "HΦ"). *)
-(*   iSpecialize ("Hinst" with "Hinv"). *)
-(*   mono: iApply "Hinst" with "[I Hterm]"... *)
-
-(*   iDestruct "HΦ" as "(HI & HΦ)". *)
-(*   iSpecialize ("I" with "HI"); iDestruct "I" as (??) "HI". *)
-
-(*   (* Well-formedness of block *) *)
-(*   apply andb_prop_elim in WF_b, WF_b'; *)
-(*     destruct WF_b, WF_b'. *)
-
-(*   (* Terminator *) *)
-(*   iSpecialize ("Hterm" with "[] [] HI"); eauto. *)
-
-(*   mono: iApply "Hterm" with "[HΦ]"... *)
-
-(*   iIntros (??) "H". *)
-(*   iDestruct "H" as (????) "(Hi & H)". *)
-(*   iExists _,_. rewrite H4 H5. *)
-(*   do 2 (iSplitL ""; [ done | ]). *)
-(*   iFrame "H". *)
-(*   iModIntro. by iExists _, _. *)
-(* Qed. *)
+Context `{vellirisGS Σ}.
 
 Lemma local_bij_equiv_except l_t l_s:
  ∀ (i_t i_s : list frame_names) (L_t L_s : local_env) Π,
@@ -345,69 +244,10 @@ Lemma local_bij_equiv_except l_t l_s:
    local_bij_except l_t l_s i_t i_s L_t L_s ∗ Π.
 Proof. Admitted.
 
-(* Definition of monotonicity for [local_env_spec] and [alloca_spec]. *)
-Definition local_env_spec_sep (ΠL ΠL1 : local_env_spec) ΠL2: iProp Σ:=
-  (∀ i_t i_s L_t L_s C,
-    local_inv ΠL i_t i_s L_t L_s C -∗
-    (local_inv ΠL1 i_t i_s L_t L_s C ∗ ΠL2)) ∗
-  (∀ i_t i_s L_t L_s C,
-    (local_inv ΠL1 i_t i_s L_t L_s C ∗ ΠL2) -∗
-    local_inv ΠL i_t i_s L_t L_s C).
-
-(* Notation "ΠL ΠL'" := (local_env_spec_includes ΠL ΠL'). *)
-(* Notation "ΠL ⊆ ΠL'" := (local_env_spec_includes ΠL ΠL'). *)
-
-(* TODO Move to [logical_relations] *)
-(* Monotonicity of logical relations w.r.t. invariants *)
-(* Lemma block_compat_relaxed *)
-(*   {A_t A_s b_t b_s bid I}: *)
-(*   block_WF b_t -> *)
-(*   block_WF b_s -> *)
-(*   ⊢ (* Related phi nodes *) *)
-(*     (phis_logrel local_bij alloca_bij *)
-(*         (denote_phis bid (blk_phis b_t)) *)
-(*         (denote_phis bid (blk_phis b_s)) *)
-(*         ∅ A_t A_s) -∗ *)
-(*     (* Related terminators *) *)
-(*     (term_logrel local_bij alloca_bij (blk_term b_t) (blk_term b_s) ∅) -∗ *)
-(*     (* Related code *) *)
-(*     (I -∗ *)
-(*       instr_conv (denote_code (blk_code b_t)) ⪯ *)
-(*       instr_conv (denote_code (blk_code b_s)) *)
-(*       [{ (r_t, r_s), I }]) -∗ *)
-(*     block_logrel (local_bij_except [a] [a]) *)
-(*     alloca_bij b_t b_s bid ∅ A_t A_s. *)
-(* Proof with vsimp. *)
-(* Admitted. *)
-
-
 (* TODO *)
 Theorem expr_logrel_relaxed_refl C dt e A_t A_s:
   (⊢ expr_logrel_relaxed C dt dt e e A_t A_s)%I.
 Proof. Admitted.
-
-(* Lemma local_bij_except_at_exp_implies {T} i_t i_s a e L_t L_s : *)
-(*   exp_local_ids e ⊆ L_t.*1 -> *)
-(*   exp_local_ids e ⊆ L_s.*1 -> *)
-(*   a ∉ exp_local_ids e -> *)
-(*   local_bij_except [a] [a] i_t i_s L_t L_s -∗ *)
-(*   local_bij_at_exp (T := T) e e i_t i_s L_t L_s. *)
-(* Proof. *)
-(*   iIntros (Het Hes Hne) "HL". *)
-(*   rewrite /local_bij_except /local_bij_at_exp; *)
-(*     destruct_local_inv. *)
-(*   rewrite /local_bij_at intersection_local_ids_eq. *)
-(* Admitted. *)
-
-(* Lemma code_inv_except_at_exp *)
-(* {T} C i_t i_s A_t A_s a e : *)
-(*   code_inv (local_bij_except [a] [a]) alloca_bij C i_t i_s A_t A_s ∗-∗ *)
-(*   code_inv (local_bij_at_exp (T := T) e e) alloca_bij C i_t i_s A_t A_s. *)
-(* Proof. *)
-(*   iSplit; iIntros "CI"; *)
-(*   destruct_code_inv_all; iFrame; *)
-(*   iExists _, _; iFrame; iFrame "WF_frame". *)
-(* Admitted. *)
 
 Theorem expr_logrel_refl' C dt e A_t A_s l:
   exp_local_ids e ## l ->
@@ -448,14 +288,29 @@ Proof with vsimp.
 Admitted.
 
 Lemma las_instr_sim b a:
-  ⊢ [∗ list] '(id, i);'(id', i') ∈
-      las_code b a None;
-      b,
-      ∀ A_t0 A_s0,
-        instr_logrel
-          (local_bij_except [a] [a])
-          alloca_bij id i id' i' ∅ A_t0 A_s0.
-Proof. Admitted.
+  ⊢ [∗ list] '(id, i);'(id', i') ∈ las_code b a None; b,
+    ∀ A_t0 A_s0,
+    instr_logrel
+      (local_bij_except [a] [a])
+        alloca_bij id i id' i' ∅ A_t0 A_s0.
+Proof.
+  iInduction b as [ | ] "IH"; eauto.
+  { destruct a0. cbn.
+    destruct i0; cbn; eauto; try iFrame "IH"; last first.
+    all :
+      try (iIntros (????) "HI";
+      destruct i; try iApply instr_conv_raise).
+    (* Follows by weakened reflexivity over instructions *)
+    3-7 : admit.
+    { (* Load *)
+      destruct val.
+      destruct e. 2-16: admit. (* weakened reflexivity? *)
+      destruct id. 1 : admit. (* weakened reflexivity? *)
+      destruct ptr.
+      destruct e. 2-16: admit. (* weakened reflexivity? *)
+      destruct id0. 1 : admit. (* weakened reflexivity? *)
+      
+Admitted.
 
 Definition phis_local_ids {T} (e : list (local_id * phi T)) : list raw_id.
 Admitted.
@@ -538,10 +393,33 @@ Proof.
     { iPureIntro. eapply promotable_ocfg_cons_inv; eauto. } }
 Qed.
 
+Lemma las_simulation_cfg (f : cfg dtyp) a A_t A_s:
+  cfg_WF f ->
+  cfg_is_SSA f ->
+  ⊢ cfg_logrel
+      (local_bij_except [a] [a])
+      alloca_bij (las f) f ∅ A_t A_s.
+Proof.
+  intros. iApply cfg_compat; eauto; last first.
+  { rewrite /las.
+    destruct (find_promotable_alloca f) eqn: Hf; eauto; cbn.
+    { destruct p, i; cbn.
+      {
+Admitted.
+
 Lemma las_simulation (f : function) :
+  fun_WF (las_fun f) ->
+  fun_WF f ->
   fun_is_SSA f ->
   ⊢ fun_logrel (las_fun f) f ∅.
-Proof. Admitted.
+Proof.
+  iIntros;
+  rewrite /las_fun. destruct f; cbn.
+    iApply fun_compat; last first.
+  { iIntros; cbn.
+    iApply las_simulation_cfg; admit. }
+  all : eauto.
+Admitted.
 
 Theorem las_correct (c : function) :
   fun_is_SSA c ->

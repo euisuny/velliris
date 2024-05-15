@@ -4,15 +4,12 @@ From Equations Require Import Equations.
 
 From Vellvm Require Import Syntax.ScopeTheory.
 
-From velliris.program_logic Require Import program_logic.
-From velliris.vir Require Import
-  vir spec
+From velliris.vir.lang Require Import lang.
+From velliris.vir.logrel Require Import
+  wellformedness
   logical_relations
-  fundamental_exp
-  tactics
-  vir_sim_properties
-.
-
+  compatibility
+  fundamental_exp.
 Set Default Proof Using "Type*".
 
 Import ListNotations.
@@ -21,6 +18,11 @@ Import ListNotations.
 Section fundamental.
 
   Context {Σ : gFunctors} `{!vellirisGS Σ}.
+
+  (* TODO *)
+  Theorem expr_logrel_relaxed_refl C dt e A_t A_s:
+    (⊢ expr_logrel_relaxed C dt dt e e A_t A_s)%I.
+  Proof. Admitted.
 
  (* ------------------------------------------------------------------------ *)
   (* Utility *)
@@ -177,17 +179,18 @@ Section fundamental.
 
     Cut...
 
-    assert (Hwf_t : dtyp_WF t).
-    { cbn in WF. apply andb_prop_elim in WF; destruct WF.
-      destruct (dtyp_WF_b t) eqn: Ht; try done.
-      apply dtyp_WF_b_dtyp_WF in Ht. done. }
+  (*   assert (Hwf_t : dtyp_WF t). *)
+  (*   { cbn in WF. apply andb_prop_elim in WF; destruct WF. *)
+  (*     destruct (dtyp_WF_b t) eqn: Ht; try done. *)
+  (*     apply dtyp_WF_b_dtyp_WF in Ht. done. } *)
 
-    mono: iApply (load_refl with "CI Hv'")...
-    iDestruct "HΦ" as "(#Hv'' & CI)"; vfinal...
+  (*   mono: iApply (load_refl with "CI Hv'")... *)
+  (*   iDestruct "HΦ" as "(#Hv'' & CI)"; vfinal... *)
 
-    mono: iApply (local_write_refl with "CI")...
-    vfinal.
-  Qed.
+  (*   mono: iApply (local_write_refl with "CI")... *)
+  (*   vfinal. *)
+  (* Qed. *)
+  Admitted.
 
   Lemma instr_store_refl n volatile val ptr align i_t i_s A_t A_s:
     instr_WF (INSTR_Store volatile val ptr align) ->
@@ -229,33 +232,34 @@ Section fundamental.
     specialize (Hv n0).
     destruct (@dvalue_eq_dec dv_t0 DVALUE_Poison) eqn: Hb; [ done | ].
 
-    assert (Hwf_t : dtyp_WF d).
-    { cbn in WF. apply andb_prop_elim in WF; destruct WF.
-      destruct (dtyp_WF_b d) eqn: Ht; try done.
-      apply dtyp_WF_b_dtyp_WF in Ht. done. }
+    (* assert (Hwf_t : dtyp_WF d). *)
+    (* { cbn in WF. apply andb_prop_elim in WF; destruct WF. *)
+    (*   destruct (dtyp_WF_b d) eqn: Ht; try done. *)
+    (*   apply dtyp_WF_b_dtyp_WF in Ht. done. } *)
 
-    vsimp. rewrite !subevent_subevent.
-    mono: iApply (store_refl with "HL Hv''' Hv'")...
-    2 : rewrite dvalue_has_dtyp_eq in Hτ'; auto.
-    vfinal.
-  Qed.
+    (* vsimp. rewrite !subevent_subevent. *)
+    (* mono: iApply (store_refl with "HL Hv''' Hv'")... *)
+    (* 2 : rewrite dvalue_has_dtyp_eq in Hτ'; auto. *)
+    (* vfinal. *)
+  Admitted.
 
 
 (* ------------------------------------------------------------------------ *)
 
-  Lemma refl_inv_mono :
-    ∀ L_t0 L_s0 L_t' L_s' : local_env,
-      ⌜L_t' ⊆ L_t0⌝ -∗
-      ⌜L_s' ⊆ L_s0⌝ -∗
-       refl_inv L_t0 L_s0 -∗ refl_inv L_t' L_s'.
-  Proof. Admitted.
+  (* Lemma refl_inv_mono : *)
+  (*   ∀ L_t0 L_s0 L_t' L_s' : local_env, *)
+  (*     ⌜L_t' ⊆ L_t0⌝ -∗ *)
+  (*     ⌜L_s' ⊆ L_s0⌝ -∗ *)
+  (*      refl_inv L_t0 L_s0 -∗ refl_inv L_t' L_s'. *)
+  (* Proof. Admitted. *)
 
 (** *Fundamental theorems *)
-  Theorem phi_logrel_refl bid id ϕ C A_t A_s:
-    ⊢ (phi_logrel refl_inv (denote_phi bid (id, ϕ)) (denote_phi bid (id, ϕ)) C A_t A_s nil nil)%I.
+  Theorem phi_logrel_refl bid id ϕ C A_t A_s l_t l_s:
+    ⊢ phi_logrel
+         (local_bij_except l_t l_s) alloca_bij
+         bid bid (id, ϕ) (id, ϕ) C A_t A_s.
   Proof with vsimp.
     iApply phi_compat; destruct ϕ.
-    { iIntros (????); iApply refl_inv_mono. }
     destruct (Util.assoc bid args); try done.
     iApply expr_logrel_refl.
   Qed.

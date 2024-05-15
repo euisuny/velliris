@@ -47,10 +47,11 @@ theories/vir/rules/rules.v
 
 theories/vir/logrel/wellformedness.v
 theories/vir/logrel/logical_relations.v
+theories/vir/logrel/compatibility.v
 theories/vir/logrel/fundamental_exp.v
 # theories/vir/logrel/fundamental_exp_relaxed.v
-# theories/vir/logrel/fundamental.v
-# theories/vir/logrel/logrel.v
+theories/vir/logrel/fundamental.v
+theories/vir/logrel/logrel.v
 
 # theories/vir/adequacy.v
 
