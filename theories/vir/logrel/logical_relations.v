@@ -32,15 +32,17 @@ Section logical_relations_def.
 
   (* ------------------------------------------------------------------------ *)
   (** *Invariants *)
-  Definition local_inv i_t i_s L_t L_s C : iProp Σ :=
-    frame_inv i_t i_s L_t.*1 L_s.*1 C ∗ ΠL i_t i_s L_t L_s.
+  Definition local_frame i_t i_s L_t L_s C : iProp Σ :=
+    frame i_t i_s L_t.*1 L_s.*1 C ∗ ΠL i_t i_s L_t L_s.
 
-  Definition alloca_inv
-    (i_t i_s : list frame_names) (A_t A_s : list Z)
-    (C : gmap (loc * loc) Qp) :=
+  Definition alloca_frame
+    (i_t i_s : list frame_names) (A_t A_s : list Z) :=
     (alloca_tgt i_t (list_to_set A_t : gset _) ∗
      alloca_src i_s (list_to_set A_s : gset _) ∗
-     ⌜NoDup A_t⌝ ∗ ⌜NoDup A_s⌝ ∗
+     ⌜NoDup A_t⌝ ∗ ⌜NoDup A_s⌝)%I.
+
+  
+     ∗
      ΠA C A_t A_s)%I.
 
   (* Invariant for codes. *)

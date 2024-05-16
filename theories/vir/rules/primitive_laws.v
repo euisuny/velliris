@@ -5,15 +5,63 @@ From iris.prelude Require Import options.
 From velliris.program_logic Require Import program_logic.
 From velliris.vir.lang Require Export lang.
 
-From ITree Require Import
-  ITree Eq.Eqit Eq.EqAxiom Events.State Events.StateFacts Extra.IForest.
-From Vellvm Require Import Semantics.LLVMEvents Handlers.Handlers Handlers.MemoryTheory.
+From ITree.Events Require Import State StateFacts.
+
+(* From ITree Require Import *)
+(*   ITree Eq.Eqit Eq.EqAxiom Events.State Events.StateFacts Extra.IForest. *)
+(* From Vellvm Require Import Semantics.LLVMEvents Handlers.Handlers Handlers.MemoryTheory. *)
 Set Default Proof Using "Type*".
 
+Ltac itree_state_simp e :=
+  lazymatch e with
+  (* Basic rewrite *)
+  | interp_state _ (ITree.trigger ?e) _ => rewrite (interp_state_vis e)
+  | interp_state _ (Vis _ _) _ => rewrite interp_state_vis
+  | interp_state _ (Tau _) _ => rewrite interp_state_tau
+  | interp_state _ (Ret _) _ => rewrite interp_state_ret
+  | interp_state _ (ITree.bind _) _ => rewrite interp_state_bind
+  end.
+
+Ltac eq_itree_simp :=
+  try timeout 1 (autorewrite with itree); cbn;
+  match goal with
+  | |- Tau _ ≅ Tau _ => apply eqitree_Tau
+  (* Some symbolic execution under ITree rewrites on [eq_itree']*)
+  | |- ?l ≅ ?r =>
+    (* Try doing ITree rewriting on both sides if possible *)
+    (itree_state_simp l + itree_vsimp l + itree_simp l) +
+    (itree_vsimp r + itree_simp r + itree_state_simp r)
+  end.
+
+Ltac unfold_interp_L2 :=
+  rewrite ?/interp_L2 ?/handle_L0_L2 ?/add_tau ?/lift_pure_err ?/lift_err.
+
+Ltac src_final :=
+  repeat
+  match goal with
+    | |- context[source_red (Tau _) _] =>
+        iApply source_red_tau
+    | |- context[source_red (Ret _) _] =>
+        iApply source_red_base
+   end.
+
+Ltac tgt_final :=
+  repeat
+  match goal with
+    | |- context[target_red (Tau _) _] =>
+        iApply target_red_tau
+    | |- context[target_red (Ret _) _] =>
+        iApply target_red_base
+   end.
 
 Section proof.
 
   Context {Σ} `{!vellirisGS Σ}.
+
+  Local Ltac solve_eq :=
+    repeat (cbn; unfold_interp_L2; eq_itree_simp).
+
+  Local Ltac final := src_final; tgt_final; done.
 
   Lemma source_red_alloca τ `{non_void τ} Ψ S_s i:
     alloca_src i S_s -∗
@@ -24,18 +72,16 @@ Section proof.
         alloca_src i ({[ z ]} ∪ S_s) -∗
         stack_src i -∗
         source_block_size z (Some (N.to_nat (sizeof_dtyp τ))) -∗
-        (* TODO: Change - Ψ (DVALUE_Addr (z, 0%Z))*)
-        source_red (η := vir_handler) (Ret (DVALUE_Addr (z, 0%Z))) Ψ) -∗
+        Ψ (Ret (DVALUE_Addr (z, 0))%Z)) -∗
     source_red (η := vir_handler) (trigger (Alloca τ)) Ψ.
   Proof.
-    rewrite !source_red_eq !source_red_def_unfold /source_red_rec.
+    rewrite source_red_unfold.
     iIntros "Hal Hf Hl". iLeft. iIntros (σ_t σ_s) "SI".
 
     destruct (allocate (vmem σ_s) τ) eqn: Ht.
     { exfalso; eapply non_void_allocate_abs; eauto. }
     destruct p.
 
-    (** *HEAP *)
     (* Allocation is successful on source and source logical views *)
     iDestruct "SI" as (???) "(Hh_s & Hh_t & H_c & Hbij & SI)".
 
@@ -46,36 +92,17 @@ Section proof.
     iSpecialize ("Hl" $! _ Hdom with "Hl_s' Hal Hf Hbs").
 
     iModIntro.
-    iExists dvalue,
-      (DVALUE_Addr (z, z0)),(fun x => Tau (Ret x)),
+    iExists dvalue, (DVALUE_Addr (z, z0)),(fun x => Tau (Ret x)),
       (update_mem m σ_s).
     iSplitL "".
+    { iPureIntro; solve_eq. rewrite Ht. by solve_eq. }
 
-    { iPureIntro.
-      match goal with
-      | |- _ ≅ ?r => remember r as RHS
-      end.
-      unfold interp_L2. rewrite interp_state_vis.
-      rewrite /add_tau bind_tau. cbn.
-      do 2 rewrite bind_bind.
-      unfold lift_pure_err. rewrite Ht.
-      rewrite !bind_ret_l interp_state_ret.
-      subst. rewrite bind_tau bind_ret_l.
-      apply eqitree_Tau; cbn.
-      rewrite /interp_L2.
-      by rewrite interp_state_tau interp_state_ret. }
     iFrame.
 
     apply allocate_inv in Ht.
-    destruct Ht as (?&?&?). inversion H0; subst.
-    inversion H1; subst.
+    destruct Ht as (?&?&?). inv H0; inv H1.
 
-    iSplitR "Hl"; cycle 1.
-    { pose proof (source_red_tau (η := vir_handler) Ψ).
-      rewrite source_red_eq in H0.
-      iApply H0. cbn. iApply "Hl". }
-    cbn.
-
+    iSplitR "Hl"; last final.
     iExists C, S, G; iFrame.
 
     rewrite -!vir_logical_frame_add_to_frame.
@@ -93,17 +120,16 @@ Section proof.
         alloca_tgt i ({[ z ]} ∪ S_s) -∗
         stack_tgt i -∗
         target_block_size z (Some (N.to_nat (sizeof_dtyp τ))) -∗
-        target_red (η := vir_handler) (Ret (DVALUE_Addr (z, 0%Z))) Ψ) -∗
+        Ψ (Ret (DVALUE_Addr (z, 0%Z)))) -∗
     target_red (η := vir_handler) (trigger (Alloca τ)) Ψ.
   Proof.
-    rewrite !target_red_eq !target_red_def_unfold /target_red_rec.
+    rewrite target_red_unfold.
     iIntros "Hal Hf Hl". iLeft. iIntros (σ_t σ_s) "SI".
 
     destruct (allocate (vmem σ_t) τ) eqn: Ht.
     { exfalso; eapply non_void_allocate_abs; eauto. }
     destruct p.
 
-    (** *HEAP *)
     (* Allocation is successful on target and target logical views *)
     iDestruct "SI" as (???) "(Hh_s & Hh_t & H_c & Hbij & SI)".
 
@@ -121,30 +147,14 @@ Section proof.
       (update_mem m σ_t).
     iSplitL "".
 
-    { iPureIntro.
-      match goal with
-      | |- _ ≅ ?r => remember r as RHS
-      end.
-      unfold interp_L2. rewrite interp_state_vis.
-      rewrite /add_tau bind_tau. cbn.
-      do 2 rewrite bind_bind.
-      unfold lift_pure_err. rewrite Ht.
-      rewrite !bind_ret_l interp_state_ret. 
-      subst. rewrite bind_tau bind_ret_l.
-      apply eqitree_Tau; cbn.
-      rewrite /interp_L2.
-      by rewrite interp_state_tau interp_state_ret. }
+    { iPureIntro. solve_eq; rewrite Ht; by solve_eq. }
     iFrame.
 
     apply allocate_inv in Ht.
     destruct Ht as (?&?&?). inversion H0; subst.
     inversion H1; subst.
 
-    iSplitR "Hl"; cycle 1.
-    { pose proof (target_red_tau (η := vir_handler) Ψ).
-      rewrite target_red_eq in H0.
-      iApply H0. cbn. iApply "Hl". }
-    cbn.
+    iSplitR "Hl"; last final; cbn.
 
     iExists C, S, G; iFrame.
 
@@ -177,16 +187,12 @@ Section proof.
     iApply target_red_sim_expr.
     iApply (target_red_alloca with "Hl_t Hf_t"); [ done | ].
     iIntros (??) "Hl_t Ha_t Hf_t Hb_t".
-    iApply target_red_base.
 
     iApply source_red_sim_expr.
     iApply (source_red_alloca with "Hl_s Hf_s"); [ done | ].
     iIntros (??) "Hl_s Ha_s Hf_s Hb_s".
-    iApply source_red_base.
 
-    iApply sim_expr_base. iExists _,_; iFrame.
-    repeat (iSplitL ""; [ done | ]).
-    repeat iExists _; iFrame. done.
+    vfinal. sfinal.
   Qed.
 
   Lemma read_logical_view m ptr n b o τ:
@@ -201,81 +207,59 @@ Section proof.
   Lemma source_red_load1 ptr τ Ψ q n b o:
     ptr.1 ↦{q}s [ LBlock n b o ] -∗
     (ptr.1 ↦{q}s [ LBlock n b o ] -∗
-      source_red (η := vir_handler) (Ret (read_in_mem_block b (snd ptr) τ)) Ψ) -∗
+      Ψ (Ret (read_in_mem_block b (snd ptr) τ))) -∗
     source_red (η := vir_handler) (trigger (Load τ (DVALUE_Addr ptr))) Ψ.
   Proof.
-    rewrite {2} source_red_eq !source_red_def_unfold /source_red_rec.
+    rewrite source_red_unfold.
     iIntros "Hs Hl". iLeft.
     iIntros (σ_t σ_s) "SI".
     iDestruct "SI" as (???) "(Hh_s & Hh_t & H_c & Hbij & SI)".
 
     iPoseProof (heap_read_st_1 with "Hh_s Hs") as "%lookup".
-    cbn in *.
-    eapply read_logical_view in lookup.
+    cbn in *; eapply (read_logical_view _ _ _ _ _ τ) in lookup.
 
     iModIntro.
-    iExists _,_,_,σ_s. iFrame. (* Long processing time *)
+    iExists _,
+      (read_in_mem_block b (snd ptr) τ),
+      (fun x => Tau (Ret x)),σ_s. iFrame. (* Long processing time *)
     iSpecialize ("Hl" with "Hs").
-    iSplitL "".
-    { unfold interp_L2. rewrite interp_state_vis.
-      cbn.
-      rewrite
-        /resum /ReSum_inr /cat /Cat_IFun /inr_ /Inr_sum1 /add_tau /case_; cbn.
-      rewrite lookup.
-      rewrite bind_ret_l.
-      iPureIntro.
-      rewrite !bind_tau.
-      apply eqit_Tau. cbn. rewrite !bind_ret_l.
-      rewrite <- interp_state_tau. cbn.
-      rewrite update_mem_id.
+    iSplitL ""; first iPureIntro.
+    { solve_eq. rewrite lookup //=. tau_steps.
+      solve_eq. rewrite update_mem_id.
       reflexivity. }
-    pose proof (source_red_tau (η := vir_handler) Ψ).
-    rewrite source_red_eq in H.
-    iSplitR "Hl"; [ | iApply H; by rewrite source_red_eq].
-    repeat iExists _; iFrame. Unshelve. exact τ.
+    iSplitR "Hl"; last final; sfinal.
   Qed.
 
   Lemma target_red_load1 ptr τ Ψ q n b o:
     ptr.1 ↦{q}t [ LBlock n b o ] -∗
     (ptr.1 ↦{q}t [ LBlock n b o ] -∗
-      target_red (η := vir_handler) (Ret (read_in_mem_block b (snd ptr) τ)) Ψ) -∗
+      Ψ (Ret (read_in_mem_block b (snd ptr) τ))) -∗
     target_red (η := vir_handler) (trigger (Load τ (DVALUE_Addr ptr))) Ψ.
   Proof.
-    rewrite {2} target_red_eq !target_red_def_unfold /target_red_rec.
+    rewrite target_red_unfold.
     iIntros "Ht Hl". iLeft.
     iIntros (σ_t σ_s) "SI".
     iDestruct "SI" as (???) "(Hh_s & Hh_t & H_c & Hbij & SI)".
 
     iPoseProof (heap_read_st_1 with "Hh_t Ht") as "%lookup".
-    cbn in *.
-    eapply read_logical_view in lookup.
+    cbn in *; eapply (read_logical_view _ _ _ _ _ τ) in lookup.
 
-    iModIntro. iExists _,_,_,σ_t. iFrame.
+    iModIntro.
+    iExists _,
+      (read_in_mem_block b (snd ptr) τ),
+      (fun x => Tau (Ret x)),σ_t. iFrame. (* Long processing time *)
     iSpecialize ("Hl" with "Ht").
-    iSplitL "".
-    { unfold interp_L2. rewrite interp_state_vis.
-      cbn.
-      rewrite
-        /resum /ReSum_inr /cat /Cat_IFun /inr_ /Inr_sum1 /add_tau /case_; cbn.
-      rewrite lookup.
-      rewrite bind_ret_l.
-      iPureIntro.
-      rewrite !bind_tau.
-      apply eqit_Tau. cbn. rewrite !bind_ret_l.
-      rewrite <- interp_state_tau. cbn.
-      rewrite update_mem_id.
+    iSplitL ""; first iPureIntro.
+    { solve_eq; rewrite lookup //=. tau_steps.
+      solve_eq. rewrite update_mem_id.
       reflexivity. }
-    pose proof (target_red_tau (η := vir_handler) Ψ).
-    rewrite target_red_eq in H.
-    iSplitR "Hl"; [ | iApply H; by rewrite target_red_eq].
-    repeat iExists _; iFrame. Unshelve. exact τ.
+    iSplitR "Hl"; last final; sfinal.
   Qed.
 
   Corollary source_red_load2 ptr τ Ψ q b:
     ptr.1 ↦{q}s [ b ] -∗
     (ptr.1 ↦{q}s [ b ] -∗
-      source_red (η := vir_handler)
-      (Ret (read_in_mem_block (lb_mem b) (snd ptr) τ)) Ψ) -∗
+      Ψ (Ret (read_in_mem_block (lb_mem b) (snd ptr) τ))) -∗
     source_red (η := vir_handler) (trigger (Load τ (DVALUE_Addr ptr))) Ψ.
   Proof.
     destruct b.
@@ -285,8 +269,7 @@ Section proof.
   Corollary target_red_load2 ptr τ Ψ q b:
     ptr.1 ↦{q}t [ b ] -∗
     (ptr.1 ↦{q}t [ b ] -∗
-      target_red (η := vir_handler)
-      (Ret (read_in_mem_block (lb_mem b) (snd ptr) τ)) Ψ) -∗
+      Ψ (Ret (read_in_mem_block (lb_mem b) (snd ptr) τ))) -∗
     target_red (η := vir_handler) (trigger (Load τ (DVALUE_Addr ptr))) Ψ.
   Proof.
     destruct b.
@@ -297,11 +280,10 @@ Section proof.
     is_supported τ ->
     dvalue_has_dtyp v τ  ->
     l ↦{q}s v -∗
-    (l ↦{q}s v -∗
-      source_red (η := vir_handler) (Ret (dvalue_to_uvalue v)) Ψ) -∗
+    (l ↦{q}s v -∗ Ψ (Ret (dvalue_to_uvalue v))) -∗
     source_red (η := vir_handler) (trigger (Load τ (# l))) Ψ.
   Proof.
-    rewrite {2} source_red_eq !source_red_def_unfold /source_red_rec.
+    rewrite source_red_unfold.
     iIntros (Hs Hτ) "Hs Hl". iLeft.
     iIntros (σ_t σ_s) "SI".
     iDestruct "SI" as (???) "(Hh_s & Hh_t & H_c & Hbij & %WF & SI)".
@@ -310,63 +292,42 @@ Section proof.
     cbn.
     pose proof (read_uvalue_logical_view _ _ _ _ Hs Hτ lookup) as Hread.
 
-    iModIntro. iExists _,_,_,_. iFrame.
+    iModIntro.
+    iExists _,
+      (dvalue_to_uvalue v),
+      (fun x => Tau (Ret x)), σ_s. iFrame. (* Long processing time *)
     iSpecialize ("Hl" with "Hs").
-    iSplitL "".
-    { unfold interp_L2. rewrite interp_state_vis.
-      cbn.
-      rewrite
-        /resum /ReSum_inr /cat /Cat_IFun /inr_ /Inr_sum1 /add_tau /case_; cbn.
-      rewrite Hread.
-      rewrite bind_ret_l.
-      iPureIntro.
-      rewrite !bind_tau.
-      apply eqit_Tau. cbn. rewrite !bind_ret_l.
-      rewrite <- interp_state_tau. cbn.
-      rewrite update_mem_id.
-      reflexivity. }
-    pose proof (source_red_tau (η := vir_handler) Ψ).
-    rewrite source_red_eq in H.
-    iSplitR "Hl"; [ | iApply H; by rewrite source_red_eq].
-    repeat iExists _; iFrame. done.
+    iSplitL ""; first iPureIntro.
+    { solve_eq. cbn; rewrite Hread.
+      solve_eq. by rewrite update_mem_id. }
+    iSplitR "Hl"; last final; sfinal.
   Qed.
 
   Lemma target_red_load l τ v Ψ q :
     is_supported τ ->
     dvalue_has_dtyp v τ  ->
     l ↦{q}t v -∗
-    (l ↦{q}t v -∗
-      target_red (η := vir_handler) (Ret (dvalue_to_uvalue v)) Ψ) -∗
+    (l ↦{q}t v -∗ Ψ (Ret (dvalue_to_uvalue v))) -∗
     target_red (η := vir_handler) (trigger (Load τ (# l))) Ψ.
   Proof.
-    rewrite {2} target_red_eq !target_red_def_unfold /target_red_rec.
+    rewrite target_red_unfold.
     iIntros (Hs Hτ) "Ht Hl". iLeft.
     iIntros (σ_t σ_s) "SI".
     iDestruct "SI" as (???) "(Hh_s & Hh_t & H_c & Hbij & %WF & SI)".
 
     iPoseProof (heap_read with "Hh_t Ht") as "%lookup".
-    cbn.
     pose proof (read_uvalue_logical_view _ _ _  _ Hs Hτ lookup) as Hread.
 
-    iModIntro. iExists _,_,_,_. iFrame.
+    iModIntro.
+    iExists _,
+      (dvalue_to_uvalue v),
+      (fun x => Tau (Ret x)), σ_t. iFrame.
     iSpecialize ("Hl" with "Ht").
-    iSplitL "".
-    { unfold interp_L2. rewrite interp_state_vis.
-      cbn.
-      rewrite
-        /resum /ReSum_inr /cat /Cat_IFun /inr_ /Inr_sum1 /add_tau /case_; cbn.
-      rewrite Hread.
-      rewrite bind_ret_l.
-      iPureIntro.
-      rewrite !bind_tau.
-      apply eqit_Tau. cbn. rewrite !bind_ret_l.
-      rewrite <- interp_state_tau. cbn.
-      rewrite update_mem_id.
-      reflexivity. }
-    pose proof (target_red_tau (η := vir_handler) Ψ).
-    rewrite target_red_eq in H.
-    iSplitR "Hl"; [ | iApply H; by rewrite target_red_eq].
-    repeat iExists _; by iFrame.
+
+    iSplitL ""; first iPureIntro.
+    { solve_eq. cbn; rewrite Hread; solve_eq.
+      by rewrite update_mem_id. }
+    iSplitR "Hl"; last final; sfinal.
   Qed.
 
   Lemma sim_load l_t l_s τ v_t v_s q_t q_s:
@@ -384,12 +345,10 @@ Section proof.
     iApply target_red_sim_expr.
     iApply (target_red_load _ _ _ _ _ Hs Hτ_t with "Hl_t").
     iIntros "Hl_t".
-    iApply target_red_base.
 
     iApply source_red_sim_expr.
     iApply (source_red_load _ _ _ _ _ Hs Hτ_s with "Hl_s").
     iIntros "Hl_s".
-    iApply source_red_base.
 
     iApply sim_expr_base. iExists _,_; iFrame.
     repeat (iSplitL ""; [ done | ]).
@@ -399,10 +358,10 @@ Section proof.
   Lemma source_red_store1 v v' n i Ψ ptr:
     ptr.1 ↦s [ LBlock n v i ] -∗
     (ptr.1 ↦s [ LBlock n (add_all_index (serialize_dvalue v') ptr.2 v) i ] -∗
-      source_red (η := vir_handler) (Ret tt) Ψ) -∗
+      Ψ (Ret tt)) -∗
     source_red (η := vir_handler) (trigger (Store (DVALUE_Addr ptr) v')) Ψ.
   Proof.
-    rewrite {2} source_red_eq !source_red_def_unfold /source_red_rec.
+    rewrite source_red_unfold.
     iIntros "Hs Hl". iLeft.
     iIntros (σ_t σ_s) "SI".
     iDestruct "SI" as (???) "(Hh_s & Hh_t & H_c & Hbij & SI)".
@@ -412,50 +371,37 @@ Section proof.
     cbn. destruct ptr.
     iSpecialize ("Hl" with "Hs").
 
-    iModIntro. iExists _,_,_,_.
-    iSplitL "".
-    { unfold interp_L2. rewrite interp_state_vis.
-      cbn.
-      rewrite
-        /resum /ReSum_inr /cat /Cat_IFun /inr_ /Inr_sum1 /add_tau /case_; cbn.
-      rewrite bind_bind.
-      rewrite /lift_pure_err /lift_err. cbn in *.
+    iModIntro.
+    iExists _,tt,(fun x => Tau(Ret x)),_.
+    iSplitL ""; first iPureIntro.
+    { solve_eq.
       apply get_logical_block_logical_view in H. rewrite /write.
       rewrite /vir_heap in H. rewrite /get_logical_block /get_logical_block_mem.
-      rewrite H; cbn.
-      rewrite bind_ret_l.
-      iPureIntro.
-      rewrite !bind_tau.
-      apply eqit_Tau. cbn. rewrite !bind_ret_l.
-      rewrite <- interp_state_tau. cbn. reflexivity. }
-    pose proof (source_red_tau (η := vir_handler) Ψ).
-    rewrite source_red_eq in H0. iFrame.
-    iSplitR "Hl"; [ | iApply H0; by rewrite source_red_eq].
-    repeat iExists _; iFrame. cbn.
+      rewrite H; cbn. by solve_eq. }
 
-    rewrite <- vir_heap_add_logical_block. cbn.
+    iSplitR "Hl"; last final; sfinal.
+
+    cbn; rewrite <- vir_heap_add_logical_block. cbn.
     rewrite /dvalue_to_block.
     cbn in *. rewrite /frames; cbn; eauto.
     destruct_HC "Hh_s".
 
     assert ({[ z ]} ∪ (vmem σ_s).1.2 = (vmem σ_s).1.2).
     { destruct Hbs. cbn in *.
-      specialize (H2 z (ltac:(rewrite lookup_insert; eauto))).
-      destruct H2. set_solver. }
+      specialize (H1 z (ltac:(rewrite lookup_insert; eauto))).
+      destruct H1. set_solver. }
 
     destruct (vmem σ_s); destruct f; cbn in *;
-    rewrite H1;
-    iExists _, _; iFrame; done.
+    rewrite H0; sfinal.
   Qed.
 
   Lemma source_red_store v v' l Ψ:
     length (serialize_dvalue v) = length (serialize_dvalue v') ->
     l ↦s v -∗
-    (l ↦s v' -∗
-      source_red (η := vir_handler) (Ret tt) Ψ) -∗
+    (l ↦s v' -∗ Ψ (Ret tt)) -∗
     source_red (η := vir_handler) (trigger (Store (# l) v')) Ψ.
   Proof.
-    rewrite {2} source_red_eq !source_red_def_unfold /source_red_rec.
+    rewrite source_red_unfold.
     iIntros (Hlen) "Hs Hl". iLeft.
     iIntros (σ_t σ_s) "SI".
     iDestruct "SI" as (???) "(Hh_s & Hh_t & H_c & Hbij & SI)".
@@ -463,36 +409,23 @@ Section proof.
     iDestruct (heap_read with "Hh_s Hs") as %?; auto.
     rewrite mapsto_dval_eq /mapsto_dval_def.
     iPoseProof (heap_write with "Hh_s Hs") as ">(Hh_s & Hs)".
-    cbn.
-    iSpecialize ("Hl" with "Hs").
+    cbn; iSpecialize ("Hl" with "Hs").
 
-    iModIntro. iExists _,_,_,_.
-    iSplitL "".
-    { unfold interp_L2. rewrite interp_state_vis.
-      cbn.
-      rewrite
-        /resum /ReSum_inr /cat /Cat_IFun /inr_ /Inr_sum1 /add_tau /case_; cbn.
-      rewrite bind_bind.
-      rewrite /lift_pure_err /lift_err.
-      rewrite /write.
-      cbn in H.
-      rewrite get_logical_block_logical_view in H. rewrite H.
-      rewrite bind_ret_l.
-      iPureIntro.
-      rewrite !bind_tau.
-      apply eqit_Tau. cbn. rewrite !bind_ret_l.
-      rewrite <- interp_state_tau. cbn. reflexivity. }
-    pose proof (source_red_tau (η := vir_handler) Ψ).
-    rewrite source_red_eq in H0. iFrame.
-    iSplitR "Hl"; [ | iApply H0; by rewrite source_red_eq].
-    repeat iExists _; iFrame. cbn.
+    iModIntro. iExists _,tt,(fun x => Tau (Ret x)),_.
+    iSplitL ""; first iPureIntro.
+    { solve_eq.
+      rewrite /write; rewrite get_logical_block_logical_view in H.
+      rewrite H. by solve_eq. }
 
-    rewrite <- vir_heap_add_logical_block. cbn.
+    iSplitR "Hl"; last final; sfinal.
+
+    cbn; rewrite <- vir_heap_add_logical_block.
     rewrite /dvalue_to_block.
     apply Nat2Z.inj_iff in Hlen. do 2 rewrite <- Zlength_correct in Hlen.
 
-    epose proof (@add_all_index_twice _ _ _ _ _ 0 (init_block (N.of_nat (length (serialize_dvalue v)))) Hlen).
-    apply leibniz_equiv in H1. rewrite H1.
+    epose proof (@add_all_index_twice _ _ _ _ _ 0
+        (init_block (N.of_nat (length (serialize_dvalue v)))) Hlen).
+    apply leibniz_equiv in H0. rewrite H0.
     rewrite !Zlength_correct in Hlen.
     apply Nat2Z.inj in Hlen. rewrite Hlen.
     rewrite /frames.
@@ -503,20 +436,19 @@ Section proof.
     assert ({[ l ]} ∪ p.2 = p.2).
     { destruct Hbs. cbn in *.
       destruct p. cbn in *.
-      specialize (H3 l (ltac:(rewrite lookup_insert; eauto))).
+      specialize (H2 l (ltac:(rewrite lookup_insert; eauto))).
       set_solver. }
-    rewrite H2.
-
-    iExists _, _; iFrame; done.
+    rewrite H1.
+    sfinal.
   Qed.
 
   Lemma target_red_store1 v v' n i Ψ ptr:
     ptr.1 ↦t [ LBlock n v i ] -∗
     (ptr.1 ↦t [ LBlock n (add_all_index (serialize_dvalue v') ptr.2 v) i ] -∗
-      target_red (η := vir_handler) (Ret tt) Ψ) -∗
+      Ψ (Ret tt)) -∗
     target_red (η := vir_handler) (trigger (Store (DVALUE_Addr ptr) v')) Ψ.
   Proof.
-    rewrite {2} target_red_eq !target_red_def_unfold /target_red_rec.
+    rewrite target_red_unfold.
     iIntros "Ht Hl". iLeft.
     iIntros (σ_t σ_s) "SI".
     iDestruct "SI" as (???) "(Hh_s & Hh_t & H_c & Hbij & SI)".
@@ -526,28 +458,17 @@ Section proof.
     cbn. destruct ptr.
     iSpecialize ("Hl" with "Ht").
 
-    iModIntro. iExists _,_,_,_.
-    iSplitL "".
-    { unfold interp_L2. rewrite interp_state_vis.
-      cbn.
-      rewrite
-        /resum /ReSum_inr /cat /Cat_IFun /inr_ /Inr_sum1 /add_tau /case_; cbn.
-      rewrite bind_bind.
-      rewrite /lift_pure_err /lift_err. cbn in *.
+    iModIntro.
+    iExists _,tt,(fun x => Tau(Ret x)),_.
+    iSplitL ""; first iPureIntro.
+    { solve_eq.
       apply get_logical_block_logical_view in H. rewrite /write.
       rewrite /vir_heap in H. rewrite /get_logical_block /get_logical_block_mem.
-      rewrite H; cbn.
-      rewrite bind_ret_l.
-      iPureIntro.
-      rewrite !bind_tau.
-      apply eqit_Tau. cbn. rewrite !bind_ret_l.
-      rewrite <- interp_state_tau. cbn. reflexivity. }
-    pose proof (target_red_tau (η := vir_handler) Ψ).
-    rewrite target_red_eq in H0. iFrame.
-    iSplitR "Hl"; [ | iApply H0; by rewrite target_red_eq].
-    repeat iExists _; iFrame. cbn.
+      rewrite H; cbn. by solve_eq. }
 
-    rewrite <- vir_heap_add_logical_block. cbn.
+    iSplitR "Hl"; last final; sfinal.
+
+    cbn; rewrite <- vir_heap_add_logical_block. cbn.
     rewrite /dvalue_to_block.
 
     destruct (vmem σ_t); cbn in *.
@@ -559,21 +480,18 @@ Section proof.
     assert ({[ z ]} ∪ p.2 = p.2).
     { destruct Hbs. cbn in *.
       destruct p. cbn in *.
-      specialize (H2 z (ltac:(rewrite lookup_insert; eauto))).
+      specialize (H1 z (ltac:(rewrite lookup_insert; eauto))).
       set_solver. }
-    rewrite H1.
-
-    iExists _, _; iFrame; done.
+    rewrite H0. sfinal.
   Qed.
 
   Lemma target_red_store v v' l Ψ:
     length (serialize_dvalue v) = length (serialize_dvalue v') ->
     l ↦t v -∗
-    (l ↦t v' -∗
-        target_red (η := vir_handler) (Ret tt) Ψ) -∗
+    (l ↦t v' -∗ Ψ (Ret tt)) -∗
     target_red (η := vir_handler) (trigger (Store (# l) v')) Ψ.
   Proof.
-    rewrite {2} target_red_eq !target_red_def_unfold /target_red_rec.
+    rewrite target_red_unfold.
     iIntros (Hlen) "Ht Hl". iLeft.
     iIntros (σ_t σ_s) "SI".
     iDestruct "SI" as (???) "(Hh_s & Hh_t & H_c & Hbij & SI)".
@@ -584,33 +502,20 @@ Section proof.
     cbn.
     iSpecialize ("Hl" with "Ht").
 
-    iModIntro. iExists _,_,_,_.
-    iSplitL "".
-    { unfold interp_L2. rewrite interp_state_vis.
-      cbn.
-      rewrite
-        /resum /ReSum_inr /cat /Cat_IFun /inr_ /Inr_sum1 /add_tau /case_; cbn.
-      rewrite bind_bind.
-      rewrite /lift_pure_err /lift_err.
-      rewrite /write.
-      cbn in H.
-      rewrite get_logical_block_logical_view in H; rewrite H.
-      rewrite bind_ret_l.
-      iPureIntro.
-      rewrite !bind_tau.
-      apply eqit_Tau. cbn. rewrite !bind_ret_l.
-      rewrite <- interp_state_tau. cbn. reflexivity. }
-    pose proof (target_red_tau (η := vir_handler) Ψ).
-    rewrite target_red_eq in H0. iFrame.
-    iSplitR "Hl"; [ | iApply H0; by rewrite target_red_eq].
-    repeat iExists _; iFrame. cbn.
+    iModIntro. iExists _,tt,(fun x => Tau(Ret x)),_.
+    iSplitL ""; first iPureIntro.
+    { solve_eq.
+      apply get_logical_block_logical_view in H. rewrite /write.
+      rewrite /vir_heap in H. rewrite /get_logical_block /get_logical_block_mem.
+      rewrite H; cbn. by solve_eq. }
+    iSplitR "Hl"; last final; sfinal.
 
-    rewrite <- vir_heap_add_logical_block. cbn.
+    cbn; rewrite <- vir_heap_add_logical_block. cbn.
     rewrite /dvalue_to_block.
     apply Nat2Z.inj_iff in Hlen. do 2 rewrite <- Zlength_correct in Hlen.
 
     epose proof (@add_all_index_twice _ _ _ _ _ 0 (init_block (N.of_nat (length (serialize_dvalue v)))) Hlen).
-    apply leibniz_equiv in H1. rewrite H1.
+    apply leibniz_equiv in H0. rewrite H0.
     rewrite !Zlength_correct in Hlen.
     apply Nat2Z.inj in Hlen. rewrite Hlen.
     rewrite /frames.
@@ -621,11 +526,9 @@ Section proof.
     assert ({[ l ]} ∪ p.2 = p.2).
     { destruct Hbs. cbn in *.
       destruct p. cbn in *.
-      specialize (H3 l (ltac:(rewrite lookup_insert; eauto))).
+      specialize (H2 l (ltac:(rewrite lookup_insert; eauto))).
       set_solver. }
-    rewrite H2.
-
-    iExists _, _; iFrame; done.
+    rewrite H1. sfinal.
   Qed.
 
   Definition update_mem (b : logical_block) (f : mem_block -> mem_block) : logical_block :=
@@ -637,7 +540,7 @@ Section proof.
     ptr.1 ↦s [ b ] -∗
     (ptr.1 ↦s [ update_mem b
                   (fun v => add_all_index (serialize_dvalue v') ptr.2 v) ] -∗
-      source_red (η := vir_handler) (Ret tt) Ψ) -∗
+      Ψ (Ret tt)) -∗
     source_red (η := vir_handler) (trigger (Store (DVALUE_Addr ptr) v')) Ψ.
   Proof.
     destruct b.
@@ -648,7 +551,7 @@ Section proof.
     ptr.1 ↦t [ b ] -∗
     (ptr.1 ↦t [ update_mem b
                   (fun v => add_all_index (serialize_dvalue v') ptr.2 v) ] -∗
-      target_red (η := vir_handler) (Ret tt) Ψ) -∗
+      Ψ (Ret tt)) -∗
     target_red (η := vir_handler) (trigger (Store (DVALUE_Addr ptr) v')) Ψ.
   Proof.
     destruct b.
@@ -666,15 +569,11 @@ Section proof.
     iApply target_red_sim_expr.
     iApply (target_red_store _ _ _ _ Hlen_t with "Hl_t").
     iIntros "Hl_t".
-    iApply target_red_base.
 
     iApply source_red_sim_expr.
     iApply (source_red_store _ _ _ _ Hlen_s with "Hl_s").
     iIntros "Hl_s".
-    iApply source_red_base.
-
-    iApply sim_expr_base. iExists _,_; iFrame.
-    by repeat (iSplitL ""; [ done | ]).
+    vfinal.
   Qed.
 
   Lemma target_local_read (x : LLVMAst.raw_id) (v : uvalue) i Ψ:
@@ -682,10 +581,10 @@ Section proof.
       stack_tgt i -∗
       ([x := v]t i -∗
         stack_tgt i -∗
-        target_red (η := vir_handler) (Ret v) Ψ) -∗
+        Ψ (Ret v)) -∗
       target_red (η := vir_handler) (trigger (LocalRead x)) Ψ.
   Proof.
-    setoid_rewrite target_red_unfold at 2.
+    rewrite target_red_unfold.
     iIntros "Hl Hf H".
     iLeft.
     iIntros (σ_t σ_s) "SI".
@@ -697,24 +596,14 @@ Section proof.
     iExists _, v, (fun x => Tau(Ret x)), σ_t.
 
     destruct (vlocal σ_t) eqn : Hσ_t.
-    iSplitL "".
-    { unfold interp_L2. rewrite interp_state_vis.
-      rewrite
-        /resum /ReSum_inr /cat /Cat_IFun /inr_ /Inr_sum1
-          /add_tau /case_; cbn.
-      rewrite /add_tau. cbn. rewrite Hσ_t.
-      rewrite bind_bind.
-      iPureIntro. cbn. rewrite Ht. rewrite !bind_ret_l. rewrite bind_tau.
-      setoid_rewrite interp_state_ret. rewrite bind_ret_l; cbn.
-      rewrite bind_tau.
-      rewrite !bind_ret_l; cbn.
-      rewrite interp_state_tau interp_state_ret.
-      repeat f_equiv; cbn. rewrite -Hσ_t. rewrite update_local_id.
-      reflexivity. }
+    iSplitL ""; first iPureIntro.
+    { solve_eq.
+      rewrite Hσ_t. cbn. rewrite Ht.
+      solve_eq. rewrite -Hσ_t.
+      by rewrite update_local_id. }
 
-    iSpecialize ("H" with "Hl Hf"); iFrame.
-    iSplitR "H"; cycle 1.
-    { by iApply target_red_tau. }
+    iSpecialize ("H" with "Hl Hf").
+    iSplitR "H"; last final.
 
     repeat iExists _; rewrite Hσ_t. by iFrame.
   Qed.
@@ -724,10 +613,10 @@ Section proof.
       stack_src i -∗
       ([x := v]s i -∗
         stack_src i -∗
-        source_red (η := vir_handler) (Ret v) Ψ) -∗
+        Ψ (Ret v)) -∗
       source_red (η := vir_handler) (trigger (LocalRead x)) Ψ.
   Proof.
-    setoid_rewrite source_red_unfold at 2.
+    rewrite source_red_unfold.
     iIntros "Hl Hf H".
     iLeft.
     iIntros (σ_t σ_s) "SI".
@@ -740,24 +629,14 @@ Section proof.
     iExists _, v, (fun x => Tau(Ret x)), _.
 
     destruct (vlocal σ_s) eqn: Hσ_s.
-    iSplitL "".
-    { unfold interp_L2. rewrite interp_state_vis.
-      cbn.
-      rewrite
-        /resum /ReSum_inr /cat /Cat_IFun /inr_ /Inr_sum1
-          /add_tau /case_; cbn.
-      rewrite Hσ_s. rewrite bind_bind.
-      iPureIntro. cbn. rewrite Ht. rewrite !bind_ret_l. rewrite bind_tau.
-      setoid_rewrite interp_state_ret. rewrite bind_ret_l; cbn.
-      rewrite bind_tau.
-      rewrite !bind_ret_l; cbn.
-      rewrite interp_state_tau interp_state_ret.
-      rewrite -Hσ_s update_local_id.
-      reflexivity. }
+    iSplitL ""; first iPureIntro.
+    { solve_eq.
+      rewrite Hσ_s. cbn. rewrite Ht.
+      solve_eq.
+      by rewrite -Hσ_s update_local_id. }
 
-    iSpecialize ("H" with "Hl Hf"); iFrame.
-    iSplitR "H"; cycle 1.
-    { by iApply source_red_tau. }
+    iSpecialize ("H" with "Hl Hf").
+    iSplitR "H"; last final.
 
     repeat iExists _; rewrite Hσ_s; by iFrame.
   Qed.
@@ -772,43 +651,16 @@ Section proof.
          ∗ [ x_t := v_t ]t i_t ∗ [ x_s := v_s ]s i_s
          ∗ stack_tgt i_t ∗ stack_src i_s }].
   Proof.
-    rewrite sim_expr_unfold.
+    iIntros "Ht Hs Hf_t Hf_s".
+    iApply target_red_sim_expr.
+    iApply (target_local_read with "Ht Hf_t").
+    iIntros "Ht Hf_t".
 
-    iIntros "Ht Hs Hf_t Hf_s %σ_t %σ_s SI".
-    rewrite /interp_L2;
-    provide_case: TAU_STEP.
-    (iSplitL ""; [ iPureIntro | ]).
-    { apply Eq.EqAxiom.bisimulation_is_eq.
-      rewrite -itree_eta.
-      rewrite interp_state_vis; cbn.
-      setoid_rewrite interp_state_ret.
-      setoid_rewrite bind_tau; cbn.
-      rewrite bind_bind.
-      cbn; reflexivity. }
-    (iSplitL ""; [ iPureIntro | ]).
-    { apply Eq.EqAxiom.bisimulation_is_eq.
-      rewrite -itree_eta.
-      rewrite interp_state_vis; cbn.
-      setoid_rewrite interp_state_ret.
-      setoid_rewrite bind_tau; cbn.
-      rewrite bind_bind.
-      cbn; reflexivity. }
+    iApply source_red_sim_expr.
+    iApply (source_local_read with "Hs Hf_s").
+    iIntros "Hs Hf_s".
 
-    (* destruct p, p1; cbn. *)
-    iDestruct "SI" as (???) "(Hh_s & Hh_t & H_c & Hbij &  SI)".
-    iDestruct (lheap_lookup with "Hh_t Hf_t Ht") as %Ht.
-    iDestruct (lheap_lookup with "Hh_s Hf_s Hs") as %Hs.
-    rewrite -alist_find_to_map_Some in Ht.
-    rewrite -alist_find_to_map_Some in Hs.
-    destruct (vlocal σ_t) eqn: Hσ_t, (vlocal σ_s) eqn: Hσ_s.
-    cbn; rewrite Ht Hs. cbn.
-    iApply sim_coindF_tau; cbn; iApply sim_coindF_base.
-
-    rewrite /lift_expr_rel.
-    repeat iExists _.
-    do 2 (iSplitL ""; [ iPureIntro; reflexivity | ]); iFrame.
-    iSplitR ""; [ | repeat iExists _; done].
-    repeat iExists _; by iFrame.
+    vfinal.
   Qed.
 
   Lemma sim_local_read_not_in_domain {R} (x_s : LLVMAst.raw_id) L_s Φ (e_t : _ R) i:
@@ -843,44 +695,6 @@ Section proof.
     eapply eqit_Vis; intros. inversion u.
     Unshelve.
     intros; inversion H.
-  Qed.
-
-  (* Ghost resource doesn't check that it gets assigned only once. It must be a
-    well-formed LLVM IR program. *)
-  Lemma sim_local_write (x_t x_s : LLVMAst.raw_id) (v_t v_s : uvalue) v_t' v_s' i_t i_s:
-    ⊢ stack_tgt i_t -∗ stack_src i_s -∗
-      [ x_t := v_t ]t i_t -∗ [ x_s := v_s ]s i_s -∗
-    trigger (LocalWrite x_t v_t') ⪯ trigger (LocalWrite x_s v_s')
-      [{ (v_t, v_s),
-          [ x_t := v_t' ]t i_t ∗ [ x_s := v_s' ]s i_s ∗
-          stack_tgt i_t ∗ stack_src i_s}].
-  Proof.
-    rewrite sim_expr_unfold.
-
-    iIntros "Hf_t Hf_s Ht Hs %σ_t %σ_s SI".
-    rewrite /interp_L2;
-    provide_case: TAU_STEP.
-    (iSplitL ""; [ iPureIntro | ]).
-    { apply Eq.EqAxiom.bisimulation_is_eq. cbn; reflexivity. }
-    (iSplitL ""; [ iPureIntro | ]).
-    { apply Eq.EqAxiom.bisimulation_is_eq. cbn; reflexivity. }
-
-    destruct (vlocal σ_t) eqn: Hlocal_t; destruct (vlocal σ_s) eqn: Hlocal_s.
-    rewrite sim_coindF_unfold sim_indF_unfold /sim_expr_inner.
-
-    cbn.
-    provide_case: TAU_STEP. cbn.
-    iDestruct "SI" as (???) "(Hh_s&Hh_t&HC&Hbij&Hg)".
-    rewrite sim_coindF_unfold sim_indF_unfold /sim_expr_inner.
-
-    iMod (lheap_write with "Hh_t Hf_t Ht") as "(Hh_t & Hf_t & Ht)".
-    iMod (lheap_write with "Hh_s Hf_s Hs") as "(Hh_s & Hf_s & Hs)".
-    provide_case:BASE.
-
-    rewrite /lift_expr_rel; cbn; iFrame.
-    iSplitR ""; cycle 1.
-    { repeat iExists _; done. }
-    iExists C, S, G; iFrame. rewrite Hlocal_t Hlocal_s; iFrame.
   Qed.
 
   (* TODO: Term [alloc] is misleading; rename *)
@@ -1121,6 +935,45 @@ Section proof.
     { by iApply source_red_tau. }
 
     repeat iExists _; by iFrame.
+  Qed.
+
+
+  (* Ghost resource doesn't check that it gets assigned only once. It must be a
+    well-formed LLVM IR program. *)
+  Lemma sim_local_write (x_t x_s : LLVMAst.raw_id) (v_t v_s : uvalue) v_t' v_s' i_t i_s:
+    ⊢ stack_tgt i_t -∗ stack_src i_s -∗
+      [ x_t := v_t ]t i_t -∗ [ x_s := v_s ]s i_s -∗
+    trigger (LocalWrite x_t v_t') ⪯ trigger (LocalWrite x_s v_s')
+      [{ (v_t, v_s),
+          [ x_t := v_t' ]t i_t ∗ [ x_s := v_s' ]s i_s ∗
+          stack_tgt i_t ∗ stack_src i_s}].
+  Proof.
+    rewrite sim_expr_unfold.
+
+    iIntros "Hf_t Hf_s Ht Hs %σ_t %σ_s SI".
+    rewrite /interp_L2;
+    provide_case: TAU_STEP.
+    (iSplitL ""; [ iPureIntro | ]).
+    { apply Eq.EqAxiom.bisimulation_is_eq. cbn; reflexivity. }
+    (iSplitL ""; [ iPureIntro | ]).
+    { apply Eq.EqAxiom.bisimulation_is_eq. cbn; reflexivity. }
+
+    destruct (vlocal σ_t) eqn: Hlocal_t; destruct (vlocal σ_s) eqn: Hlocal_s.
+    rewrite sim_coindF_unfold sim_indF_unfold /sim_expr_inner.
+
+    cbn.
+    provide_case: TAU_STEP. cbn.
+    iDestruct "SI" as (???) "(Hh_s&Hh_t&HC&Hbij&Hg)".
+    rewrite sim_coindF_unfold sim_indF_unfold /sim_expr_inner.
+
+    iMod (lheap_write with "Hh_t Hf_t Ht") as "(Hh_t & Hf_t & Ht)".
+    iMod (lheap_write with "Hh_s Hf_s Hs") as "(Hh_s & Hf_s & Hs)".
+    provide_case:BASE.
+
+    rewrite /lift_expr_rel; cbn; iFrame.
+    iSplitR ""; cycle 1.
+    { repeat iExists _; done. }
+    iExists C, S, G; iFrame. rewrite Hlocal_t Hlocal_s; iFrame.
   Qed.
 
 End proof.
