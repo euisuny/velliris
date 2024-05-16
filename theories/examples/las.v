@@ -1,6 +1,7 @@
 From iris.prelude Require Import options.
 
 From velliris.vir.lang Require Import lang.
+From velliris.vir.rules Require Import rules.
 From velliris.vir.logrel Require Import wellformedness logical_relations compatibility.
 
 (* Import DenoteTactics. *)
@@ -323,6 +324,36 @@ Section las_example_proof.
   (* TODO: Promotable block implies points-to *)
   (* Lemma promotable_block_id b id: *)
   (*   promotable_block b id -> *)
+
+  (* If it's a well-formed program, it should have allocated the local id before
+     trying to perform the optimization, thus we have the ownership for the
+     locations. *)
+
+  (* [LAS] case where the load *)
+  Lemma las_instr_sim_load
+    promotable v_t v_s i_t i_s ptr ptr' A_t A_s i id val align b τ τ':
+    let '((id', i'), v) :=
+      (las_instr promotable (Some val)
+         (id, INSTR_Load b τ (τ', EXP_Ident (ID_Local promotable)) align)) in
+    (* The promotable local id stores a pointer that is allocated on both source
+       and target. *)
+    [ promotable := UVALUE_Addr ptr ]s i_s -∗
+    ptr.1 ↦s v_s  -∗
+    [ promotable := UVALUE_Addr ptr' ]t i_t -∗
+    ptr.1 ↦t v_t  -∗
+    dval_rel v_t v_s -∗
+    instr_logrel (local_bij_except [promotable] [promotable])
+      alloca_bij id' i' id i ∅ A_t A_s.
+  Proof.
+    cbn; destruct_if_goal; try done; clear e H0 H2.
+    (* Reduced *)
+    iIntros "Hls Hps Hlt Hpt #Hv" (??) "CI".
+    iApply target_red_sim_expr.
+    destruct_code_inv_all; repeat destruct_frame.
+    iApply (target_red_mono with "[] [Hs_t Hd_t Hlt]"); cycle 1.
+    { iPoseProof (target_instr_pure with "Hs_t [] Hd_t") as "H'".
+    cbn.
+
 
   Lemma las_instr_list_sim b a v_s i_s ptr:
     [ a := UVALUE_Addr ptr ]s i_s -∗

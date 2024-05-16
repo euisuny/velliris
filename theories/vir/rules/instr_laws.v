@@ -218,6 +218,126 @@ Section instr_properties.
     iExists _, _; done.
   Qed.
 
+  Lemma target_instr_pure1 (x : LLVMAst.raw_id) (v : uvalue) o i L Ψ:
+    ⊢ stack_tgt i -∗
+      ldomain_tgt i L -∗
+      [ x := v ]t i -∗
+      ([ x := v ]t i -∗
+        ldomain_tgt i L -∗
+        stack_tgt i -∗
+        target_red (η := vir_handler) (Ret ()) Ψ) -∗
+      target_red (η := vir_handler) (exp_conv (denote_op o)) (lift_unary_post (fun x => ⌜x = v⌝)) -∗
+      target_red (η := vir_handler) (<{ %(IId x) = (INSTR_Op o) }>) Ψ.
+  Proof.
+    iIntros "Hf Hd Hl Ht He".
+    cbn. rewrite /instr_conv.
+    iApply target_red_eq_itree.
+    { rewrite interp_bind. rewrite interp_translate.
+
+      eapply eq_itree_clo_bind; first done.
+      intros; subst. rewrite interp_vis. setoid_rewrite interp_ret at 1.
+      rewrite /subevent /resum /ReSum_inr /cat /Cat_IFun /inr_ /Inr_sum1.
+      simp instrE_conv.
+      Unshelve.
+      2 : exact
+          (fun u2 => x0 <- trigger (LocalWrite x u2);; Tau (Ret x0)).
+      reflexivity. }
+    cbn.
+
+    iApply target_red_bind.
+    rewrite /exp_to_instr. simp instrE_conv.
+    rewrite /exp_conv.
+    assert (handler_eq:
+      eq_Handler
+        (λ T (e : exp_E T), Vis (instrE_conv T (inr1 (inr1 e))) (λ x0 : T, Ret x0))
+        (λ T (e : exp_E T), Vis (exp_to_L0 e) Monad.ret)).
+    { repeat intro. simp instrE_conv.
+      rewrite /instr_to_L0 /exp_to_L0;
+        destruct a; try destruct s; try reflexivity. }
+    apply eq_itree_interp in handler_eq. do 2 red in handler_eq.
+    specialize (handler_eq _ (denote_op o) _ (ltac:(reflexivity))).
+    apply EqAxiom.bisimulation_is_eq in handler_eq;
+      rewrite handler_eq; clear handler_eq.
+
+    iApply (target_red_mono with "[Hf Hd Ht Hl]"); [ | iApply "He"].
+    rewrite /lift_unary_post.
+    iIntros (??). destruct H as (?&?&?). subst.
+
+    iApply target_red_eq_itree.
+    { rewrite H. rewrite !bind_ret_l. reflexivity. }
+    clear H.
+    iApply target_red_bind.
+
+    iApply (target_local_write with "Hl Hd Hf"); try done.
+    iIntros "Hi Hd Hs".
+    iApply target_red_base.
+
+    iApply target_red_eq_itree.
+    { by rewrite bind_ret_l. }
+
+    iApply target_red_tau. iApply ("Ht" with "Hi Hd Hs").
+  Qed.
+
+  Lemma source_instr_pure1 (x : LLVMAst.raw_id) (v : uvalue) o i L R1 Φ (e_t : _ R1):
+    ⊢ stack_src i -∗
+      ldomain_src i L -∗
+      [ x := v ]s i -∗
+      ([ x := v ]s i -∗
+        ldomain_src i L -∗
+        stack_src i -∗
+        source_red (η := vir_handler) (Ret ()) (fun e_s' => e_t ⪯ e_s' [{ Φ }])) -∗
+      source_red (η := vir_handler) (exp_conv (denote_op o)) (lift_unary_post (fun x => ⌜x = v⌝)) -∗
+      source_red (η := vir_handler) (<{ %(IId x) = (INSTR_Op o) }>) (fun e_s' => e_t ⪯ e_s' [{ Φ }]).
+  Proof.
+    iIntros "Hf Hd Hl H He".
+    cbn. rewrite /instr_conv.
+    iApply source_red_eq_itree.
+    { rewrite interp_bind. rewrite interp_translate.
+
+      eapply eq_itree_clo_bind; first done.
+      intros; subst. rewrite interp_vis. setoid_rewrite interp_ret at 1.
+      rewrite /subevent /resum /ReSum_inr /cat /Cat_IFun /inr_ /Inr_sum1.
+      simp instrE_conv.
+      Unshelve.
+      2 : exact
+          (fun u2 => x0 <- trigger (LocalWrite x u2);; Tau (Ret x0)).
+      reflexivity. }
+    cbn.
+
+    iApply source_red_bind.
+    rewrite /exp_to_instr. simp instrE_conv.
+    rewrite /exp_conv.
+    assert (handler_eq:
+      eq_Handler
+        (λ T (e : exp_E T), Vis (instrE_conv T (inr1 (inr1 e))) (λ x0 : T, Ret x0))
+        (λ T (e : exp_E T), Vis (exp_to_L0 e) Monad.ret)).
+    { repeat intro. simp instrE_conv.
+      rewrite /instr_to_L0 /exp_to_L0;
+        destruct a; try destruct s; try reflexivity. }
+    apply eq_itree_interp in handler_eq. do 2 red in handler_eq.
+    specialize (handler_eq _ (denote_op o) _ (ltac:(reflexivity))).
+    apply EqAxiom.bisimulation_is_eq in handler_eq;
+      rewrite handler_eq; clear handler_eq.
+
+    iApply (source_red_mono with "[Hf Hd H Hl]"); [ | iApply "He"].
+    rewrite /lift_unary_post.
+    iIntros (??). destruct H as (?&?&?). subst.
+
+    iApply source_red_eq_itree.
+    { rewrite H. rewrite !bind_ret_l. reflexivity. }
+    clear H.
+    iApply source_red_bind.
+
+    iApply (source_local_write with "Hl Hd Hf"); try done.
+    iIntros "Hi Hd Hs".
+    iApply source_red_base.
+
+    iApply source_red_eq_itree.
+    { by rewrite bind_ret_l. }
+
+    iApply source_red_tau. iApply ("H" with "Hi Hd Hs").
+  Qed.
+
   Lemma target_instr_pure (x : LLVMAst.raw_id) (v : uvalue) o i L Ψ:
     x ∉ L ->
     ⊢ stack_tgt i -∗
