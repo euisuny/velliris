@@ -183,6 +183,8 @@ Section frame_resources.
   Definition frame_WF {A} (i_t i_s : list A) : iPropI Σ :=
     ((⌜length i_s > 0 -> length i_t > 0⌝)%Z)%I.
 
+  (* Frame resources:
+     The current stack index and the domain for the local environment. *)
   Definition frame_γ γ i (L : list local_id) :=
     (⌜NoDup L⌝ ∗
     (* Current stack frame *)
@@ -193,13 +195,21 @@ Section frame_resources.
   Definition frame_tgt := (frame_γ sheapG_heap_target).
   Definition frame_src := (frame_γ sheapG_heap_source).
 
-  Definition frame_inv i_t i_s (L_t L_s : list local_id) C : iProp Σ :=
-    (* Current stack frame *)
+  (* Frame resources (i.e. checkout set, source and target frame resources). *)
+  Definition frameR i_t i_s (L_t L_s : list local_id) C : iProp Σ :=
+    (* Well-formedness of the frame index. *)
     frame_WF i_t i_s ∗
     (* Checkout set *)
     checkout C ∗
     (* Source and target resources *)
     frame_tgt i_t L_t ∗ frame_src i_s L_s.
+
+  (* Alloca resources (for source and target). *)
+  Definition allocaR
+    (i_t i_s : list frame_names) (A_t A_s : list Z) :=
+    (alloca_tgt i_t (list_to_set A_t : gset _) ∗
+     alloca_src i_s (list_to_set A_s : gset _) ∗
+     ⌜NoDup A_t⌝ ∗ ⌜NoDup A_s⌝)%I.
 
 End frame_resources.
 
