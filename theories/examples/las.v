@@ -14,41 +14,52 @@ Section las_example.
   (* [a] is the register that will be analyzed for load after store
      [v] is the current register whose value is stored in the address at [a]. *)
  Definition las_code_body {A : Set} {T}
-   (x: A * instr T) (c : code T) (a : raw_id) (v : option raw_id) :=
+   (x: A * instr T) (promotable : raw_id) (stored_val : option raw_id) (c : code T) :=
     match x with
-    (* A load instruction from a stored [raw_id] that hasn't been modified *)
-    | (id, INSTR_Load _ _ (_, EXP_Ident (ID_Local ptr)) _) =>
-      if decide (a = ptr) then
-        match v with
+    (* A load instruction from a stored [raw_id] that hasn't been modified. *)
+    | (promotable_id, INSTR_Load _ _ (_, EXP_Ident (ID_Local ptr)) _) =>
+      if decide (promotable = ptr) then
+        match stored_val with
           | Some c =>
-              ((id, INSTR_Op (EXP_Ident (ID_Local c))), v)
-          | None => (x, v)
+              (* The promotable location has been written to; substitute the load
+                 for the local identifier for the promotable location instead. *)
+              ((promotable_id, INSTR_Op (EXP_Ident (ID_Local c))), stored_val)
+          | None => (x, stored_val)
         end
-      else (x, v)
-    (* A store instruction to the promoted local identifier *)
-    | (id, INSTR_Store _
-              (* TODO Warning! this is enforced by the syntactic
-                  condition in the [TODO] above *)
+      else (x, stored_val)
+    (* A store instruction to the promoted local identifier. *)
+    | (_, INSTR_Store _
               (_, EXP_Ident (ID_Local v'))
               (_, EXP_Ident (ID_Local ptr)) _) =>
-        if decide (a = ptr) then
+        if decide (promotable = ptr) then
+          (* Update the stored value *)
           (x, Some v')
         else
-          (x, v)
-    | x => (x, v)
+          (x, stored_val)
+    | x => (x, stored_val)
     end.
 
-  (* LATER: Can generalize the [v] values being stored (e.g. storing constants).
-     FIXME: Generalize [v] to expressions *)
-  (* TODO: Figure out if there is a normal form that can be enforced to make
-           sure expressions refer to [local_id]s. *)
-  Fixpoint las_code {T} (c : code T) (a : raw_id) (v : option raw_id)
-    : code T :=
+  (* Given a code block [c] and a promotable location, (i.e. a local identifier
+     that stores a non-aliased location that has been allocated in the current block),
+     check if that location has a load after having stored a value.
+
+     The [stored_val] keeps track of the most recent store of the code block to the
+     promotable location [promotable].
+
+    LATER:
+      - Can generalize the [v] values being stored (e.g. storing constants).
+      - Generalize [v] to expressions
+      - Figure out if there is a normal form that can be enforced to make
+                sure expressions refer to [local_id]s. *)
+  Fixpoint las_code {T}
+    (promotable : local_id) (stored_val : option raw_id) (c : code T) :=
     match c with
     | nil => nil
     | x :: tl =>
-        let '(x, v) := las_code_body x c a v in
-      x :: las_code tl a v
+        let '(x, v) :=
+          las_code_body x promotable stored_val c
+        in
+        x :: las_code promotable v tl
     end.
 
   Definition las_block {T} (a : raw_id) (v : option raw_id) (b : LLVMAst.block T) :
@@ -56,12 +67,12 @@ Section las_example.
       mk_block
         (blk_id b)
         (blk_phis b)
-        (las_code (blk_code b) a v)
+        (las_code a v (blk_code b))
         (blk_term b)
         (blk_comments b).
 
   (* Apply the [las] optimization over an open control flow graph. *)
-  Definition las_ocfg {T} (o : ocfg T) a : ocfg T :=
+  Definition las_ocfg {T} a (o : ocfg T) : ocfg T :=
     List.map (las_block a None) o.
 
   Definition raw_id_not_in_texp {T} (l : list (texp T)) (i : raw_id) : bool :=
@@ -137,7 +148,7 @@ Section las_example.
     match find_promotable_alloca c with
       | Some (IId i, _) =>
           {| init := init c ;
-             blks := las_ocfg (blks c) i ;
+             blks := las_ocfg i (blks c) ;
              args := args c |}
       | _ => c
     end.
@@ -181,7 +192,7 @@ Example cfg1 : cfg dtyp :=
 Compute (find_promotable_alloca cfg1).
 
 Compute (las cfg1).
-Compute (las_code code1 (Name "a")).
+Compute (las_code (Name "a") None code1).
 
 (* ------------------------------------------------------------------- *)
 (* Specification of the Load-after-store optimization. *)
