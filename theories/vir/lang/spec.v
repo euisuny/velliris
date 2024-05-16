@@ -35,9 +35,6 @@ Definition HaveAttr : fn_attr -> list fn_attr -> list fn_attr -> bool :=
 Section spec.
   Context Σ `{!vellirisGS Σ}.
 
-  Definition frame_WF {A} (i_t i_s : list A) : iPropI Σ :=
-    ((⌜length i_s > 0 -> length i_t > 0⌝)%Z)%I.
-
   Definition state_lookup (state : language.state vir_lang) (a : Z) v : iProp Σ :=
     let h := (vir_heap state.(vmem)) in
     ⌜h !! a = v⌝.

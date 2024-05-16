@@ -353,7 +353,7 @@ Section las_example_proof.
     iApply (target_red_mono with "[] [Hs_t Hd_t Hlt]"); cycle 1.
     { iPoseProof (target_instr_pure with "Hs_t [] Hd_t") as "H'".
     cbn.
-
+  Admitted.
 
   Lemma las_instr_list_sim b a v_s i_s ptr:
     [ a := UVALUE_Addr ptr ]s i_s -∗

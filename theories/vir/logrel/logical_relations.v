@@ -32,25 +32,6 @@ Section logical_relations_def.
 
   (* ------------------------------------------------------------------------ *)
   (** *Invariants *)
-  (* Invariant for expressions. *)
-  Definition frame_γ γ i (L : list local_id) :=
-    (⌜NoDup L⌝ ∗
-    (* Current stack frame *)
-    vir_state.stack γ i ∗
-    (* Domain of local environments on source and target *)
-    ldomain γ (current_frame i) (list_to_set L))%I.
-
-  Definition frame_tgt := (frame_γ sheapG_heap_target).
-  Definition frame_src := (frame_γ sheapG_heap_source).
-
-  Definition frame_inv i_t i_s (L_t L_s : list local_id) C : iProp Σ :=
-    (* Current stack frame *)
-    frame_WF i_t i_s ∗
-    (* Checkout set *)
-    checkout C ∗
-    (* Source and target resources *)
-    frame_tgt i_t L_t ∗ frame_src i_s L_s.
-
   Definition local_inv i_t i_s L_t L_s C : iProp Σ :=
     frame_inv i_t i_s L_t.*1 L_s.*1 C ∗ ΠL i_t i_s L_t L_s.
 
