@@ -1,3 +1,7 @@
+(* ======================================================================== *)
+(* VIR Language. *)
+(* ======================================================================== *)
+
 From Coq Require Import String.
 From Equations Require Export Equations.
 
@@ -12,6 +16,8 @@ From Vellvm Require Export
      Handlers.Handlers
      LLVMAst
      Semantics.LLVMEvents.
+
+(* ------------------------------------------------------------------------ *)
 
 Import DenoteTactics.
 
@@ -63,7 +69,9 @@ Import DenoteTactics.
         a lightweight specification to how call events may affect memory.
  *)
 
+(* ------------------------------------------------------------------------ *)
 (** *Instantiation of [VIR] language *)
+(* ------------------------------------------------------------------------ *)
 
 (* ------------------------------------------------------------------------ *)
 (* Auxillary functions for function calls in VIR *)
@@ -639,6 +647,8 @@ Notation "et '⪯0' es [{ Φ }]" :=
 (* Some useful tactics *)
 (* TODO Move to [program_logic] for the proofs there. *)
 
+From ITree.Events Require Import State StateFacts.
+
 Ltac itree_simp e :=
   lazymatch e with
   (* Basic rewrite *)
@@ -655,6 +665,45 @@ Ltac itree_simp e :=
   | interp ?f (translate ?t ?k) => rewrite (interp_translate f t k)
   | interp _ (translate _ _) => rewrite interp_translate
   end.
+
+Ltac itree_state_simp e :=
+  lazymatch e with
+  (* Basic rewrite *)
+  | interp_state _ (ITree.trigger ?e) _ => rewrite (interp_state_vis e)
+  | interp_state _ (Vis _ _) _ => rewrite interp_state_vis
+  | interp_state _ (Tau _) _ => rewrite interp_state_tau
+  | interp_state _ (Ret _) _ => rewrite interp_state_ret
+  | interp_state _ (ITree.bind _) _ => rewrite interp_state_bind
+  end.
+
+Ltac eq_itree_simp :=
+  try timeout 1 (autorewrite with itree); cbn;
+  match goal with
+  | |- Tau _ ≅ Tau _ => apply eqitree_Tau
+  (* Some symbolic execution under ITree rewrites on [eq_itree']*)
+  | |- ?l ≅ ?r =>
+    (* Try doing ITree rewriting on both sides if possible *)
+    (itree_state_simp l + itree_simp l) +
+    (itree_state_simp r + itree_simp r)
+  end.
+
+Ltac src_final :=
+  repeat
+  match goal with
+    | |- context[source_red (Tau _) _] =>
+        iApply source_red_tau
+    | |- context[source_red (Ret _) _] =>
+        iApply source_red_base
+   end.
+
+Ltac tgt_final :=
+  repeat
+  match goal with
+    | |- context[target_red (Tau _) _] =>
+        iApply target_red_tau
+    | |- context[target_red (Ret _) _] =>
+        iApply target_red_base
+   end.
 
 Ltac Tau := iApply sim_expr_tau + iApply sim_expr'_tau.
 

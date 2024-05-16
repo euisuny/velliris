@@ -1,55 +1,13 @@
-(** * Primitive Laws. *)
+(* ======================================================================== *)
+(* Primitive laws on instruction-related events. *)
+(* ======================================================================== *)
 
 From iris.prelude Require Import options.
 
 From velliris.program_logic Require Import program_logic.
 From velliris.vir.lang Require Export lang.
 
-From ITree.Events Require Import State StateFacts.
-
 Set Default Proof Using "Type*".
-
-Ltac itree_state_simp e :=
-  lazymatch e with
-  (* Basic rewrite *)
-  | interp_state _ (ITree.trigger ?e) _ => rewrite (interp_state_vis e)
-  | interp_state _ (Vis _ _) _ => rewrite interp_state_vis
-  | interp_state _ (Tau _) _ => rewrite interp_state_tau
-  | interp_state _ (Ret _) _ => rewrite interp_state_ret
-  | interp_state _ (ITree.bind _) _ => rewrite interp_state_bind
-  end.
-
-Ltac eq_itree_simp :=
-  try timeout 1 (autorewrite with itree); cbn;
-  match goal with
-  | |- Tau _ ≅ Tau _ => apply eqitree_Tau
-  (* Some symbolic execution under ITree rewrites on [eq_itree']*)
-  | |- ?l ≅ ?r =>
-    (* Try doing ITree rewriting on both sides if possible *)
-    (itree_state_simp l + itree_vsimp l + itree_simp l) +
-    (itree_vsimp r + itree_simp r + itree_state_simp r)
-  end.
-
-Ltac unfold_interp_L2 :=
-  rewrite ?/interp_L2 ?/handle_L0_L2 ?/add_tau ?/lift_pure_err ?/lift_err.
-
-Ltac src_final :=
-  repeat
-  match goal with
-    | |- context[source_red (Tau _) _] =>
-        iApply source_red_tau
-    | |- context[source_red (Ret _) _] =>
-        iApply source_red_base
-   end.
-
-Ltac tgt_final :=
-  repeat
-  match goal with
-    | |- context[target_red (Tau _) _] =>
-        iApply target_red_tau
-    | |- context[target_red (Ret _) _] =>
-        iApply target_red_base
-   end.
 
 (* ------------------------------------------------------------------------ *)
 (* Utility  *)
@@ -69,16 +27,15 @@ Definition update_block (b : logical_block) (f : mem_block -> mem_block) : logic
     | LBlock n m i => LBlock n (f m) i
   end.
 
-(* ======================================================================== *)
-(* Primitive laws on instruction-related events. *)
-
+(* ------------------------------------------------------------------------ *)
 Section primitive_rules.
 
   Context {Σ} `{!vellirisGS Σ}.
 
+  Local Ltac unfold_interp_L2 :=
+    rewrite ?/interp_L2 ?/handle_L0_L2 ?/add_tau ?/lift_pure_err ?/lift_err.
   Local Ltac solve_eq :=
     repeat (cbn; unfold_interp_L2; eq_itree_simp).
-
   Local Ltac final := src_final; tgt_final; done.
 
   (* ------------------------------------------------------------------------ *)
@@ -119,9 +76,7 @@ Section primitive_rules.
     iSplitL "".
     { iPureIntro; solve_eq. rewrite Ht. by solve_eq. }
 
-    iFrame.
-
-    apply allocate_inv in Ht.
+    iFrame; apply allocate_inv in Ht.
     destruct Ht as (?&?&?). inv H0; inv H1.
 
     iSplitR "Hl"; last final.
@@ -165,8 +120,7 @@ Section primitive_rules.
       Ψ (Ret (read_in_mem_block (lb_mem b) (snd ptr) τ))) -∗
     source_red (η := vir_handler) (trigger (Load τ (DVALUE_Addr ptr))) Ψ.
   Proof.
-    destruct b.
-    iApply source_load_block.
+    destruct b; iApply source_load_block.
   Qed.
 
   Lemma source_load l τ v Ψ q :
@@ -181,12 +135,11 @@ Section primitive_rules.
     iIntros (σ_t σ_s) "SI".
     iDestruct "SI" as (???) "(Hh_s & Hh_t & H_c & Hbij & %WF & SI)".
 
-    iPoseProof (heap_read with "Hh_s Hs") as "%lookup".
-    cbn.
+    iPoseProof (heap_read with "Hh_s Hs") as "%lookup"; cbn.
     pose proof (read_uvalue_logical_view _ _ _ _ Hs Hτ lookup) as Hread.
 
-    iModIntro.
-    iExists _,
+    iModIntro;
+      iExists _,
       (dvalue_to_uvalue v),
       (fun x => Tau (Ret x)), σ_s. iFrame. (* Long processing time *)
     iSpecialize ("Hl" with "Hs").
@@ -203,14 +156,12 @@ Section primitive_rules.
     source_red (η := vir_handler) (trigger (Store (DVALUE_Addr ptr) v')) Ψ.
   Proof.
     rewrite source_red_unfold.
-    iIntros "Hs Hl". iLeft.
-    iIntros (σ_t σ_s) "SI".
+    iIntros "Hs Hl"; iLeft; iIntros (σ_t σ_s) "SI".
     iDestruct "SI" as (???) "(Hh_s & Hh_t & H_c & Hbij & SI)".
 
     iDestruct (heap_read_st_1 with "Hh_s Hs") as %?; auto.
     iPoseProof (heap_write with "Hh_s Hs") as ">(Hh_s & Hs)".
-    cbn. destruct ptr.
-    iSpecialize ("Hl" with "Hs").
+    cbn; destruct ptr; iSpecialize ("Hl" with "Hs").
 
     iModIntro.
     iExists _,tt,(fun x => Tau(Ret x)),_.
@@ -266,11 +217,10 @@ Section primitive_rules.
 
     epose proof (@add_all_index_twice _ _ _ _ _ 0
         (init_block (N.of_nat (length (serialize_dvalue v)))) Hlen).
-    apply leibniz_equiv in H0. rewrite H0.
-    rewrite !Zlength_correct in Hlen.
+    apply leibniz_equiv in H0.
+    rewrite H0 !Zlength_correct in Hlen.
     apply Nat2Z.inj in Hlen. rewrite Hlen.
-    rewrite /frames.
-    destruct (vmem σ_s) ; cbn in *.
+    rewrite /frames; destruct (vmem σ_s) ; cbn in *.
 
     destruct_HC "Hh_s".
 
@@ -302,9 +252,7 @@ Section primitive_rules.
       source_red (η := vir_handler) (trigger (LocalRead x)) Ψ.
   Proof.
     rewrite source_red_unfold.
-    iIntros "Hl Hf H".
-    iLeft.
-    iIntros (σ_t σ_s) "SI".
+    iIntros "Hl Hf H"; iLeft; iIntros (σ_t σ_s) "SI".
 
     iDestruct "SI" as (???) "(Hh_s & Hh_t & H_c & Hbij & SI)".
 
@@ -427,8 +375,7 @@ Section primitive_rules.
     iExists dvalue,
       (DVALUE_Addr (z, z0)),(fun x => Tau (Ret x)),
       (update_mem m σ_t).
-    iSplitL "".
-
+    iSplitL ""; iFrame.
     { iPureIntro. solve_eq; rewrite Ht; by solve_eq. }
     iFrame.
 
@@ -439,7 +386,6 @@ Section primitive_rules.
     iSplitR "Hl"; last final; cbn.
 
     iExists C, S, G; iFrame.
-
     rewrite -!vir_logical_frame_add_to_frame.
     cbn in *. unfold frames; cbn.
     destruct (vmem σ_t); cbn in *.
@@ -616,9 +562,7 @@ Section primitive_rules.
       target_red (η := vir_handler) (trigger (LocalRead x)) Ψ.
   Proof.
     rewrite target_red_unfold.
-    iIntros "Hl Hf H".
-    iLeft.
-    iIntros (σ_t σ_s) "SI".
+    iIntros "Hl Hf H"; iLeft; iIntros (σ_t σ_s) "SI".
     iDestruct "SI" as (???) "(Hh_s & Hh_t & H_c & Hbij & SI)".
 
     iDestruct (lheap_lookup with "Hh_t Hf Hl") as %Ht.
@@ -752,7 +696,7 @@ Section primitive_rules.
     iIntros (Hs Hτ_t Hτ_s) "Hl_t Hl_s".
     iApply target_red_sim_expr.
     iApply (target_load _ _ _ _ _ Hs Hτ_t with "Hl_t").
-    iIntros "Hl_t".
+    iIntros "Hl_t";
 
     iApply source_red_sim_expr.
     iApply (source_load _ _ _ _ _ Hs Hτ_s with "Hl_s").
