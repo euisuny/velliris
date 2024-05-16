@@ -34,15 +34,15 @@ theories/vir/lang/globalbij.v
 theories/vir/lang/heapbij.v
 theories/vir/lang/spec.v
 theories/vir/lang/vir_sim_properties.v
+theories/vir/lang/interp_properties.v
 theories/vir/lang/tactics.v
 theories/vir/lang/lang.v
 
 # Rules for the program logic
-theories/vir/rules/primitive_laws.v
+theories/vir/rules/event_laws.v
 theories/vir/rules/bij_laws.v
 theories/vir/rules/frame_laws.v
 theories/vir/rules/instr_laws.v
-theories/vir/rules/interp_properties.v
 theories/vir/rules/rules.v
 
 theories/vir/logrel/wellformedness.v

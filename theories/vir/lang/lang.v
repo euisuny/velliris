@@ -10,4 +10,5 @@ From velliris.vir.lang Require Export
     heapbij
     spec
     vir_sim_properties
+    interp_properties
     tactics.
