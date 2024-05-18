@@ -8,7 +8,6 @@ From velliris.vir.lang Require Export lang.
 Set Default Proof Using "Type*".
 Import uPred.
 
-From ITree Require Import ITree Eq.EqAxiom Eq.Eqit Events.StateFacts.
 From Vellvm Require Import Handlers.Handlers.
 
 Import LLVMEvents.
@@ -432,7 +431,7 @@ Section local_properties.
         iClear "HC Hb Hl_t Hl_s CI Hclose Ht IH Ha".
         iExFalso.
         iPoseProof (heap_mapsto_combine_0 with "Has Hs") as "H".
-        iDestruct (mapsto_valid with "H") as %Hi.
+        iDestruct (vir_state.mapsto_valid with "H") as %Hi.
         done. }
 
       cbn; destruct (decide (a ∈ dom L_t)) eqn: Hat.
@@ -457,7 +456,7 @@ Section local_properties.
         iClear "HC Hb Hl_t Hl_s CI Hclose Hs IH Ha".
         iExFalso.
         iPoseProof (heap_mapsto_combine_0 with "Hat Ht") as "H".
-        iDestruct (mapsto_valid with "H") as %Hi.
+        iDestruct (vir_state.mapsto_valid with "H") as %Hi.
         done. }
 
       iSpecialize ("IH" with "Hl HC Hl_t Hl_s Hh_t Hh_s CI Hbij SI_rem").
@@ -899,13 +898,9 @@ Section local_properties.
     unfold interp_L2.
     iApply sim_coind_Proper.
     { rewrite bind_trigger.
-      rewrite interp_state_vis; cbn. rewrite /add_tau. cbn.
-      rewrite bind_tau bind_bind.
-      reflexivity. }
+      solve_eq. cbn. rewrite bind_tau. done. }
     { rewrite bind_trigger.
-      rewrite interp_state_vis; cbn. rewrite /add_tau. cbn.
-      rewrite bind_tau bind_bind.
-      reflexivity. }
+      solve_eq. cbn. rewrite bind_tau. done. }
     iApply sim_coind_tau.
 
     destruct (vlocal σ_s) eqn: Hleq_s. cbn -[state_interp].
@@ -948,14 +943,14 @@ Section local_properties.
     iDestruct ("Ha" with "SI") as ">(CI & Hst & Hss & SI)".
 
     cbn -[state_interp].
-    rewrite !interp_state_tau.
+    rewrite !StateFacts.interp_state_tau.
     iApply sim_coind_tau.
-    rewrite !interp_state_vis !bind_tau !bind_bind.
+    rewrite !StateFacts.interp_state_vis !bind_tau !bind_bind.
     cbn -[state_interp]. rewrite /free_frame. rewrite Hmσ_t Hmσ_s;
       cbn -[state_interp].
     rewrite !bind_ret_l.
     do 2 iApply sim_coind_tau.
-    rewrite !interp_state_ret.
+    rewrite !StateFacts.interp_state_ret.
 
     iApply sim_coind_base.
     cbn -[state_interp].
@@ -1019,11 +1014,11 @@ Section local_properties.
     unfold interp_L2.
     iApply sim_coind_Proper.
     { rewrite bind_trigger.
-      rewrite interp_state_vis; cbn. rewrite /add_tau. cbn.
+      rewrite StateFacts.interp_state_vis; cbn. rewrite /add_tau. cbn.
       rewrite bind_tau bind_bind.
       reflexivity. }
     { rewrite bind_trigger.
-      rewrite interp_state_vis; cbn. rewrite /add_tau. cbn.
+      rewrite StateFacts.interp_state_vis; cbn. rewrite /add_tau. cbn.
       rewrite bind_tau bind_bind.
       reflexivity. }
     iApply sim_coind_tau.
@@ -1066,13 +1061,13 @@ Section local_properties.
     iDestruct ("Ha" with "SI") as ">(CI & Hst & Hss & SI)".
 
     cbn -[state_interp].
-    rewrite !interp_state_tau.
+    rewrite !StateFacts.interp_state_tau.
     iApply sim_coind_tau.
-    rewrite !interp_state_vis !bind_tau !bind_bind.
+    rewrite !StateFacts.interp_state_vis !bind_tau !bind_bind.
     cbn. rewrite Hmσ_t Hmσ_s; cbn.
     rewrite !bind_ret_l.
     do 2 iApply sim_coind_tau.
-    rewrite !interp_state_ret.
+    rewrite !StateFacts.interp_state_ret.
 
     iApply sim_coind_base.
     cbn -[state_interp].
@@ -1215,44 +1210,32 @@ Section local_properties.
     iIntros (??) "SI".
 
     iApply sim_coind_Proper.
-    { rewrite bind_trigger.
-      rewrite interp_state_vis; cbn. rewrite /add_tau. cbn.
-      rewrite bind_tau bind_bind. rewrite !bind_ret_l.
-      rewrite interp_state_bind.
-      setoid_rewrite interp_state_tau.
-      setoid_rewrite interp_state_ret.
-      setoid_rewrite bind_tau; setoid_rewrite bind_ret_l.
-      rewrite interp_state_vis.
-      setoid_rewrite interp_state_ret.
+    { rewrite bind_trigger. solve_eq. cbn. solve_eq.
+      rewrite bind_tau.
       reflexivity. }
-    { rewrite bind_trigger.
-      rewrite interp_state_vis; cbn. rewrite /add_tau. cbn.
-      rewrite bind_tau bind_bind. rewrite !bind_ret_l.
-
-      rewrite interp_state_bind.
-      setoid_rewrite interp_state_tau.
-      setoid_rewrite interp_state_ret.
-      setoid_rewrite bind_tau; setoid_rewrite bind_ret_l.
-      rewrite interp_state_vis.
-      setoid_rewrite interp_state_ret.
+    { rewrite bind_trigger. solve_eq. cbn. solve_eq.
+      rewrite bind_tau.
       reflexivity. }
-    do 3 iApply sim_coind_tau.
+    iApply sim_coind_tau.
+    rewrite !bind_bind !bind_ret_l.
+    iApply sim_coind_tau.
+    iApply sim_coind_Proper; [ by solve_eq | by solve_eq | ].
+    iApply sim_coind_tau.
 
     destruct (vlocal σ_t) eqn: Hσ_t.
     destruct (vlocal σ_s) eqn: Hσ_s.
-    iApply sim_coind_Proper.
-    { cbn. rewrite /add_tau.
-      rewrite bind_tau. cbn.
-      rewrite !bind_bind. rewrite Hσ_t.
-      rewrite !bind_ret_l. cbn.
-      reflexivity. }
-    { cbn. rewrite /add_tau.
-      rewrite bind_tau; cbn.
-      rewrite !bind_bind. rewrite Hσ_s.
-      rewrite !bind_ret_l. cbn.
-      reflexivity. }
+    iApply sim_coind_Proper;
+      [ solve_eq; cbn; by solve_eq | solve_eq; cbn; by solve_eq |].
+    rewrite !bind_tau Hσ_t Hσ_s.
 
-    do 2 (iApply sim_coind_tau).
+    iApply sim_coind_tau.
+    iApply sim_coind_Proper.
+    { cbn; solve_eq. rewrite bind_bind !bind_ret_l; by cbn. }
+    { cbn; solve_eq. rewrite bind_bind !bind_ret_l; by cbn. }
+    iApply sim_coind_tau.
+
+    iApply sim_coind_Proper;
+      [ solve_eq; cbn; by solve_eq | solve_eq; cbn; by solve_eq |].
     iApply sim_coind_base.
 
     iCombine "SI H" as "H".
@@ -1299,44 +1282,44 @@ Section local_properties.
     rewrite /interp_L2.
     iIntros (??) "SI".
 
+    iApply sim_coind_Proper.
+    { rewrite bind_trigger. solve_eq. cbn. solve_eq.
+      rewrite bind_tau.
+      reflexivity. }
+    { rewrite bind_trigger. solve_eq. cbn. solve_eq.
+      rewrite bind_tau.
+      reflexivity. }
+    iApply sim_coind_tau.
+    rewrite !bind_bind !bind_ret_l.
+    iApply sim_coind_tau.
+    iApply sim_coind_Proper; [ by solve_eq | by solve_eq | ].
+
     destruct (vlocal σ_t) eqn: Hσ_t.
     destruct (vlocal σ_s) eqn: Hσ_s.
-    iApply sim_coind_Proper.
-    { rewrite bind_trigger.
-      rewrite interp_state_vis; cbn. rewrite /add_tau. cbn.
-      rewrite bind_tau bind_bind. rewrite !bind_ret_l.
-      reflexivity. }
-    { rewrite bind_trigger.
-      rewrite interp_state_vis; cbn. rewrite /add_tau. cbn.
-      rewrite bind_tau bind_bind. rewrite !bind_ret_l.
-      reflexivity. }
-    do 2 iApply sim_coind_tau.
+    iApply sim_coind_Proper;
+      [ solve_eq; cbn; by solve_eq | solve_eq; cbn; by solve_eq |].
+    rewrite !bind_tau Hσ_t Hσ_s.
 
+    iApply sim_coind_tau.
     iApply sim_coind_Proper.
-    { rewrite interp_state_vis; cbn. rewrite /add_tau.
-      rewrite bind_tau; setoid_rewrite interp_state_ret; cbn.
-      rewrite !bind_bind. rewrite Hσ_t.
-      rewrite !bind_ret_l. cbn.
-      reflexivity. }
-    { rewrite interp_state_vis; cbn. rewrite /add_tau.
-      rewrite bind_tau; setoid_rewrite interp_state_ret; cbn.
-      rewrite !bind_bind. rewrite Hσ_s.
-      rewrite !bind_ret_l. cbn.
-      reflexivity. }
+    { cbn; solve_eq. rewrite bind_bind !bind_ret_l; by cbn. }
+    { cbn; solve_eq. rewrite bind_bind !bind_ret_l; by cbn. }
+    iApply sim_coind_tau.
 
-    do 2 (iApply sim_coind_tau).
+    iApply sim_coind_Proper;
+      [ solve_eq; cbn; by solve_eq | solve_eq; cbn; by solve_eq |].
     iApply sim_coind_base.
 
     iCombine "SI H" as "H".
     iDestruct (alloca_new_frame with "H") as
       ">(%j_t & %j_s & SI & Hf_t & Hf_s & Ha_t & Ha_s & Hd_t & Hd_s & Hl_t & Hl_s)";
       [apply Hnodup_t | apply Hnodup_s | ]; iFrame.
-    rewrite /add_frame.  cbn -[state_interp].
+    rewrite /add_frame. cbn -[state_interp].
+
 
     rewrite !foldr_local_env; eauto. iFrame.
     cbn; rewrite Hσ_t Hσ_s; iFrame.
-    iModIntro; iExists _,_; repeat (iSplit; try done).
-    iExists _,_; repeat (iSplit; try done); iFrame.
+    do 2 sfinal.
   Qed.
 
 End local_properties.
