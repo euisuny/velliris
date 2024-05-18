@@ -1,24 +1,9 @@
 From iris.prelude Require Import options.
 
-From velliris.base_logic Require Export gen_sim_prog.
 From velliris.program_logic Require Import program_logic.
-From velliris.vir Require Export
-  vir vir_state spec util frame_laws primitive_laws tactics
-  vir_util vir_sim_properties tactics.
+From velliris.vir.lang Require Export lang.
+From velliris.vir.rules Require Export event_laws frame_laws.
 
-From ITree Require Import
-  ITree Eq.Eqit Eq.EqAxiom Events.State Events.StateFacts.
-From ITree Require Import Interp.InterpFacts Interp.TranslateFacts.
-
-From Vellvm Require Import
-  Syntax.LLVMAst
-  Semantics.LLVMEvents
-  Semantics.InterpretationStack
-  Syntax.DynamicTypes
-  Handlers.Handlers
-  Handlers.MemoryTheory.
-
-From Equations Require Import Equations.
 Import DenoteTactics.
 
 Set Default Proof Using "Type*".
@@ -225,7 +210,7 @@ Section instr_properties.
       ([ x := v ]t i -∗
         ldomain_tgt i L -∗
         stack_tgt i -∗
-        target_red (η := vir_handler) (Ret ()) Ψ) -∗
+        Ψ (Ret tt)) -∗
       target_red (η := vir_handler) (exp_conv (denote_op o)) (lift_unary_post (fun x => ⌜x = v⌝)) -∗
       target_red (η := vir_handler) (<{ %(IId x) = (INSTR_Op o) }>) Ψ.
   Proof.
@@ -268,26 +253,25 @@ Section instr_properties.
     clear H.
     iApply target_red_bind.
 
-    iApply (target_local_write with "Hl Hd Hf"); try done.
-    iIntros "Hi Hd Hs".
+    iApply (target_local_write with "Hl Hf"); try done.
+    iIntros "Hi Hs".
+    iApply target_red_eq_itree; first (by rewrite bind_ret_l).
+    iApply target_red_tau.
     iApply target_red_base.
 
-    iApply target_red_eq_itree.
-    { by rewrite bind_ret_l. }
-
-    iApply target_red_tau. iApply ("Ht" with "Hi Hd Hs").
+    iApply ("Ht" with "Hi Hd Hs").
   Qed.
 
-  Lemma source_instr_pure1 (x : LLVMAst.raw_id) (v : uvalue) o i L R1 Φ (e_t : _ R1):
+  Lemma source_instr_pure1 (x : LLVMAst.raw_id) (v : uvalue) o i L Φ:
     ⊢ stack_src i -∗
       ldomain_src i L -∗
       [ x := v ]s i -∗
       ([ x := v ]s i -∗
         ldomain_src i L -∗
         stack_src i -∗
-        source_red (η := vir_handler) (Ret ()) (fun e_s' => e_t ⪯ e_s' [{ Φ }])) -∗
+        Φ (Ret tt)) -∗
       source_red (η := vir_handler) (exp_conv (denote_op o)) (lift_unary_post (fun x => ⌜x = v⌝)) -∗
-      source_red (η := vir_handler) (<{ %(IId x) = (INSTR_Op o) }>) (fun e_s' => e_t ⪯ e_s' [{ Φ }]).
+      source_red (η := vir_handler) (<{ %(IId x) = (INSTR_Op o) }>) Φ.
   Proof.
     iIntros "Hf Hd Hl H He".
     cbn. rewrite /instr_conv.
@@ -328,16 +312,16 @@ Section instr_properties.
     clear H.
     iApply source_red_bind.
 
-    iApply (source_local_write with "Hl Hd Hf"); try done.
-    iIntros "Hi Hd Hs".
+    iApply (source_local_write with "Hl Hf"); try done.
+    iIntros "Hi Hs".
+    iApply source_red_eq_itree; first (by rewrite bind_ret_l).
+    iApply source_red_tau.
     iApply source_red_base.
 
-    iApply source_red_eq_itree.
-    { by rewrite bind_ret_l. }
-
-    iApply source_red_tau. iApply ("H" with "Hi Hd Hs").
+    iApply ("H" with "Hi Hd Hs").
   Qed.
 
+  (* BOOK MARK *)
   Lemma target_instr_pure (x : LLVMAst.raw_id) (v : uvalue) o i L Ψ:
     x ∉ L ->
     ⊢ stack_tgt i -∗
