@@ -173,11 +173,7 @@ Section proof.
             end;;
             Tau (Ret (σ, r))).
   Proof.
-    rewrite /interp_L2.
-    setoid_rewrite interp_state_vis.
-    setoid_rewrite interp_state_ret.
-    setoid_rewrite bind_tau; cbn.
-    rewrite bind_bind. apply eqit_Tau.
+    solve_eq.
     destruct (read (vmem σ) l τ) eqn: H.
     (* Nothing read ; [raiseUB] *)
     { etransitivity.
@@ -187,10 +183,10 @@ Section proof.
         { eapply eq_itree_clo_bind with (UU := eq) (t2 := trigger (ThrowUB s));
             done. }
         intros [] [] (Heq & Hu1); cbn in *. inv Heq.
-        by rewrite update_mem_id bind_ret_l.
+        rewrite update_mem_id; by solve_eq.
       - setoid_rewrite bind_bind.
         by eapply eq_itree_clo_bind with (UU := eq). }
-    { by rewrite !bind_ret_l update_mem_id. }
+    { solve_eq. by rewrite update_mem_id. }
     Unshelve. all: done.
   Qed.
 
@@ -472,18 +468,11 @@ Section proof.
           | inr x => Monad.ret x
           end;; Tau (SemNotations.Ret1 (vir.update_mem r σ) ())).
   Proof.
-    rewrite /interp_L2.
-    setoid_rewrite interp_state_vis.
-    setoid_rewrite interp_state_ret.
-    setoid_rewrite bind_tau; cbn.
+    solve_eq.
     destruct (vmem σ) eqn: H; cbn.
-    rewrite !bind_bind.
-    do 2 setoid_rewrite bind_ret_l; cbn.
-    rewrite /lift_pure_err /lift_err.
-    apply eqit_Tau.
     eapply eq_itree_clo_bind; first done.
     intros; subst. destruct u2 as (?&?); eauto.
-    done.
+    by solve_eq.
   Qed.
 
   Lemma sim_bij_store l_t l_s C v_t v_s:
@@ -823,7 +812,7 @@ Section proof.
 
   Lemma free_frame_empty γ i (m m' : memory) (mf mf': frame_stack) g L S :
     (1 < length i)%nat ->
-      free_frame (m, mf) = inr (m', mf') ->
+      Mem.free_frame (m, mf) = inr (m', mf') ->
       vir_state.stack γ i
       ∗ heap_ctx γ (⊙ (m, mf), vir_dyn (m, mf)) mf g L S
       ∗ allocaS γ (current_frame i) ∅
