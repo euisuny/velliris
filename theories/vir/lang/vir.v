@@ -748,6 +748,11 @@ Ltac Base :=
       iApply sim_expr'_base
   end.
 
+Ltac unfold_interp_L2 :=
+  rewrite ?/interp_L2 ?/handle_L0_L2 ?/add_tau ?/lift_pure_err ?/lift_err.
+Ltac solve_eq :=
+  repeat (cbn; unfold_interp_L2; eq_itree_simp).
+
 (* ------------------------------------------------------------------------ *)
 
 (* Notations for [vir] *)

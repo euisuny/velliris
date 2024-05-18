@@ -14,7 +14,7 @@ From Equations Require Import Equations.
 From velliris.logic Require Import satisfiable.
 From velliris.program_logic Require Import program_logic.
 From velliris.utils Require Import tactics.
-From velliris.vir.lang Require Import lang.
+From velliris.vir.lang Require Import vir spec.
 
 Set Default Proof Using "Type*".
 

@@ -1,15 +1,12 @@
-(** * Primitive Laws with bijection on locations. *)
-From iris.algebra Require Import auth.
+(* ======================================================================== *)
+(* Laws about programs that manipulate publicly related locations. *)
+(* ======================================================================== *)
 From iris.prelude Require Import options.
+From iris.algebra Require Import frac.
 
 From velliris.base_logic Require Export gen_sim_prog.
 From velliris.program_logic Require Import program_logic.
 From velliris.vir.lang Require Export lang.
-
-From ITree Require Import
-  ITree Eq.Eqit Eq.EqAxiom Events.State Events.StateFacts Extra.IForest.
-From Vellvm Require Import
-  Semantics.LLVMEvents Handlers.Handlers Utils.NoFailure Syntax.LLVMAst.
 
 Open Scope Z_scope.
 From Equations Require Import Equations.

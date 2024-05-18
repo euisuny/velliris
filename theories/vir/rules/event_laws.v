@@ -32,10 +32,6 @@ Section primitive_rules.
 
   Context {Σ} `{!vellirisGS Σ}.
 
-  Local Ltac unfold_interp_L2 :=
-    rewrite ?/interp_L2 ?/handle_L0_L2 ?/add_tau ?/lift_pure_err ?/lift_err.
-  Local Ltac solve_eq :=
-    repeat (cbn; unfold_interp_L2; eq_itree_simp).
   Local Ltac final := src_final; tgt_final; done.
 
   (* ------------------------------------------------------------------------ *)
@@ -218,7 +214,7 @@ Section primitive_rules.
     epose proof (@add_all_index_twice _ _ _ _ _ 0
         (init_block (N.of_nat (length (serialize_dvalue v)))) Hlen).
     apply leibniz_equiv in H0.
-    rewrite H0 !Zlength_correct in Hlen.
+    rewrite H0. rewrite !Zlength_correct in Hlen.
     apply Nat2Z.inj in Hlen. rewrite Hlen.
     rewrite /frames; destruct (vmem σ_s) ; cbn in *.
 
