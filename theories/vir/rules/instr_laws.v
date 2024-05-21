@@ -321,7 +321,6 @@ Section instr_properties.
     iApply ("H" with "Hi Hd Hs").
   Qed.
 
-  (* BOOK MARK *)
   Lemma target_instr_pure (x : LLVMAst.raw_id) (v : uvalue) o i L Ψ:
     x ∉ L ->
     ⊢ stack_tgt i -∗
@@ -330,7 +329,7 @@ Section instr_properties.
       ([ x := v ]t i -∗
         ldomain_tgt i ({[x]} ∪ L) -∗
         stack_tgt i -∗
-        target_red (η := vir_handler) (Ret ()) Ψ) -∗
+        Ψ (Ret ())) -∗
       target_red (η := vir_handler) (<{ %(IId x) = (INSTR_Op o) }>) Ψ.
   Proof.
     iIntros (H) "Hf Ht Hd H".
@@ -374,15 +373,13 @@ Section instr_properties.
 
     iApply (target_local_write_alloc with "Hd Hf"); try done.
     iIntros "Hi Hd Hs".
+    iApply target_red_eq_itree; first (by rewrite bind_ret_l).
+    iApply target_red_tau.
     iApply target_red_base.
-
-    iApply target_red_eq_itree.
-    { by rewrite bind_ret_l. }
-
-    iApply target_red_tau. iApply ("H" with "Hi Hd Hs").
+    iApply ("H" with "Hi Hd Hs").
   Qed.
 
-  Lemma source_instr_pure (x : LLVMAst.raw_id) (v : uvalue) o i L R1 Φ (e_t : _ R1):
+  Lemma source_instr_pure (x : LLVMAst.raw_id) (v : uvalue) o i L Φ:
     x ∉ L ->
     ⊢ stack_src i -∗
       source_red (η := vir_handler) (exp_conv (denote_op o)) (lift_unary_post (fun x => ⌜x = v⌝)) -∗
@@ -390,8 +387,8 @@ Section instr_properties.
       ([ x := v ]s i -∗
         ldomain_src i ({[x]} ∪ L) -∗
         stack_src i -∗
-        source_red (η := vir_handler) (Ret ()) (fun e_s' => e_t ⪯ e_s' [{ Φ }])) -∗
-      source_red (η := vir_handler) (<{ %(IId x) = (INSTR_Op o) }>) (fun e_s' => e_t ⪯ e_s' [{ Φ }]).
+        Φ (Ret tt)) -∗
+      source_red (η := vir_handler) (<{ %(IId x) = (INSTR_Op o) }>) Φ.
   Proof.
     iIntros (H) "Hf Ht Hd H".
     cbn. rewrite /instr_conv.
@@ -434,12 +431,11 @@ Section instr_properties.
 
     iApply (source_local_write_alloc with "Hd Hf"); try done.
     iIntros "Hi Hd Hs".
+    iApply source_red_eq_itree; first (by rewrite bind_ret_l).
+    iApply source_red_tau.
     iApply source_red_base.
 
-    iApply source_red_eq_itree.
-    { by rewrite bind_ret_l. }
-
-    iApply source_red_tau. iApply ("H" with "Hi Hd Hs").
+    iApply ("H" with "Hi Hd Hs").
   Qed.
 
   Lemma sim_instr_pure
@@ -578,7 +574,7 @@ Section instr_properties.
         l ↦{q}t [ LBlock size bytes cid ] -∗
         ldomain_tgt i ({[ pid ]} ∪ L) -∗
         stack_tgt i -∗
-        target_red (η := vir_handler) (Ret ()) Ψ) -∗
+        Ψ (Ret ())) -∗
       target_red (η := vir_handler)
         (<{ %(IId pid) = (INSTR_Load b dt (du, EXP_Ident (ID_Local id)) o) }>)
         Ψ.
@@ -599,8 +595,7 @@ Section instr_properties.
     iApply target_red_bind.
     iApply (target_red_mono with "[Hp Hd H] [Hf Hl]");
       [ | iApply (target_local_read with "Hl Hf"); auto]; cycle 1.
-    { iIntros "Hl Hf".
-      iApply target_red_base.
+    {iIntros "Hl Hf".
       Unshelve.
       2 : exact (lift_unary_post (fun x => ⌜x = UVALUE_Addr (l, 0%Z)⌝
        ∗ stack_tgt i ∗ [id := UVALUE_Addr (l, 0%Z)]t i)%I).
@@ -642,25 +637,18 @@ Section instr_properties.
     iApply target_red_bind.
 
     change l with ((l, 0%Z).1) at 1.
-    iApply (target_red_load1 with "Hp").
+    iApply (target_load_block with "Hp").
 
     iIntros "H'".
-    iApply target_red_base.
-
-    iApply target_red_eq_itree.
-    { by rewrite bind_ret_l !bind_tau. }
-
+    iApply target_red_eq_itree; first (by rewrite bind_ret_l bind_tau).
     iApply target_red_tau; iApply target_red_bind.
 
     iApply (target_local_write_alloc _ _ _ _ _ Ht with "Hd Hf").
     iIntros "Hi H_t H_s".
 
-    iApply target_red_base.
+    iApply target_red_eq_itree; first (by rewrite bind_ret_l).
+    iApply target_red_tau; iApply target_red_base.
 
-    iApply target_red_eq_itree.
-    { by rewrite bind_ret_l. }
-
-    iApply target_red_tau.
 
     by iSpecialize ("H" with "Hl Hi H' H_t H_s").
   Qed.
@@ -678,7 +666,7 @@ Section instr_properties.
         l ↦{q}t v -∗
         ldomain_tgt i ({[ pid ]} ∪ L) -∗
         stack_tgt i -∗
-        target_red (η := vir_handler) (Ret ()) Ψ) -∗
+        Ψ (Ret ())) -∗
       target_red (η := vir_handler)
         (<{ %(IId pid) = (INSTR_Load b dt (du, EXP_Ident (ID_Local id)) o) }>)
         Ψ.
@@ -700,7 +688,6 @@ Section instr_properties.
     iApply (target_red_mono with "[Hp Hd H] [Hf Hl]");
       [ | iApply (target_local_read with "Hl Hf"); auto]; cycle 1.
     { iIntros "Hl Hf".
-      iApply target_red_base.
       Unshelve.
       2 : exact (lift_unary_post (fun x => ⌜x = UVALUE_Addr (l, 0%Z)⌝
        ∗ stack_tgt i ∗ [id := UVALUE_Addr (l, 0%Z)]t i)%I).
@@ -741,13 +728,12 @@ Section instr_properties.
 
     iApply target_red_bind.
     iApply (target_red_mono with "[Hd Hf H Hl] [Hp]");
-      [ | iApply (target_red_load _ _ _ _ _ WF Hdt with "Hp")]; cycle 1.
+      [ | iApply (target_load _ _ _ _ _ WF Hdt with "Hp")]; cycle 1.
 
     Unshelve.
     3 : exact (lift_unary_post
           (fun x : uvalue => ⌜x = dvalue_to_uvalue v⌝ ∗ l ↦{q}t v)%I).
     { iIntros.
-      iApply target_red_base.
       iExists _; eauto. }
 
     iIntros (?) "H'".
@@ -766,8 +752,7 @@ Section instr_properties.
     3 : exact (lift_unary_post
           (fun (_ : ()) => [ pid := dvalue_to_uvalue v ]t i ∗
             ldomain_tgt i ({[pid]} ∪ L) ∗ stack_tgt i))%I.
-    { iIntros.
-      iApply target_red_base; iExists _; by iFrame. }
+    { iIntros; iExists _; by iFrame. }
 
     iIntros (?) "HP".
     iDestruct "HP" as (??)"(Hpl&Hd&Hf)".
@@ -776,7 +761,7 @@ Section instr_properties.
     iApply target_red_eq_itree.
     { by rewrite bind_ret_l. }
 
-    iApply target_red_tau. by destruct v0.
+    iApply target_red_tau; iApply target_red_base. by destruct v0.
   Qed.
 
    Lemma source_instr_load1 l dt du b o L i pid id q Ψ size bytes cid:
@@ -791,7 +776,7 @@ Section instr_properties.
         l ↦{q}s [ LBlock size bytes cid ] -∗
         ldomain_src i ({[ pid ]} ∪ L) -∗
         stack_src i -∗
-        source_red (η := vir_handler) (Ret ()) Ψ) -∗
+        Ψ (Ret ())) -∗
       source_red (η := vir_handler)
         (<{ %(IId pid) = (INSTR_Load b dt (du, EXP_Ident (ID_Local id)) o) }>)
         Ψ.
@@ -813,7 +798,6 @@ Section instr_properties.
     iApply (source_red_mono with "[Hp Hd H] [Hf Hl]");
       [ | iApply (source_local_read with "Hl Hf"); auto]; cycle 1.
     { iIntros "Hl Hf".
-      iApply source_red_base.
       Unshelve.
       2 : exact (lift_unary_post (fun x => ⌜x = UVALUE_Addr (l, 0%Z)⌝
        ∗ stack_src i ∗ [id := UVALUE_Addr (l, 0%Z)]s i)%I).
@@ -855,10 +839,9 @@ Section instr_properties.
     iApply source_red_bind.
 
     change l with ((l, 0%Z).1) at 1.
-    iApply (source_red_load1 with "Hp").
+    iApply (source_load_block with "Hp").
 
     iIntros "H'".
-    iApply source_red_base.
 
     iApply source_red_eq_itree.
     { by rewrite bind_ret_l !bind_tau. }
@@ -868,12 +851,10 @@ Section instr_properties.
     iApply (source_local_write_alloc _ _ _ _ _ Ht with "Hd Hf").
     iIntros "Hi H_t H_s".
 
-    iApply source_red_base.
-
     iApply source_red_eq_itree.
     { by rewrite bind_ret_l. }
 
-    iApply source_red_tau.
+    iApply source_red_tau. iApply source_red_base.
 
     by iSpecialize ("H" with "Hl Hi H' H_t H_s").
   Qed.
@@ -891,7 +872,7 @@ Section instr_properties.
         l ↦{q}s v -∗
         ldomain_src i ({[ pid ]} ∪ L) -∗
         stack_src i -∗
-        source_red (η := vir_handler) (Ret ()) Ψ) -∗
+        Ψ (Ret ())) -∗
       source_red (η := vir_handler)
         (<{ %(IId pid) = (INSTR_Load b dt (du, EXP_Ident (ID_Local id)) o) }>)
         Ψ.
@@ -913,7 +894,6 @@ Section instr_properties.
     iApply (source_red_mono with "[Hp Hd H] [Hf Hl]");
       [ | iApply (source_local_read with "Hl Hf"); auto]; cycle 1.
     { iIntros "Hl Hf".
-      iApply source_red_base.
       Unshelve.
       2 : exact (lift_unary_post (fun x => ⌜x = UVALUE_Addr (l, 0%Z)⌝
        ∗ stack_src i ∗ [id := UVALUE_Addr (l, 0%Z)]s i)%I).
@@ -953,14 +933,12 @@ Section instr_properties.
 
     iApply source_red_bind.
     iApply (source_red_mono with "[Hd Hf H Hl] [Hp]");
-      [ | iApply (source_red_load _ _ _ _ _ WF Hdt with "Hp")]; cycle 1.
+      [ | iApply (source_load _ _ _ _ _ WF Hdt with "Hp")]; cycle 1.
 
     Unshelve.
     3 : exact (lift_unary_post
           (fun x : uvalue => ⌜x = dvalue_to_uvalue v⌝ ∗ l ↦{q}s v)%I).
-    { iIntros.
-      iApply source_red_base.
-      iExists _; eauto. }
+    { iIntros; iExists _; eauto. }
 
     iIntros (?) "H'".
     iDestruct "H'" as (???) "H'"; subst.
@@ -978,8 +956,7 @@ Section instr_properties.
     3 : exact (lift_unary_post
           (fun (_ : ()) => [ pid := dvalue_to_uvalue v ]s i ∗
             ldomain_src i ({[pid]} ∪ L) ∗ stack_src i))%I.
-    { iIntros.
-      iApply source_red_base; iExists _; by iFrame. }
+    { iIntros; iExists _; by iFrame. }
 
     iIntros (?) "HP".
     iDestruct "HP" as (??)"(Hpl&Hd&Hf)".
@@ -988,7 +965,7 @@ Section instr_properties.
     iApply source_red_eq_itree.
     { by rewrite bind_ret_l. }
 
-    iApply source_red_tau. by destruct v0.
+    iApply source_red_tau. iApply source_red_base. by destruct v0.
   Qed.
 
   Lemma target_instr_store b dt val o ptr i n id' v L Ψ dv:
@@ -1007,8 +984,7 @@ Section instr_properties.
         stack_tgt i -∗
         [ id' := UVALUE_Addr (ptr, 0%Z) ]t i -∗
         ptr ↦t dv -∗
-        target_red (η := vir_handler)
-          (Ret ()) Ψ) -∗
+        Ψ (Ret ())) -∗
       target_red (η := vir_handler)
         (<{ %(IVoid n) =
             (INSTR_Store b (dt, val) (DTYPE_Pointer, EXP_Ident (ID_Local id')) o) }>)
@@ -1097,7 +1073,6 @@ Section instr_properties.
       [ | iApply (target_local_read with "Hl Hf"); auto]; cycle 1.
 
     { iIntros "Hl Hf".
-      iApply target_red_base.
       Unshelve.
       2 : exact (lift_unary_post (fun x => ⌜x = UVALUE_Addr (ptr, 0%Z)⌝
        ∗ stack_tgt i ∗ [id' := UVALUE_Addr (ptr, 0%Z)]t i)%I).
@@ -1133,13 +1108,13 @@ Section instr_properties.
     apply dvalue_has_dtyp_fun_sound in Hdt, Hdt'.
 
     pose proof (dvalue_has_dtyp_serialize _ _ _ Hdt Hdt').
-    iApply (target_red_store _ _ _ _ H1 with "Hp").
+    iApply (target_store _ _ _ _ H1 with "Hp").
     iIntros "Hp".
-    iApply target_red_base.
     iApply target_red_eq_itree.
     { by rewrite bind_ret_l. }
 
     iApply target_red_tau.
+    iApply target_red_base.
 
     iApply ("HP" with "Hd Hf Hl Hp").
   Qed.
@@ -1161,8 +1136,7 @@ Section instr_properties.
         stack_src i -∗
         [ id' := UVALUE_Addr (ptr, 0%Z) ]s i -∗
         ptr ↦s dv -∗
-        source_red (η := vir_handler)
-          (Ret ()) Ψ) -∗
+        Ψ (Ret ())) -∗
       source_red (η := vir_handler)
         (<{ %(IVoid n) =
             (INSTR_Store b (dt, val)
@@ -1253,7 +1227,6 @@ Section instr_properties.
       [ | iApply (source_local_read with "Hl Hf"); auto]; cycle 1.
 
     { iIntros "Hl Hf".
-      iApply source_red_base.
       Unshelve.
       2 : exact (lift_unary_post (fun x => ⌜x = UVALUE_Addr (ptr, 0%Z)⌝
        ∗ stack_src i ∗ [id' := UVALUE_Addr (ptr, 0%Z)]s i)%I).
@@ -1261,7 +1234,6 @@ Section instr_properties.
 
     iIntros (?) "HΦ".
     iDestruct "HΦ" as (???) "(Hf & Hl)".
-
 
     destruct (dvalue_eq_dec (d1:=DVALUE_Addr (ptr, 0%Z)) (d2:=DVALUE_Poison)) eqn: Heq ; [ done | ].
     iApply source_red_eq_itree.
@@ -1281,22 +1253,19 @@ Section instr_properties.
       reflexivity. }
 
     subst.
-    iApply source_red_tau.
-    iApply source_red_bind.
+    iApply source_red_tau; iApply source_red_bind.
 
     destruct (dvalue_has_dtyp_fun v dt) eqn: Hdt; subst; try done.
     destruct (dvalue_has_dtyp_fun dv dt) eqn: Hdt'; subst; try done.
     apply dvalue_has_dtyp_fun_sound in Hdt, Hdt'.
 
     pose proof (dvalue_has_dtyp_serialize _ _ _ Hdt Hdt').
-    iApply (source_red_store _ _ _ _ H1 with "Hp").
+    iApply (source_store _ _ _ _ H1 with "Hp").
     iIntros "Hp".
-    iApply source_red_base.
     iApply source_red_eq_itree.
     { by rewrite bind_ret_l. }
 
-    iApply source_red_tau.
-
+    iApply source_red_tau; iApply source_red_base.
     iApply ("HP" with "Hd Hf Hl Hp").
   Qed.
 
@@ -1315,7 +1284,7 @@ Section instr_properties.
         stack_src i -∗
         [ id' := UVALUE_Addr (ptr, 0%Z) ]s i -∗
         ptr ↦s [ LBlock size (add_all_index (serialize_dvalue dv) 0%Z bytes) idx ] -∗
-        source_red (η := vir_handler) (Ret ()) Ψ) -∗
+        Ψ (Ret ())) -∗
       source_red (η := vir_handler)
         (<{ %(IVoid n) =
             (INSTR_Store b (dt, val)
@@ -1405,7 +1374,6 @@ Section instr_properties.
       [ | iApply (source_local_read with "Hl Hf"); auto]; cycle 1.
 
     { iIntros "Hl Hf".
-      iApply source_red_base.
       Unshelve.
       2 : exact (lift_unary_post (fun x => ⌜x = UVALUE_Addr (ptr, 0%Z)⌝
        ∗ stack_src i ∗ [id' := UVALUE_Addr (ptr, 0%Z)]s i)%I).
@@ -1436,13 +1404,12 @@ Section instr_properties.
     iApply source_red_bind.
 
     change (ptr) with ((ptr, 0%Z).1) at 1.
-    iApply (source_red_store1 with "Hp").
+    iApply (source_store_block with "Hp").
     iIntros "Hp".
-    iApply source_red_base.
     iApply source_red_eq_itree.
     { by rewrite bind_ret_l. }
 
-    iApply source_red_tau.
+    iApply source_red_tau; iApply source_red_base.
 
     cbn.
     by iSpecialize ("HP" with "Hd Hf Hl Hp").
@@ -1463,7 +1430,7 @@ Section instr_properties.
         stack_tgt i -∗
         [ id' := UVALUE_Addr (ptr, 0%Z) ]t i -∗
         ptr ↦t [ LBlock size (add_all_index (serialize_dvalue dv) 0%Z bytes) idx ] -∗
-        target_red (η := vir_handler) (Ret ()) Ψ) -∗
+        Ψ (Ret ())) -∗
       target_red (η := vir_handler)
         (<{ %(IVoid n) =
             (INSTR_Store b (dt, val)
@@ -1553,7 +1520,6 @@ Section instr_properties.
       [ | iApply (target_local_read with "Hl Hf"); auto]; cycle 1.
 
     { iIntros "Hl Hf".
-      iApply target_red_base.
       Unshelve.
       2 : exact (lift_unary_post (fun x => ⌜x = UVALUE_Addr (ptr, 0%Z)⌝
        ∗ stack_tgt i ∗ [id' := UVALUE_Addr (ptr, 0%Z)]t i)%I).
@@ -1584,13 +1550,12 @@ Section instr_properties.
     iApply target_red_bind.
 
     change (ptr) with ((ptr, 0%Z).1) at 1.
-    iApply (target_red_store1 with "Hp").
+    iApply (target_store_block with "Hp").
     iIntros "Hp".
-    iApply target_red_base.
     iApply target_red_eq_itree.
     { by rewrite bind_ret_l. }
 
-    iApply target_red_tau.
+    iApply target_red_tau; iApply target_red_base.
 
     cbn.
     by iSpecialize ("HP" with "Hd Hf Hl Hp").
@@ -1620,7 +1585,7 @@ Lemma eq_Handler_instrE_conv:
     (λ (T : Type) (x : (λ H : Type, instr_E H) T),
       Vis (instrE_conv T x) Monad.ret)
     (λ (T : Type) (e : instr_E T),
-            Vis (call_conv T (instr_to_L0' e)) (λ x0 : T, Ret x0)).
+            Vis (call_conv T (LLVMEvents.instr_to_L0' e)) (λ x0 : T, Ret x0)).
 Proof.
   repeat intro.
   rewrite /instr_to_L0'.
@@ -1982,7 +1947,7 @@ Section exp_laws.
       end.
       2 : done. iApply "H'".
       iIntros "Hl Hst".
-      iApply source_red_base. Unshelve.
+      Unshelve.
       2 : exact (fun x => ⌜x = Ret (UVALUE_Addr l)⌝ ∗ [ id := UVALUE_Addr l ]s i ∗ stack_src i)%I.
       by iFrame. }
     cbn.
@@ -2024,7 +1989,7 @@ Section exp_laws.
     rewrite bind_ret_l.
 
     cbn.
-    rewrite !bind_bind. rewrite interp_state_bind.
+    rewrite !bind_bind. rewrite StateFacts.interp_state_bind.
 
     iDestruct "SI" as (???) "(Hh_s & Hh_t & H_c & Hbij' & SI)".
 
@@ -2036,10 +2001,10 @@ Section exp_laws.
     rewrite bind_bind.
     destruct (vlocal σ_s); cbn.
     rewrite /ITree.map !bind_bind !bind_ret_l bind_tau.
-    iApply sim_coind_tauR. rewrite interp_state_ret.
-    rewrite bind_ret_l. rewrite interp_state_bind.
+    iApply sim_coind_tauR. rewrite StateFacts.interp_state_ret.
+    rewrite bind_ret_l. rewrite StateFacts.interp_state_bind.
     rewrite StateFacts.interp_state_tau. rewrite bind_tau.
-    iApply sim_coind_tauR. rewrite interp_ret interp_state_ret.
+    iApply sim_coind_tauR. rewrite interp_ret StateFacts.interp_state_ret.
     rewrite bind_ret_l. cbn.
 
     iSpecialize ("H" with "Hid").
@@ -2062,25 +2027,23 @@ Section more_properties.
   Context {Σ : gFunctors} `{!vellirisGS Σ}.
 
 
-   Lemma target_instr_load_in l dt du b o L i pid id q Ψ u v:
+   Lemma target_instr_load_in l dt du b o i pid id q Ψ u v:
     is_supported dt ->
     dvalue_has_dtyp v dt ->
     ⊢ l ↦{q}t v -∗
       [ id := UVALUE_Addr (l, 0%Z) ]t i -∗
       [ pid := u ]t i -∗
-      ldomain_tgt i L -∗
       stack_tgt i -∗
       ([ id := UVALUE_Addr (l, 0%Z) ]t i -∗
         [ pid := dvalue_to_uvalue v]t i -∗
         l ↦{q}t v -∗
-        ldomain_tgt i L -∗
         stack_tgt i -∗
-        target_red (η := vir_handler) (Ret ()) Ψ) -∗
+        Ψ (Ret ())) -∗
       target_red (η := vir_handler)
         (<{ %(IId pid) = (INSTR_Load b dt (du, EXP_Ident (ID_Local id)) o) }>)
         Ψ.
   Proof.
-    iIntros (WF Hτ) "Hp Hl Hid Hd Hf H".
+    iIntros (WF Hτ) "Hp Hl Hid Hf H".
 
     cbn. rewrite /instr_conv.
     iApply target_red_eq_itree.
@@ -2094,10 +2057,9 @@ Section more_properties.
       simp instrE_conv. reflexivity. }
 
     iApply target_red_bind.
-    iApply (target_red_mono with "[Hp Hid Hd H] [Hf Hl]");
+    iApply (target_red_mono with "[Hp Hid H] [Hf Hl]");
       [ | iApply (target_local_read with "Hl Hf"); auto]; cycle 1.
     { iIntros "Hl Hf".
-      iApply target_red_base.
       Unshelve.
       2 : exact (lift_unary_post (fun x => ⌜x = UVALUE_Addr (l, 0%Z)⌝
        ∗ stack_tgt i ∗ [id := UVALUE_Addr (l, 0%Z)]t i)%I).
@@ -2139,49 +2101,43 @@ Section more_properties.
     iApply target_red_bind.
 
     change l with ((l, 0%Z).1) at 1.
-    iApply (target_red_load with "Hp"); auto.
+    iApply (target_load with "Hp"); auto.
 
     iIntros "H'".
-    iApply target_red_base.
-
     iApply target_red_eq_itree.
     { by rewrite bind_ret_l !bind_tau. }
 
     iApply target_red_tau; iApply target_red_bind.
 
-    iApply (target_local_write with "Hid Hd Hf").
-    iIntros "Hi H_t H_s".
-
-    iApply target_red_base.
+    iApply (target_local_write with "Hid Hf").
+    iIntros "Hi H_t".
 
     iApply target_red_eq_itree.
     { by rewrite bind_ret_l. }
 
-    iApply target_red_tau.
+    iApply target_red_tau; iApply target_red_base.
 
     cbn.
-    by iSpecialize ("H" with "Hl Hi H' H_t H_s").
+    by iSpecialize ("H" with "Hl Hi H' H_t").
   Qed.
 
-   Lemma source_instr_load_in l dt du b o L i pid id q Ψ u v:
+   Lemma source_instr_load_in l dt du b o i pid id q Ψ u v:
     is_supported dt ->
     dvalue_has_dtyp v dt  ->
     ⊢ l ↦{q}s v -∗
       [ id := UVALUE_Addr (l, 0%Z) ]s i -∗
       [ pid := u ]s i -∗
-      ldomain_src i L -∗
       stack_src i -∗
       ([ id := UVALUE_Addr (l, 0%Z) ]s i -∗
         [ pid := dvalue_to_uvalue v ]s i -∗
         l ↦{q}s v -∗
-        ldomain_src i L -∗
         stack_src i -∗
-        source_red (η := vir_handler) (Ret ()) Ψ) -∗
+        Ψ (Ret ())) -∗
       source_red (η := vir_handler)
         (<{ %(IId pid) = (INSTR_Load b dt (du, EXP_Ident (ID_Local id)) o) }>)
         Ψ.
   Proof.
-    iIntros (WF Hdt) "Hp Hl Hid Hd Hf H".
+    iIntros (WF Hdt) "Hp Hl Hid Hf H".
 
     cbn. rewrite /instr_conv.
     iApply source_red_eq_itree.
@@ -2195,10 +2151,9 @@ Section more_properties.
       simp instrE_conv. reflexivity. }
 
     iApply source_red_bind.
-    iApply (source_red_mono with "[Hp Hid Hd H] [Hf Hl]");
+    iApply (source_red_mono with "[Hp Hid H] [Hf Hl]");
       [ | iApply (source_local_read with "Hl Hf"); auto]; cycle 1.
     { iIntros "Hl Hf".
-      iApply source_red_base.
       Unshelve.
       2 : exact (lift_unary_post (fun x => ⌜x = UVALUE_Addr (l, 0%Z)⌝
        ∗ stack_src i ∗ [id := UVALUE_Addr (l, 0%Z)]s i)%I).
@@ -2240,28 +2195,24 @@ Section more_properties.
     iApply source_red_bind.
 
     change l with ((l, 0%Z).1) at 1.
-    iApply (source_red_load with "Hp"); auto.
+    iApply (source_load with "Hp"); auto.
 
     iIntros "H'".
-    iApply source_red_base.
 
     iApply source_red_eq_itree.
     { by rewrite bind_ret_l !bind_tau. }
 
     iApply source_red_tau; iApply source_red_bind.
 
-    iApply (source_local_write with "Hid Hd Hf").
-    iIntros "Hi H_t H_s".
-
-    iApply source_red_base.
+    iApply (source_local_write with "Hid Hf").
+    iIntros "Hi H_t".
 
     iApply source_red_eq_itree.
     { by rewrite bind_ret_l. }
 
-    iApply source_red_tau.
-
+    iApply source_red_tau; iApply source_red_base.
     cbn.
-    by iSpecialize ("H" with "Hl Hi H' H_t H_s").
+    by iSpecialize ("H" with "Hl Hi H' H_t").
   Qed.
 
   Lemma sim_instr_load_bij_Some
