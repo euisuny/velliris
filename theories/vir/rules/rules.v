@@ -3,8 +3,7 @@ From iris.prelude Require Import options.
 (* This file summarizes the content of the rules/ directory. *)
 
 From velliris.vir.rules Require Export
-     primitive_laws
+     event_laws
      bij_laws
      frame_laws
-     instr_laws
-     interp_properties.
+     instr_laws.

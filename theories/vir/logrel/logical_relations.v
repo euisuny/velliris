@@ -32,18 +32,12 @@ Section logical_relations_def.
 
   (* ------------------------------------------------------------------------ *)
   (** *Invariants *)
-  Definition local_frame i_t i_s L_t L_s C : iProp Σ :=
-    frame i_t i_s L_t.*1 L_s.*1 C ∗ ΠL i_t i_s L_t L_s.
+  Definition local_inv i_t i_s L_t L_s C : iProp Σ :=
+    frameR i_t i_s L_t.*1 L_s.*1 C ∗ ΠL i_t i_s L_t L_s.
 
-  Definition alloca_frame
-    (i_t i_s : list frame_names) (A_t A_s : list Z) :=
-    (alloca_tgt i_t (list_to_set A_t : gset _) ∗
-     alloca_src i_s (list_to_set A_s : gset _) ∗
-     ⌜NoDup A_t⌝ ∗ ⌜NoDup A_s⌝)%I.
-
-  
-     ∗
-     ΠA C A_t A_s)%I.
+  Definition alloca_inv
+    (i_t i_s : list frame_names) (A_t A_s : list Z) C :=
+     (allocaR i_t i_s A_t A_s ∗ ΠA C A_t A_s)%I.
 
   (* Invariant for codes. *)
    Definition code_inv C i_t i_s A_t A_s : iPropI Σ :=
@@ -266,7 +260,7 @@ Ltac destruct_local_inv :=
 Ltac destruct_alloca_inv :=
   match goal with
   | |- context [environments.Esnoc _ ?RI (alloca_inv _ _ _ _ _ _)]=>
-      iDestruct RI as "(Ha_t & Ha_s & %Hd_t & %Hd_s & AI)"
+      iDestruct RI as "((Ha_t & Ha_s & %Hd_t & %Hd_s) & AI)"
   end.
 
 Ltac destruct_SI :=
@@ -283,7 +277,7 @@ Ltac destruct_frame :=
       iDestruct SI as (Hnd_s) "(Hs_s & Hd_s)"
   | |- context [environments.Esnoc _ ?SI (frame_γ _ _ _)]=>
       iDestruct SI as (?) "(Hs & Hd)"
-  | |- context [environments.Esnoc _ ?SI (frame_inv _ _ _ _ _)]=>
+  | |- context [environments.Esnoc _ ?SI (frameR _ _ _ _ _)]=>
       iDestruct SI as "(#WF_frame & CI & Hft & Hfs)"
   end.
 
@@ -325,7 +319,7 @@ Section logical_invariant_properties.
   Proof.
     iIntros "HΠI II".
     destruct_alloca_inv.
-    iFrame. do 2 (iSplitL ""; first done).
+    iFrame; iSplitL ""; first done.
     by iApply "HΠI".
   Qed.
 
@@ -679,7 +673,7 @@ Section logical_relations_properties.
     {T : Set} i_t i_s L_t L_s (elts: list (T * exp T)) C:
     local_inv_bij (EXP_Cstring elts) (EXP_Cstring elts)
       i_t i_s L_t L_s C -∗
-    frame_inv i_t i_s L_t.*1 L_s.*1 C ∗
+    frameR i_t i_s L_t.*1 L_s.*1 C ∗
     (∀ x,
         ⌜In x elts⌝ -∗
         local_bij_at_exp x.2 x.2 i_t i_s L_t L_s).
@@ -729,7 +723,7 @@ Section logical_relations_properties.
   Lemma expr_local_bij_struct_invert
     {T : Set} i_t i_s L_t L_s (elts: list (T * exp T)) C:
     local_inv_bij (EXP_Struct elts) (EXP_Struct elts) i_t i_s L_t L_s C -∗
-    frame_inv i_t i_s L_t.*1 L_s.*1 C ∗
+    frameR i_t i_s L_t.*1 L_s.*1 C ∗
     (∀ x,
         ⌜In x elts⌝ -∗
       local_bij_at_exp x.2 x.2 i_t i_s L_t L_s).
@@ -776,7 +770,7 @@ Section logical_relations_properties.
   Lemma expr_local_bij_array_invert
     {T : Set} i_t i_s L_t L_s (elts: list (T * exp T)) C:
     local_inv_bij (EXP_Array elts) (EXP_Array elts) i_t i_s L_t L_s C -∗
-    frame_inv i_t i_s L_t.*1 L_s.*1 C ∗
+    frameR i_t i_s L_t.*1 L_s.*1 C ∗
     (∀ x,
         ⌜In x elts⌝ -∗
         local_bij_at_exp x.2 x.2 i_t i_s L_t L_s).
@@ -1060,11 +1054,11 @@ Section logical_relations_properties.
 
   Lemma sim_local_write_frame
     (x_t x_s : LLVMAst.raw_id) (v_t v_s : uvalue) v_t' v_s' i_t i_s L_t L_s C:
-    ⊢ frame_inv i_t i_s L_t L_s C -∗
+    ⊢ frameR i_t i_s L_t L_s C -∗
       [ x_t := v_t ]t i_t -∗ [ x_s := v_s ]s i_s -∗
     trigger (LocalWrite x_t v_t') ⪯ trigger (LocalWrite x_s v_s')
       [{ (v_t, v_s),
-          [ x_t := v_t' ]t i_t ∗ [ x_s := v_s' ]s i_s ∗ frame_inv i_t i_s L_t L_s C }].
+          [ x_t := v_t' ]t i_t ∗ [ x_s := v_s' ]s i_s ∗ frameR i_t i_s L_t L_s C }].
   Proof.
     iIntros "Hf Hxt Hxs".
     destruct_frame.
@@ -1079,11 +1073,11 @@ Section logical_relations_properties.
     (x_t x_s : LLVMAst.raw_id) (v_t v_s : uvalue) L_t L_s i_t i_s C:
     x_t ∉ L_t ->
     x_s ∉ L_s ->
-    ⊢ frame_inv i_t i_s L_t L_s C -∗
+    ⊢ frameR i_t i_s L_t L_s C -∗
     trigger (LocalWrite x_t v_t) ⪯ trigger (LocalWrite x_s v_s)
       [{ (v1, v2),
           [ x_t := v_t ]t i_t ∗ [ x_s := v_s ]s i_s ∗
-          frame_inv i_t i_s (x_t :: L_t) (x_s :: L_s) C }].
+          frameR i_t i_s (x_t :: L_t) (x_s :: L_s) C }].
   Proof.
     iIntros (Hnt Hns) "Hf".
     destruct_frame.
@@ -1184,12 +1178,12 @@ Section logical_relations_properties.
     (x_t x_s : LLVMAst.raw_id) (v_t v_s : uvalue) i_t i_s L_t L_s C:
     ⊢ [ x_t := v_t ]t i_t -∗
       [ x_s := v_s ]s i_s -∗
-      frame_inv i_t i_s L_t L_s C -∗
+      frameR i_t i_s L_t L_s C -∗
     trigger (LocalRead x_t) ⪯ trigger (LocalRead x_s)
       [{ (v_t', v_s'),
         ⌜v_t = v_t'⌝ ∗ ⌜v_s = v_s'⌝
          ∗ [ x_t := v_t ]t i_t ∗ [ x_s := v_s ]s i_s
-         ∗ frame_inv i_t i_s L_t L_s C }].
+         ∗ frameR i_t i_s L_t L_s C }].
   Proof.
     iIntros "Ht Hs Hf".
     destruct_frame.
@@ -1547,10 +1541,11 @@ Section logical_relations_properties.
     iSplitL ""; first by iApply dval_rel_addr.
     repeat iExists _; iFrame.
     iFrame "WF_frame". sfinal.
+    rewrite /allocaR.
     rewrite allocaS_eq; iFrame "Hr Ha_t Ha_s".
     iPureIntro.
     rewrite -not_elem_of_dom.
-    do 2 (split; first (apply NoDup_cons; set_solver)).
+    (split; first (split; apply NoDup_cons; set_solver)).
     intro. apply Hext_t.
     exists (l_t, l_s); split; auto.
 
