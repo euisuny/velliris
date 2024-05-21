@@ -77,13 +77,12 @@ Section logical_relations_def.
                         | _, _ => False
                         end}])%I.
 
-   Definition instr_logrel id_t e_t id_s e_s C A_t A_s : iPropI Σ :=
-    (∀ i_t i_s,
-        code_inv C i_t i_s A_t A_s -∗
-        instr_conv (denote_instr (id_t, e_t)) ⪯
-        instr_conv (denote_instr (id_s, e_s))
-        [{ (r_t, r_s),
-            code_inv_post C i_t i_s A_t A_s }])%I.
+   Definition instr_logrel i_t i_s id_t e_t id_s e_s C A_t A_s : iPropI Σ :=
+    (code_inv C i_t i_s A_t A_s -∗
+      instr_conv (denote_instr (id_t, e_t)) ⪯
+      instr_conv (denote_instr (id_s, e_s))
+      [{ (r_t, r_s),
+          code_inv_post C i_t i_s A_t A_s }])%I.
 
    Definition phi_logrel bid_t bid_s ϕ_t ϕ_s C A_t A_s : iPropI Σ :=
     (∀ args_t args_s i_t i_s,

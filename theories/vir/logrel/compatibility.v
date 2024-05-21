@@ -326,7 +326,7 @@ Section compatibility.
     code_WF c ->
     code_WF c' ->
     ([∗ list] '(id, i); '(id', i') ∈ c; c',
-        ∀ A_t A_s, instr_logrel ΠL ΠA id i id' i' ∅ A_t A_s) -∗
+        ∀ i_t i_s A_t A_s, instr_logrel ΠL ΠA i_t i_s id i id' i' ∅ A_t A_s) -∗
     code_logrel ΠL ΠA c c' ∅ A_t A_s.
   Proof with vsimp.
     iIntros (Hwf Hwf') "Hi"; iIntros (??) "CI"; cbn.
