@@ -16,6 +16,41 @@ Section compatibility.
 
   Context {Σ : gFunctors} `{!vellirisGS Σ}.
 
+(* ------------------------------------------------------------------------ *)
+  (* Utility *)
+
+  Lemma local_bij_except_add {l_t l_s args_t args_s v_t v_s i_t i_s x}:
+    x ∈ (remove_ids l_t args_t).*1 ->
+    uval_rel v_t v_s -∗
+    local_bij i_t i_s
+      (alist_add x v_t (alist_remove x (remove_ids l_t args_t)))
+      (alist_add x v_s (alist_remove x (remove_ids l_s args_s))) -∗
+    local_bij_except l_t l_s i_t i_s args_t args_s.
+  Proof.
+  Admitted.
+
+  Lemma local_bij_except_add_notin {l_t l_s args_t args_s v_t v_s i_t i_s x}:
+    x ∉ (remove_ids l_t args_t).*1 ->
+    uval_rel v_t v_s -∗
+    local_bij_except l_t l_s i_t i_s args_t args_s -∗
+    [ x := v_s ]s i_s -∗
+    [ x := v_t ]t i_t -∗
+    local_bij_except l_t l_s i_t i_s
+      (alist_add x v_t args_t)
+      (alist_add x v_s args_s).
+  Proof.
+  Admitted.
+
+  Lemma remove_ids_not_elem_of
+    {K : Type} {R : K → K → Prop} `{RelDec.RelDec _ R}:
+      ∀ {V : Type} (l: list K) (L: alist K V) x,
+    x ∉ l ->
+    x ∉ (remove_ids l L).*1 ->
+    x ∉ L.*1.
+  Proof. Admitted.
+
+(* ------------------------------------------------------------------------ *)
+
   (* LATER: See if the [id] generalization is also possible *)
   Theorem phi_compat ΠL ΠA bid bid' id ϕ ϕ' C A_t A_s:
     (let '(Phi dt  args )  := ϕ in
@@ -196,36 +231,6 @@ Section compatibility.
     iIntros (?) "H"; iDestruct "H" as (?) "(Hxs & Hf)".
     subst. iApply ("HΦ" with "Hxs Hf").
   Qed.
-
-  Lemma local_bij_except_add {l_t l_s args_t args_s v_t v_s i_t i_s x}:
-    x ∈ (remove_ids l_t args_t).*1 ->
-    uval_rel v_t v_s -∗
-    local_bij i_t i_s
-      (alist_add x v_t (alist_remove x (remove_ids l_t args_t)))
-      (alist_add x v_s (alist_remove x (remove_ids l_s args_s))) -∗
-    local_bij_except l_t l_s i_t i_s args_t args_s.
-  Proof.
-  Admitted.
-
-  Lemma local_bij_except_add_notin {l_t l_s args_t args_s v_t v_s i_t i_s x}:
-    x ∉ (remove_ids l_t args_t).*1 ->
-    uval_rel v_t v_s -∗
-    local_bij_except l_t l_s i_t i_s args_t args_s -∗
-    [ x := v_s ]s i_s -∗
-    [ x := v_t ]t i_t -∗
-    local_bij_except l_t l_s i_t i_s
-      (alist_add x v_t args_t)
-      (alist_add x v_s args_s).
-  Proof.
-  Admitted.
-
-  Lemma remove_ids_not_elem_of
-    {K : Type} {R : K → K → Prop} `{RelDec.RelDec _ R}:
-      ∀ {V : Type} (l: list K) (L: alist K V) x,
-    x ∉ l ->
-    x ∉ (remove_ids l L).*1 ->
-    x ∉ L.*1.
-  Proof. Admitted.
 
   Lemma local_write_bij_except
     ΠA C x v_t v_s i_t i_s A_t A_s l_t l_s Q:

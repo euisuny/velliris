@@ -298,7 +298,7 @@ Section las_example_proof.
      locations. *)
 
   (* [LAS] case where the load is removed. *)
-  (* FIXME: Use Simulation relation directly *)
+  (* FIXME: Use simulation relation directly *)
   Lemma las_instr_sim_load
     promotable v_t v_s i_t i_s ptr ptr' A_t A_s id val align b τ τ' l_t l_s:
     let '((id', i'), v) :=
@@ -328,7 +328,8 @@ Section las_example_proof.
     iIntros "Hids Hidt Hls Hps Hlt Hpt #Hv CI".
     iApply target_red_sim_expr.
     destruct_code_inv_all; repeat destruct_frame.
-    iApply (target_instr_local_write1 with "Hs_t Hd_t Hidt [Hlt]"); cycle 1; eauto.
+    iApply (target_instr_local_write1 with "Hs_t Hd_t Hidt [Hlt]");
+      cycle 1; eauto.
     { iIntros "Hid Hdt_t Hs_t".
       rewrite /denote_instr_exp; cbn -[denote_op].
       iApply target_red_eq_itree.

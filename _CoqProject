@@ -50,10 +50,12 @@ theories/vir/logrel/logical_relations.v
 theories/vir/logrel/compatibility.v
 theories/vir/logrel/fundamental_exp.v
 # theories/vir/logrel/fundamental_exp_relaxed.v
-theories/vir/logrel/fundamental.v
+# theories/vir/logrel/fundamental.v
 theories/vir/logrel/logrel.v
 
-# theories/vir/adequacy.v
+theories/vir/soundness/adequacy.v
+theories/vir/soundness/contextual.v
+theories/vir/soundness/soundness.v
 
 # theories/vir/contextual_mcfg.v
 # theories/vir/mcfg_contextual.v

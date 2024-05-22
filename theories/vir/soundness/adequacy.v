@@ -40,7 +40,7 @@ Section Adequacy.
       sat (|==>
       ∃ `{vellirisGS Σ},
           state_interp σ_t σ_s ∗ ie_t ⪯ ie_s
-               [[ lift_post (fun x y => ⌜obs_val x y ⌝) ]]) ->
+               ⦉ lift_post (fun x y => ⌜obs_val x y ⌝) ⦊) ->
       eutt obs_val_res (⟦ie_t⟧ σ_t) (⟦ie_s⟧ σ_s).
   Proof.
     intros * H_wf Hsim.
