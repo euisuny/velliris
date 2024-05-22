@@ -145,14 +145,6 @@ Section las_example.
              | _ => false
              end) instrs.
 
-  (*
-
-   %id = alloca x 
-....
-   ... store .. id v ;
-     .. v
-
-   *)
   (* Load-after-store optimization. *)
   Definition las {T} (c : cfg T) : cfg T :=
     match find_promotable_alloca c with
@@ -321,8 +313,15 @@ Section las_example_proof.
     [ promotable := UVALUE_Addr (ptr', 0%Z) ]t i_t -∗
     ptr ↦t v_t  -∗
     dval_rel v_t v_s -∗
-    instr_logrel (local_bij_except [promotable] [promotable])
-      alloca_bij i_t i_s id' i' (IId id) (INSTR_Load b τ (τ', EXP_Ident (ID_Local promotable)) align) ∅ A_t A_s.
+    instr_logrel
+      (local_bij_except [promotable] [promotable])
+      alloca_bij
+      i_t i_s
+      id'
+      i'
+      (IId id)
+      (INSTR_Load b τ (τ', EXP_Ident (ID_Local promotable)) align)
+      ∅ A_t A_s.
   Proof.
     cbn; destruct_if_goal; try done.  clear e H0 H2.
     (* Reduced *)
@@ -346,16 +345,6 @@ Section las_example_proof.
       iFrame "WF_frame".
   Admitted.
 
-  Lemma las_simulation_term a b:
-    term_WF (blk_term b) ->
-    ⊢ term_logrel
-        (local_bij_except_promotable a)
-        alloca_bij
-        (blk_term (las_block a None b))
-        (blk_term b)
-        ∅.
-  Proof. Admitted.
-
   Lemma las_simulation_code a b A_t A_s :
     code_WF (blk_code b) ->
     ⊢ code_logrel
@@ -364,16 +353,53 @@ Section las_example_proof.
         (blk_code (las_block a None b))
         (blk_code b)
         ∅ A_t A_s.
-  Proof. Admitted.
+  Proof.
+    iIntros (?); iApply code_compat; eauto;
+      first by apply las_code_WF.
+
+    (* TODO: MEDIUM
+        [las_instr custom logical relation]. *)
+  Admitted.
+
+  Lemma las_simulation_term a b:
+    term_WF (blk_term b) ->
+    ⊢ term_logrel
+        (local_bij_except_promotable a)
+        alloca_bij
+        (blk_term (las_block a None b))
+        (blk_term b)
+        ∅.
+  Proof.
+    (* TODO: Show reflexivity of [except] for terminators, analogous to
+            expressions. *)
+  Admitted.
 
   Lemma las_simulation_phis a be b A_t A_s :
+    (blk_phis b).*1 ## (a :: nil) ->
     ⊢ phis_logrel
-        (local_bij_except_promotable a) alloca_bij
+        (local_bij_except [a] [a]) alloca_bij
         be be
         (blk_phis (las_block a None b))
         (blk_phis b)
         ∅ A_t A_s.
-  Proof. Admitted.
+  Proof.
+    iIntros (?); iApply phis_compat; cbn; eauto.
+    iInduction (blk_phis b) as [ | ] "IH"; eauto.
+    cbn; iSplitL; first iClear "IH"; last first.
+    { (* Inductive case can be discharged trivially. *)
+      iApply "IH"; iPureIntro; set_solver. }
+
+    destruct a0; iApply phi_compat; destruct p.
+    destruct (Util.assoc be args) eqn: Hlu; eauto.
+    (* TODO: EASY, but tedius.
+        [expr_logrel] with [local_bij_except]. *)
+    (* TODO: Might need to strengthen
+        Propagate from [find_promotable_alloca] that we have
+        a disjoint set. *)
+    (* TODO: Not sure
+        [local_bij_except] does not include the subpredicates
+        of [local_bij_except_promotable]. *)
+  Admitted.
 
   Lemma las_simulation_cfg (f : cfg dtyp) a i A_t A_s:
     cfg_WF f ->
@@ -411,14 +437,16 @@ Section las_example_proof.
     iApply block_compat; eauto; [ by apply las_block_WF | .. ].
 
     (* Phis logrel *)
-    { iApply las_simulation_phis. }
+    { admit. }
+      (* iApply las_simulation_phis. *)
 
     (* Code logrel *)
     { by iApply las_simulation_code. }
 
     (* Term logrel *)
     { by iApply las_simulation_term. }
-  Qed.
+
+  Admitted.
 
   Lemma las_simulation (f : function) :
     fun_WF f ->
@@ -468,8 +496,6 @@ Section las_example_proof.
   Theorem las_correct (c : function) :
     fun_is_SSA c ->
     ctx_ref (las_fun c) c.
-  Proof. Abort.
-
-  (* TODO: Prove it *)
+  Proof. Abort. (* TODO *)
 
 End las_example_proof.
