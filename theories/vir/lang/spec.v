@@ -28,9 +28,6 @@ Definition HasAttr : fn_attr -> list fn_attr -> bool :=
         p || (Coqlib.proj_sumbool (decide (b = attr)))) false l
     end.
 
-Definition HaveAttr : fn_attr -> list fn_attr -> list fn_attr -> bool :=
-  fun attr l l' => HasAttr attr l && HasAttr attr l'.
-
 (** *Attribute specifications *)
 Section spec.
   Context Σ `{!vellirisGS Σ}.
@@ -88,7 +85,22 @@ Section spec.
       | ARGMONLY => argmemonly_spec
       | READONLY => readonly_spec
       | INACC_OR_ARGMONLY => inacc_or_argmemonly_spec
-      | OTHER  => other_spec
+      | NONE => other_spec
+    end.
+
+  Definition has_attr_case (attrs : list fn_attr) (c : attr_case) : Prop :=
+    let has := fun attr => HasAttr attr (remove_tag attrs) in
+    match c with
+    | ARG_READ => has FNATTR_Argmemonly && has FNATTR_Readonly
+    | ARGMONLY => has FNATTR_Argmemonly /\ not (has FNATTR_Readonly)
+    | READONLY => has FNATTR_Readonly /\ not (has FNATTR_Argmemonly)
+    | INACC_OR_ARGMONLY => has FNATTR_Inaccessiblemem_or_argmemonly
+    | NONE =>
+        not (has FNATTR_Argmemonly) /\
+        not (has FNATTR_Readonly) /\
+        not (has FNATTR_Writeonly) /\
+        not (has FNATTR_Nofree) /\
+        not (has FNATTR_Inaccessiblemem_or_argmemonly)
     end.
 
   (** *Specification of memory-related function attributes
@@ -102,23 +114,10 @@ Section spec.
     attribute_interp
       (ExternalCall a f args_t attr_t)
       (ExternalCall a0 f0 args_s attr_s) C :=
-       let attr_t := remove_tag attr_t in
-       let attr_s := remove_tag attr_s in
-       let have := fun attr => HaveAttr attr attr_t attr_s in
+      attr_t = attr_s /\
        ∃ (c : attr_case),
-         match c with
-         | ARG_READ => have FNATTR_Argmemonly && have FNATTR_Readonly
-         | ARGMONLY => have FNATTR_Argmemonly /\ not (have FNATTR_Readonly)
-         | READONLY => have FNATTR_Readonly /\ not (have FNATTR_Argmemonly)
-         | INACC_OR_ARGMONLY => have FNATTR_Inaccessiblemem_or_argmemonly
-         | OTHER =>
-             not (have FNATTR_Argmemonly) /\
-             not (have FNATTR_Readonly) /\
-             not (have FNATTR_Writeonly) /\
-             not (have FNATTR_Nofree) /\
-             not (have FNATTR_Inaccessiblemem_or_argmemonly)
-         end /\
-        attribute_spec c C args_t args_s.
+         has_attr_case attr_t c /\
+         attribute_spec c C args_t args_s.
 
   Equations vir_call_ev {X Y} :
     language.CallE (call_events vir_lang) X →
@@ -126,7 +125,7 @@ Section spec.
     (gmap (loc * loc) Qp * list frame_names * list frame_names)%type -> iPropI Σ :=
     vir_call_ev (ExternalCall t f args attr) (ExternalCall t0 f0 args0 attr0) (C, i_t, i_s) :=
       (dval_rel f f0 ∗
-        ⌜t = t0⌝ ∗ ⌜attr = attr0⌝ ∗ ([∗ list] x;y ∈ args; args0, uval_rel x y) ∗
+        ⌜t = t0⌝ ∗ ([∗ list] x;y ∈ args; args0, uval_rel x y) ∗
         checkout C ∗ frame_WF i_t i_s ∗ stack_tgt i_t ∗ stack_src i_s ∗
         ⌜attribute_interp (ExternalCall t f args attr) (ExternalCall t0 f0 args0 attr0) C⌝)%I.
 
