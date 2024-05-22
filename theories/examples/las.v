@@ -346,12 +346,33 @@ Section las_example_proof.
       iFrame "WF_frame".
   Admitted.
 
-  Lemma las_simulation_phis a be b A_t A_s:
-    (* phi_WF (blk_phis b) -> *)
-   ⊢ phis_logrel
-     (local_bij_except_promotable a) alloca_bij
-      be be (blk_phis (las_block a None b))
-      (blk_phis b) ∅ A_t A_s.
+  Lemma las_simulation_term a b:
+    term_WF (blk_term b) ->
+    ⊢ term_logrel
+        (local_bij_except_promotable a)
+        alloca_bij
+        (blk_term (las_block a None b))
+        (blk_term b)
+        ∅.
+  Proof. Admitted.
+
+  Lemma las_simulation_code a b A_t A_s :
+    code_WF (blk_code b) ->
+    ⊢ code_logrel
+        (local_bij_except_promotable a)
+        alloca_bij
+        (blk_code (las_block a None b))
+        (blk_code b)
+        ∅ A_t A_s.
+  Proof. Admitted.
+
+  Lemma las_simulation_phis a be b A_t A_s :
+    ⊢ phis_logrel
+        (local_bij_except_promotable a) alloca_bij
+        be be
+        (blk_phis (las_block a None b))
+        (blk_phis b)
+        ∅ A_t A_s.
   Proof. Admitted.
 
   Lemma las_simulation_cfg (f : cfg dtyp) a i A_t A_s:
@@ -384,12 +405,20 @@ Section las_example_proof.
 
     (* Well-formedness. *)
     apply cfg_WF_inv in Hwf; cbn in *; destructb.
+    pose proof (HWF := H0); apply andb_true_iff in H0; destruct H0.
 
     (* Compatibility of blocks under [las] transformation. *)
     iApply block_compat; eauto; [ by apply las_block_WF | .. ].
 
-    (* All these sub-obligations look quite reasonable. *)
-  Admitted.
+    (* Phis logrel *)
+    { iApply las_simulation_phis. }
+
+    (* Code logrel *)
+    { by iApply las_simulation_code. }
+
+    (* Term logrel *)
+    { by iApply las_simulation_term. }
+  Qed.
 
   Lemma las_simulation (f : function) :
     fun_WF f ->
