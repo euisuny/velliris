@@ -590,7 +590,8 @@ Section compatibility.
     iApply sim_expr_exception.
   Qed.
 
-  Theorem fun_compat ΠL ΠA f f':
+  (* LATER: Generalize [alloca_bij] relation *)
+  Theorem fun_compat ΠL f f':
     fun_WF f ->
     fun_WF f' ->
     df_args f =  df_args f' ->
@@ -602,11 +603,10 @@ Section compatibility.
       ([∗ list] '(l_s, v_s) ∈ args_s, [ l_s := v_s ]s i_s) -∗
       ([∗ list] y1;y2 ∈ args_t.*2;args_s.*2, uval_rel y1 y2) -∗
       ΠL i_t i_s args_t args_s) -∗
-    ΠA ∅ ∅ ∅ -∗
-    (∀ A_t A_s, cfg_logrel ΠL ΠA (df_instrs f) (df_instrs f') ∅ A_t A_s) -∗
+    (∀ A_t A_s, cfg_logrel ΠL alloca_bij (df_instrs f) (df_instrs f') ∅ A_t A_s) -∗
     fun_logrel f f' ∅.
   Proof with vsimp.
-    iIntros (WF WF' Hargs_eq) "HInv HA Hf".
+    iIntros (WF WF' Hargs_eq) "HInv Hf".
     iIntros (i_t i_s args_t args_s Hlen) "Hs_t Hs_s Hv HC".
 
     rewrite /denote_function; cbn -[denote_cfg].
@@ -668,7 +668,7 @@ Section compatibility.
 
     (* Push 'em on the stack. *)
     iCombine "Hs_t Hs_s" as "Hst".
-    iApply (sim_expr'_bupd_mono with "[Hv HC Hf HInv HA]");
+    iApply (sim_expr'_bupd_mono with "[Hv HC Hf HInv]");
       [ | iApply sim_expr_lift; iApply (frame_laws.sim_push_frame' with "Hst") ];
       [ | rewrite combine_fst | rewrite combine_fst ]; eauto.
 
@@ -682,7 +682,7 @@ Section compatibility.
     iDestruct "Hv" as "#Hv".
     iApply sim_expr'_bupd_mono;
       [ | iApply ("Hf" with
-          "[HInv HC Hs_t Hs_s Ha_t Ha_s Hd_t Hd_s Harg_t Harg_s HA]") ];
+          "[HInv HC Hs_t Hs_s Ha_t Ha_s Hd_t Hd_s Harg_t Harg_s]") ];
       eauto; cycle 1.
     { Unshelve.
       4 : exact (j_t :: i_t). 4 : exact (j_s :: i_s).
@@ -690,7 +690,7 @@ Section compatibility.
       iExists (combine (df_args f) args_t),
               (combine (df_args f') args_s); iFrame.
       iSplitR ""; cycle 1.
-      { iPureIntro; split; by apply NoDup_nil. }
+      { cbn. iPureIntro; split; eauto; split; by apply NoDup_nil. }
       iSplitL "".
       { iPureIntro; split; eauto; split; rewrite combine_fst; eauto. }
 
@@ -748,8 +748,7 @@ Section compatibility.
 
       change (Vis (call_conv () (subevent () MemPop)) ret) with
         (trigger MemPop : expr vir_lang _).
-      iApply "H". setoid_rewrite lookup_empty. admit.
-    }
+      iApply "H". iApply "AI". }
 
     iIntros (??) "H".
     iDestruct "H" as (??->->) "(HC & Hst & Hss)".
@@ -757,7 +756,7 @@ Section compatibility.
     iFrame. iExists _, _; iFrame "Hr"; done.
     Unshelve.
     all: rewrite combine_fst; eauto.
-  Admitted.
+  Qed.
 
   (* Theorem fundefs_compat r r' Attr: *)
   (*   ⌜fundefs_WF r Attr⌝ -∗ *)
