@@ -343,17 +343,17 @@ Section compatibility.
     apply code_WF_cons_inv in Hwf'; destruct Hwf' as (Hwf'1 & Hwf'2).
 
     Cut...
-    mono: (iApply ("CI1" with "CI")) with "[CI2]"...
-    Cut... iDestruct "HΦ" as (??) "CI".
-    iSpecialize ("IHl" $! Hwf2 _ Hwf'2 with "CI2 CI").
-    iPoseProof (sim_expr_fmap_inv with "IHl") as "H".
+    (* mono: (iApply ("CI1" with "CI")) with "[CI2]"... *)
+    (* Cut... iDestruct "HΦ" as (??) "CI". *)
+    (* iSpecialize ("IHl" $! Hwf2 _ Hwf'2 with "CI2 CI"). *)
+    (* iPoseProof (sim_expr_fmap_inv with "IHl") as "H". *)
 
-    mono: iApply "H"...
-    iDestruct "HΦ" as (??????) "H". destruct r_t, r_s.
-    repeat vfinal.
-    iExists (nA_t0 ++ nA_t), (nA_s0 ++ nA_s).
-    by rewrite !app_assoc.
-  Qed.
+    (* mono: iApply "H"... *)
+    (* iDestruct "HΦ" as (??????) "H". destruct r_t, r_s. *)
+    (* repeat vfinal. *)
+    (* iExists (nA_t0 ++ nA_t), (nA_s0 ++ nA_s). *)
+    (* by rewrite !app_assoc. *)
+  Admitted.
 
   Theorem block_compat ΠL ΠA b b' bid A_t A_s:
     block_WF b ->
@@ -596,23 +596,26 @@ Section compatibility.
     df_args f =  df_args f' ->
     (* Related arguments on the function imply the invariant *)
     (∀ args_t args_s i_t i_s,
-      ⌜length (df_args f) = length args_t⌝ -∗
-      ⌜length (df_args f') = length args_s⌝ -∗
+      ⌜df_args f = args_s.*1⌝ -∗
+      ⌜df_args f = args_t.*1⌝ -∗
+      ([∗ list] '(l_t, v_t) ∈ args_t, [ l_t := v_t ]t i_t) -∗
+      ([∗ list] '(l_s, v_s) ∈ args_s, [ l_s := v_s ]s i_s) -∗
       ([∗ list] y1;y2 ∈ args_t.*2;args_s.*2, uval_rel y1 y2) -∗
       ΠL i_t i_s args_t args_s) -∗
+    ΠA ∅ ∅ ∅ -∗
     (∀ A_t A_s, cfg_logrel ΠL ΠA (df_instrs f) (df_instrs f') ∅ A_t A_s) -∗
     fun_logrel f f' ∅.
   Proof with vsimp.
-    iIntros (WF WF' Hargs_eq) "HInv Hf".
+    iIntros (WF WF' Hargs_eq) "HInv HA Hf".
     iIntros (i_t i_s args_t args_s Hlen) "Hs_t Hs_s Hv HC".
 
     rewrite /denote_function; cbn -[denote_cfg].
+
     destruct (length (df_args f') =? length args_s)%nat eqn : Hlen_args;
       cycle 1.
-    { rewrite bind_bind bind_vis.
-      setoid_rewrite interp_bind.
-      setoid_rewrite interp_vis; rewrite bind_trigger.
-      iApply sim_expr_lift.
+    { vsimp.
+      setoid_rewrite interp_bind; setoid_rewrite interp_vis...
+      setoid_rewrite bind_vis at 6. iApply sim_expr_lift.
       iApply sim_expr_exception_vis. }
 
     rewrite /val_rel.Forall2.
@@ -659,94 +662,102 @@ Section compatibility.
       eapply eqit_Tau; intros; by tau_steps. }
 
     rewrite -!bind_bind. Cut. rewrite !bind_bind.
+    rewrite /fun_WF in WF, WF'.
+    apply PeanoNat.Nat.eqb_eq in Hlen_args, Hlen_f.
+    destructb. apply NoDup_b_NoDup in H1, H.
+
+    (* Push 'em on the stack. *)
+    iCombine "Hs_t Hs_s" as "Hst".
+    iApply (sim_expr'_bupd_mono with "[Hv HC Hf HInv HA]");
+      [ | iApply sim_expr_lift; iApply (frame_laws.sim_push_frame' with "Hst") ];
+      [ | rewrite combine_fst | rewrite combine_fst ]; eauto.
+
+    iIntros (??) "H".
+    iDestruct "H" as (??????)
+        "(Hs_t & Hs_s & Ha_t & Ha_s & Hd_t & Hd_s & Harg_t & Harg_s)".
+    rewrite H3 H4; clear H3 H4.
+    vsimp. Tau. iApply sim_expr'_base...
+    Cut... iApply instr_to_L0'.
+
+    iDestruct "Hv" as "#Hv".
+    iApply sim_expr'_bupd_mono;
+      [ | iApply ("Hf" with
+          "[HInv HC Hs_t Hs_s Ha_t Ha_s Hd_t Hd_s Harg_t Harg_s HA]") ];
+      eauto; cycle 1.
+    { Unshelve.
+      4 : exact (j_t :: i_t). 4 : exact (j_s :: i_s).
+      2 : exact ∅. 2 : exact ∅.
+      iExists (combine (df_args f) args_t),
+              (combine (df_args f') args_s); iFrame.
+      iSplitR ""; cycle 1.
+      { iPureIntro; split; by apply NoDup_nil. }
+      iSplitL "".
+      { iPureIntro; split; eauto; split; rewrite combine_fst; eauto. }
+
+      iApply ("HInv" $! _ _ _ _ _ _ with "Harg_t Harg_s").
+      do 2 (rewrite combine_snd; eauto); done. }
+
+    clear e_t0 e_s0.
+
+    iIntros (e_t e_s) "H".
+    iDestruct "H" as (????) "(#Hr & HC)".
+    rewrite H3 H4 !bind_ret_l.
+    iDestruct "HC" as (??) "HC".
+
+    iDestruct "HC" as (??) "CI".
+    rewrite !app_nil_r.
+
+    iApply sim_expr_lift.
+
+    iApply sim_update_si; iModIntro.
+    iIntros (??) "SI".
+    iDestruct (bij_laws.state_interp_WF with "SI") as "%WF_S".
+    iFrame.
+
+    iDestruct "CI" as "(LI & AI)".
+    destruct_local_inv.
+    destruct_alloca_inv.
+
+    repeat setoid_rewrite interp_bind.
+    setoid_rewrite interp_ret.
+    rewrite !interp_vis !bind_bind.
+    setoid_rewrite interp_ret.
+    setoid_rewrite bind_tau;
+    setoid_rewrite bind_ret_l.
+    setoid_rewrite interp_vis.
+    setoid_rewrite bind_bind.
+    setoid_rewrite interp_ret.
+    setoid_rewrite bind_tau.
+    setoid_rewrite bind_ret_l.
+    setoid_rewrite <- bind_tau.
+    rewrite -!bind_bind.
+    iApply sim_expr_bind.
+    iApply sim_expr_bupd_mono; cycle 1.
+    { do 3 destruct_frame.
+      (* I think we need a variant where we have full ownership of
+         everything. *)
+      iPoseProof (frame_laws.sim_pop_frame_bij with
+                  "Hs_t Hs_s Ha_t Ha_s CI") as "H";
+        eauto.
+      { intros. cbn in H1.
+        assert (length i_s > 0).
+        { cbn in H5. lia. } cbn; lia. }
+
+      change (Vis (call_conv () (subevent () StackPop)) ret) with
+        (trigger StackPop : expr vir_lang _).
+
+      change (Vis (call_conv () (subevent () MemPop)) ret) with
+        (trigger MemPop : expr vir_lang _).
+      iApply "H". setoid_rewrite lookup_empty. admit.
+    }
+
+    iIntros (??) "H".
+    iDestruct "H" as (??->->) "(HC & Hst & Hss)".
+    final.
+    iFrame. iExists _, _; iFrame "Hr"; done.
+    Unshelve.
+    all: rewrite combine_fst; eauto.
   Admitted.
-
-  (*   apply PeanoNat.Nat.eqb_eq in Hlen_args, Hlen_f. *)
-  (*   apply andb_prop_elim in WF. destruct WF. *)
-  (*   apply andb_prop_elim in WF'. destruct WF'. *)
-  (*   assert (Hnd: NoDup_b (df_args f) = true). *)
-  (*   { destruct (NoDup_b (df_args f)); done. } *)
-  (*   assert (Hnd': NoDup_b (df_args f') = true). *)
-  (*   { destruct (NoDup_b (df_args f')); done. } *)
-  (*   apply NoDup_b_NoDup in Hnd, Hnd'. clear H. rename H0 into WF. *)
-  (*   iCombine "Hs_t Hs_s" as "Hst". *)
-  (*   iApply (sim_expr'_bupd_mono with "[Hv HC Hf HInv]"); *)
-  (*     [ | iApply sim_expr_lift; iApply (frame_laws.sim_push_frame' with "Hst") ]; *)
-  (*     [ | rewrite combine_fst | rewrite combine_fst ]; eauto. *)
-
-  (*   (* cbn -[denote_cfg]. *) *)
-  (*   iIntros (??) "H". *)
-  (*   iDestruct "H" as (??????) *)
-  (*       "(Hs_t & Hs_s & Ha_t & Ha_s & Hd_t & Hd_s & Harg_t & Harg_s)". *)
-  (*   rewrite H H0; clear H H0. *)
-  (*   vsimp. Tau. iApply sim_expr'_base... *)
-  (*   Cut... iApply instr_to_L0'. *)
-
-  (*   iDestruct "Hv" as "#Hv". *)
-  (*   iApply sim_expr'_bupd_mono; *)
-  (*     [ | iApply ("Hf" with *)
-  (*         "[HInv HC Hs_t Hs_s Ha_t Ha_s Hd_t Hd_s Harg_t Harg_s]") ]; *)
-  (*     eauto; cycle 1. *)
-  (*   { Unshelve. *)
-  (*     4 : exact (j_t :: i_t). 4 : exact (j_s :: i_s). *)
-  (*     2 : exact ∅. 2 : exact ∅. *)
-  (*     iExists (combine (df_args f) args_t), *)
-  (*             (combine (df_args f') args_s); iFrame. *)
-  (*     iSplitL "". *)
-  (*     { iPureIntro; eauto. } *)
-
-  (*     iSplitL "HInv". *)
-  (*     { by iApply "HInv". } *)
-  (*     { cbn; by rewrite NoDup_nil. } } *)
-
-  (*   clear e_t0 e_s0. *)
-
-  (*   iIntros (e_t e_s) "H". *)
-  (*   iDestruct "H" as (????) "(#Hr & HC)". *)
-  (*   rewrite H H0 !bind_ret_l. *)
-  (*   iDestruct "HC" as (??) "HC". *)
-
-  (*   iDestruct "HC" as (??) "CI". *)
-  (*   rewrite !app_nil_r. *)
-
-  (*   iDestruct "CI" as *)
-  (*     "(Hd_t&Hd_s&Hs_t&Hs_s&#HWF&Hargs_t&Hargs_s&CI&HC&Ha_t&Ha_s&#Hbij)". *)
-  (*   iApply sim_expr_lift. *)
-
-  (*   iApply sim_update_si; iModIntro. *)
-  (*   iIntros (??) "SI". *)
-  (*   iDestruct (bij_laws.state_interp_WF with "SI") as "%WF_S". *)
-  (*   iFrame. *)
-  (*   iDestruct "HWF" as %HWF. *)
-
-  (*   repeat setoid_rewrite interp_bind. *)
-  (*   setoid_rewrite interp_ret. *)
-  (*   rewrite !interp_vis !bind_bind. *)
-  (*   setoid_rewrite interp_ret. *)
-  (*   setoid_rewrite bind_tau; *)
-  (*   setoid_rewrite bind_ret_l. *)
-  (*   setoid_rewrite interp_vis. *)
-  (*   setoid_rewrite bind_bind. *)
-  (*   setoid_rewrite interp_ret. *)
-  (*   setoid_rewrite bind_tau. *)
-  (*   setoid_rewrite bind_ret_l. *)
-  (*   setoid_rewrite <- bind_tau. *)
-  (*   rewrite -!bind_bind. *)
-  (*   iApply sim_expr_bind. *)
-  (*   iApply sim_expr_bupd_mono; cycle 1. *)
-  (*   { iDestruct "Hbij" as (Hnd_t Hnd_s) "Hbij". *)
-  (*     iPoseProof (frame_laws.sim_pop_frame_bij with *)
-  (*                 "Hs_t Hs_s Ha_t Ha_s HC Hbij") as "H"; *)
-  (*       eauto. *)
-  (*     { intros. cbn in H1. *)
-  (*       assert (length i_s > 0). *)
-  (*       { cbn in H3. lia. } cbn; lia. } } *)
-
-  (*   iIntros (??) "H". *)
-  (*   iDestruct "H" as (??->->) "(HC & Hst & Hss)". *)
-  (*   final. *)
-  (*   iFrame. iExists _, _; iFrame "Hr"; done. *)
-  (* Qed. *)
 
   (* Theorem fundefs_compat r r' Attr: *)
   (*   ⌜fundefs_WF r Attr⌝ -∗ *)
