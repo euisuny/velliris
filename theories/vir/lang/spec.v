@@ -41,12 +41,55 @@ Section spec.
 
   Variant attr_case : Type :=
   | ARG_READ
-  | WRITEONLY
-  | NOFREE
+  (* | WRITEONLY *)
+  (* | NOFREE *)
   | ARGMONLY
   | READONLY
   | INACC_OR_ARGMONLY
   | OTHER.
+
+  Definition call_ev_spec := gmap (loc * loc) Qp -> list uvalue -> list uvalue -> Prop.
+
+  Definition read_argmemonly_spec : call_ev_spec :=
+   fun (C : gmap (loc * loc) Qp) (args_t args_s : list uvalue) =>
+    (∀ l_t l_s n,
+        nth_error (zip args_t args_s) n =
+          Some (UVALUE_Addr l_t, UVALUE_Addr l_s) ->
+            ∃ q, C !! (l_t.1, l_s.1) = Some q ∧ Qp.lt q 1).
+
+  Definition argmemonly_spec : call_ev_spec :=
+   fun (C : gmap (loc * loc) Qp) (args_t args_s : list uvalue) =>
+    (∀ l_t l_s n,
+        nth_error (zip args_t args_s) n = Some (UVALUE_Addr l_t, UVALUE_Addr l_s) ->
+        C !! (l_t.1, l_s.1) = None).
+
+  Definition readonly_spec : call_ev_spec :=
+   fun (C : gmap (loc * loc) Qp) (args_t args_s : list uvalue) =>
+     (∀ (l_t l_s : loc) q, C !! (l_t, l_s) = Some q -> Qp.lt q 1).
+
+  Definition inacc_or_argmemonly_spec : call_ev_spec :=
+   fun (C : gmap (loc * loc) Qp) (args_t args_s : list uvalue) =>
+    (∀ l_t l_s n,
+      nth_error (zip args_t args_s) n =
+        Some (UVALUE_Addr l_t, UVALUE_Addr l_s) ->
+      C !! (l_t.1, l_s.1) = None) /\
+    (∀ (l_t l_s : Z * Z),
+        (l_t.1, l_s.1) ∈ dom C ->
+        (UVALUE_Addr l_t, UVALUE_Addr l_s) ∉ (zip args_t args_s) ->
+        C !! (l_t.1, l_s.1) = Some 1%Qp).
+
+  Definition other_spec : call_ev_spec :=
+   fun (C : gmap (loc * loc) Qp) (args_t args_s : list uvalue) =>
+     args_t = args_s /\ C = ∅.
+
+  Definition attribute_spec (c : attr_case) :=
+    match c with
+      | ARG_READ => read_argmemonly_spec
+      | ARGMONLY => argmemonly_spec
+      | READONLY => readonly_spec
+      | INACC_OR_ARGMONLY => inacc_or_argmemonly_spec
+      | OTHER  => other_spec
+    end.
 
   (** *Specification of memory-related function attributes
 
@@ -64,39 +107,18 @@ Section spec.
        let have := fun attr => HaveAttr attr attr_t attr_s in
        ∃ (c : attr_case),
          match c with
-         | ARG_READ => have FNATTR_Argmemonly && have FNATTR_Readonly /\
-              (∀ l_t l_s n,
-                  nth_error (zip args_t args_s) n =
-                    Some (UVALUE_Addr l_t, UVALUE_Addr l_s) ->
-                      ∃ q, C !! (l_t.1, l_s.1) = Some q ∧ Qp.lt q 1)
-         | WRITEONLY => have FNATTR_Writeonly /\ C = ∅
-         | NOFREE => have FNATTR_Nofree /\ C = ∅
-         | ARGMONLY => have FNATTR_Argmemonly /\ not (have FNATTR_Readonly) /\
-                      (∀ l_t l_s n,
-                        nth_error (zip args_t args_s) n =
-                          Some (UVALUE_Addr l_t, UVALUE_Addr l_s) ->
-                        C !! (l_t.1, l_s.1) = None)
-         | READONLY => have FNATTR_Readonly /\ not (have FNATTR_Argmemonly) /\
-                        (∀ (l_t l_s : loc) q, C !! (l_t, l_s) = Some q -> Qp.lt q 1)
-         | INACC_OR_ARGMONLY => have FNATTR_Inaccessiblemem_or_argmemonly /\
-                      (∀ l_t l_s n,
-                        nth_error (zip args_t args_s) n =
-                          Some (UVALUE_Addr l_t, UVALUE_Addr l_s) ->
-                        C !! (l_t.1, l_s.1) = None) /\
-                      (∀ (l_t l_s : Z * Z),
-                          (l_t.1, l_s.1) ∈ dom C ->
-                          (UVALUE_Addr l_t, UVALUE_Addr l_s) ∉ (zip args_t args_s) ->
-                          C !! (l_t.1, l_s.1) = Some 1%Qp)
+         | ARG_READ => have FNATTR_Argmemonly && have FNATTR_Readonly
+         | ARGMONLY => have FNATTR_Argmemonly /\ not (have FNATTR_Readonly)
+         | READONLY => have FNATTR_Readonly /\ not (have FNATTR_Argmemonly)
+         | INACC_OR_ARGMONLY => have FNATTR_Inaccessiblemem_or_argmemonly
          | OTHER =>
              not (have FNATTR_Argmemonly) /\
              not (have FNATTR_Readonly) /\
              not (have FNATTR_Writeonly) /\
              not (have FNATTR_Nofree) /\
-             not (have FNATTR_Inaccessiblemem_or_argmemonly) /\
-                  let ev_t := ExternalCall a f args_t attr_t in
-                  let ev_s := ExternalCall a0 f0 args_s attr_s in
-                   ev_t ~= ev_s /\ C = ∅
-         end.
+             not (have FNATTR_Inaccessiblemem_or_argmemonly)
+         end /\
+        attribute_spec c C args_t args_s.
 
   Equations vir_call_ev {X Y} :
     language.CallE (call_events vir_lang) X →
