@@ -512,6 +512,12 @@ Section las_example_proof.
     fun_WF f -> cfg_WF (df_instrs f).
   Proof. Admitted.
 
+  (* TODO: Move to [logical_relations] *)
+  Lemma local_bij_implies_local_bij_except i_t i_s L_t L_s r_t r_s:
+    local_bij i_t i_s L_t L_s -∗
+    local_bij_except r_t r_s i_t i_s L_t L_s.
+  Proof. Admitted.
+
   Lemma las_fun_WF f:
     fun_WF f ->
     fun_WF (las_fun f).
@@ -543,7 +549,7 @@ Section las_example_proof.
 
     iApply
       (fun_compat
-        (local_bij_except [promotable] [promotable]) alloca_bij);
+        (local_bij_except [promotable] [promotable]));
       eauto; cycle 3.
 
     (* Well-formedness is maintained by the [las] transformation. *)
@@ -551,16 +557,9 @@ Section las_example_proof.
       by rewrite /las_fun /las Promotable_found in fun_WF_src. }
 
     (* State the invariant first. *)
-    { cbn; iIntros (??????) "Hargs".
-      rewrite /local_bij_except.
-      rewrite /local_bij.
-      (* FIXME: Edit [fun_logrel] to reflect:
-            (1) local ids for arguments are the same
-                (df_args is exactly the keys for args
-
-          compatibility to reflect:
-            (2) locals have ownership over the values *)
-       admit. }
+    { cbn; iIntros (??????) "Hlt Hls Hargs".
+      iApply local_bij_implies_local_bij_except; rewrite /local_bij; iFrame.
+      rewrite -H0; done. }
 
     (* CFG's are related to each other. *)
 
@@ -569,7 +568,7 @@ Section las_example_proof.
       eauto; last first.
     { by rewrite /las Promotable_found. }
     apply fun_WF_inv in fun_WF_src; eauto.
-  Admitted.
+  Qed.
 
   Theorem las_correct (c : function) :
     fun_is_SSA c ->
