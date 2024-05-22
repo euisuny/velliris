@@ -220,6 +220,19 @@ From velliris.program_logic Require Import program_logic.
 From velliris.vir Require Import logical_relations tactics.
 
 (* ------------------------------------------------------------------- *)
+
+(* TODO: Move and prove on [wellformedness]. *)
+Lemma fun_WF_inv f:
+  fun_WF f -> cfg_WF (df_instrs f).
+Proof. Admitted.
+
+(* TODO: Move *)
+Lemma cfg_WF_inv f:
+  cfg_WF f ->
+  ocfg_WF (blks f).
+Proof. Admitted.
+
+(* ------------------------------------------------------------------- *)
 (* Well-formedness is preserved in the LAS transformation. *)
 
 Lemma las_block_WF a0 a s:
@@ -251,7 +264,6 @@ Proof.
   intros. induction f; eauto.
 Admitted.
 
-
 (* ------------------------------------------------------------------- *)
 
 (* The [las] algorithm does not change the phi nodes. *)
@@ -261,19 +273,7 @@ Proof.
   eauto.
 Qed.
 
-(* TODO: Instantiate [ocfg_is_SSA]. *)
-Lemma ocfg_is_SSA_cons_inv a0 f :
-  ocfg_is_SSA (a0 :: f) ->
-  ocfg_is_SSA f.
-Proof. Admitted.
-
-Lemma promotable_ocfg_cons_inv {T} a0 (f : _ T) a:
-  promotable_ocfg (a0 :: f) a ->
-  promotable_ocfg f a.
-Proof.
-  rewrite /promotable_ocfg; cbn; intros.
-  destructb. auto.
-Qed.
+(* ------------------------------------------------------------------- *)
 
 Section las_example_proof.
 
@@ -285,17 +285,6 @@ Section las_example_proof.
   Theorem fun_logrel_refl f:
     fun_WF f ->
     (⊢ fun_logrel f f ∅)%I.
-  Proof. Admitted.
-
-  (* TODO: Move and prove on [wellformedness]. *)
-  Lemma fun_WF_inv f:
-    fun_WF f -> cfg_WF (df_instrs f).
-  Proof. Admitted.
-
-  (* TODO: Move *)
-  Lemma cfg_WF_inv f:
-    cfg_WF f ->
-    ocfg_WF (blks f).
   Proof. Admitted.
 
   Definition local_bij_except_promotable promotable i_t i_s L_t L_s :=
@@ -357,6 +346,14 @@ Section las_example_proof.
       iFrame "WF_frame".
   Admitted.
 
+  Lemma las_simulation_phis a be b A_t A_s:
+    (* phi_WF (blk_phis b) -> *)
+   ⊢ phis_logrel
+     (local_bij_except_promotable a) alloca_bij
+      be be (blk_phis (las_block a None b))
+      (blk_phis b) ∅ A_t A_s.
+  Proof. Admitted.
+
   Lemma las_simulation_cfg (f : cfg dtyp) a i A_t A_s:
     cfg_WF f ->
     find_promotable_alloca f = Some (IId a, i) ->
@@ -377,13 +374,21 @@ Section las_example_proof.
     iModIntro; destruct f; cbn. clear Halloc.
     iInduction blks as [ | ] "IH"; eauto.
     cbn. iSplitL; cycle 1.
-    { iApply "IH"; iPureIntro; eauto.
-      (* Well-formedness. *)
-      admit. }
 
-    { iSplitL ""; first done.
-      iIntros (???). iApply block_compat.
-        admit. (* All these sub-obligations look quite reasonable. *) }
+    { (* Inductive case can be trivially discharged *)
+      iApply "IH"; iPureIntro; eauto.
+      (* Well-formedness. *)
+      apply cfg_WF_inv in Hwf; cbn in *; by destructb. }
+
+    iSplitL ""; first done; iIntros (???); iClear "IH".
+
+    (* Well-formedness. *)
+    apply cfg_WF_inv in Hwf; cbn in *; destructb.
+
+    (* Compatibility of blocks under [las] transformation. *)
+    iApply block_compat; eauto; [ by apply las_block_WF | .. ].
+
+    (* All these sub-obligations look quite reasonable. *)
   Admitted.
 
   Lemma las_simulation (f : function) :
