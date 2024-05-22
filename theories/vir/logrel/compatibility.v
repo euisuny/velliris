@@ -596,7 +596,7 @@ Section compatibility.
   Qed.
 
   (* LATER: Generalize [alloca_bij] relation *)
-  Theorem fun_compat ΠL f f':
+  Theorem fun_compat ΠL ΠAttr attr f f':
     fun_WF f ->
     fun_WF f' ->
     df_args f =  df_args f' ->
@@ -609,10 +609,10 @@ Section compatibility.
       ([∗ list] y1;y2 ∈ args_t.*2;args_s.*2, uval_rel y1 y2) -∗
       ΠL i_t i_s args_t args_s) -∗
     (∀ A_t A_s, cfg_logrel ΠL alloca_bij (df_instrs f) (df_instrs f') ∅ A_t A_s) -∗
-    fun_logrel f f' ∅.
+    fun_logrel ΠAttr attr f f' ∅.
   Proof with vsimp.
     iIntros (WF WF' Hargs_eq) "HInv Hf".
-    iIntros (i_t i_s args_t args_s Hlen) "Hs_t Hs_s Hv HC".
+    iIntros (i_t i_s args_t args_s Hlen) "Hattr Hs_t Hs_s Hv HC".
 
     rewrite /denote_function; cbn -[denote_cfg].
 

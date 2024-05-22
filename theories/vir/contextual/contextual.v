@@ -131,30 +131,30 @@ Section contextual_refinement.
 
   Context `{!vellirisGS Σ}.
 
-  Definition function_meets_spec attr f_t f_s C :=
-    ∀ i_t i_s args_t args_s,
-     ⌜attribute_spec attr C args_t args_s⌝ -∗
-     ⌜length i_s > 0 -> length i_t > 0⌝ -∗
-     stack_tgt i_t -∗
-     stack_src i_s -∗
-     val_rel.Forall2 uval_rel args_t args_s -∗
-     checkout C -∗
-     L0'expr_conv (denote_function f_t args_t) ⪯ L0'expr_conv (denote_function f_s args_s)
-     ⦉ fun v_t v_s =>
-         ∃ r_t r_s, ⌜v_t = Ret r_t⌝ ∗ ⌜v_s = Ret r_s⌝ ∗
-             stack_tgt i_t ∗ stack_src i_s ∗ checkout C ∗ uval_rel r_t r_s ⦊.
+  Definition mcfg_logrel
+    (Ft Fs : list (dvalue * definition dtyp (cfg dtyp)))
+    τ ft fs (args_t args_s : list uvalue) : iPropI Σ :=
+    (∀ i_t i_s args_t args_s,
+      frameR i_t i_s nil nil ∅ -∗
+      allocaR i_t i_s ∅ ∅ -∗
+      val_rel.Forall2 uval_rel args_t args_s -∗
+      denote_mcfg Ft τ ft args_t ⪯
+      denote_mcfg Fs τ fs args_s
+    ⦉ fun v_t v_s =>
+          ∃ r_t r_s, ⌜v_t = Ret r_t⌝ ∗ ⌜v_s = Ret r_s⌝ ∗
+          frameR i_t i_s nil nil ∅∗
+          allocaR i_t i_s ∅ ∅ ∗
+          uval_rel r_t r_s ⦊)%I.
 
   (** *contextual refinement *)
-  Theorem contextual_refinement e_t e_s main decl:
-    function_meets_spec f_t f_s C -∗
-    fun_logrel e_t e_s C -∗
-    ctx_ref DTYPE_Void main [] (decl, e_t) (decl, e_s).
+  Theorem contextual_refinement
+    e_t e_s e_t' e_s' C attr attr' ft ft' fs fs' args_t args_s τ:
+    fun_logrel attr_inv attr e_t e_s C -∗
+    fun_logrel attr_inv attr' e_t' e_s' C -∗
+    mcfg_logrel
+      [(ft, e_t); (ft', e_t')]
+      [(fs, e_s); (fs' e_s')] τ ft fs args_t args_s.
   Proof.
-    iIntros (Hsat C Hwf Hneq Hattr HWF);
-      eapply adequacy; eauto; clear HWF.
-    Unshelve.
-    rewrite /ctx_ref.
-
-Admitted.
+  Admitted.
 
 End contextual_refinement.

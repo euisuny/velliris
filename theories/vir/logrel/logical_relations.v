@@ -55,6 +55,15 @@ Section logical_relations_def.
        local_inv i_t i_s args_t args_s C ∗
        alloca_tgt i_t ∅ ∗ alloca_src i_s ∅)%I.
 
+   (* TODO : Move to [wellformedness ]*)
+   Definition attr_spec :=
+    (list fn_attr -> gmap (loc * loc) Qp -> list uvalue -> list uvalue -> iProp Σ).
+
+   (* Concrete attribute specification *)
+   Definition attr_inv : attr_spec :=
+     fun attr C l_t l_s =>
+     (⌜∃ c, has_attr_case attr c /\ attribute_spec c C l_t l_s⌝)%I.
+
   (* ------------------------------------------------------------------------ *)
    (** *Logical relations *)
    Definition expr_logrel C τ_t τ_s e_t e_s A_t A_s : iPropI Σ :=
@@ -141,7 +150,7 @@ Section logical_relations_def.
           ∃ r_t r_s, ⌜v_t = Ret r_t⌝ ∗ ⌜v_s = Ret r_s⌝ ∗ uval_rel r_t r_s ∗
             code_inv_post C i_t i_s A_t A_s ⦊)%I.
 
-  Definition fun_logrel ΠAttr (attr : list fn_attr) f_t f_s C: iPropI Σ :=
+  Definition fun_logrel (ΠAttr : attr_spec) (attr : list fn_attr) f_t f_s C: iPropI Σ :=
     ∀ i_t i_s args_t args_s,
      ⌜length i_s > 0 -> length i_t > 0⌝ -∗
      ΠAttr attr C args_t args_s -∗
@@ -154,7 +163,7 @@ Section logical_relations_def.
          ∃ r_t r_s, ⌜v_t = Ret r_t⌝ ∗ ⌜v_s = Ret r_s⌝ ∗
              stack_tgt i_t ∗ stack_src i_s ∗ checkout C ∗ uval_rel r_t r_s ⦊.
 
-  Definition fundefs_logrel ΠAttr
+  Definition fundefs_logrel (ΠAttr : attr_spec)
       (F_t F_s: list (dvalue * _))
       (Attr_t Attr_s : list (list fn_attr)) C: iPropI Σ :=
       (∀ i f_t f_s (addr_t addr_s : dvalue) (attr : list fn_attr),
