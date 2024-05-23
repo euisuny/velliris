@@ -512,20 +512,44 @@ Section logical_invariant_properties.
     iFrame.
   Qed.
 
-  (* (* Adding a new related element restores the original local bijection. *) *)
-  (* Lemma local_bij_add_remove {i_t i_s x v_t v_s L_t L_s}: *)
-  (*   x ∈ L_t.*1 -> *)
-  (*   uval_rel v_t v_s -∗ *)
-  (*   local_bij i_t i_s *)
-  (*     (alist_add x v_t (alist_remove x L_t)) *)
-  (*     (alist_add x v_s (alist_remove x L_s)) -∗ *)
-  (*   local_bij i_t i_s L_t L_s. *)
-  (* Proof. *)
-  (*   iIntros (?) "Hv Hbij". *)
-  (*   destruct_local_inv; rewrite /local_bij; iFrame. *)
-  (*   iSplitL "" *)
-  (*   Search alist_add alist_remove. *)
-  (* Abort. *)
+  Lemma local_env_update_target {i_t i_s x v_t C} {L_t L_s : local_env}:
+    x ∈ L_t.*1 ->
+    frameR i_t i_s L_t.*1 L_s.*1 C -∗
+    ([∗ list] '(l_t, v_t0) ∈ L_t, [ l_t := v_t0 ]t i_t) -∗
+    [∗ list] '(l_t, v_t0) ∈ alist_add x v_t L_t, [ l_t := v_t0 ]t i_t.
+  Proof.
+    iIntros (H) "Hf Hl_t".
+    apply elem_of_fst in H. destruct H as (v&Hin).
+    apply elem_of_list_lookup in Hin; destruct Hin as (index & Hin).
+
+    iPoseProof (big_sepL_delete with "Hl_t") as "H"; first done.
+    iDestruct "H" as "(Hvt & Ht)".
+    do 3 destruct_frame.
+    Search ldomain_tgt.
+
+    rewrite !alist_remove; try rewrite -H; eauto.
+    iFrame.
+  Qed.
+
+    iSplitL ""
+    Search alist_add alist_remove.
+
+  (* Adding a new related element restores the original local bijection. *)
+  Lemma local_bij_update {i_t i_s x v_t v_s L_t L_s C}:
+    x ∈ L_t.*1 ->
+    uval_rel v_t v_s -∗
+    frameR i_t i_s L_t.*1 L_s.*1 C -∗
+    local_bij i_t i_s L_t L_s -∗
+    local_bij i_t i_s (alist_add x v_t L_t) (alist_add x v_s L_s).
+  Proof.
+    iIntros (?) "#Hv Hf Hbij".
+    destruct_local_inv; rewrite /local_bij.
+    iSplitL "".
+    { iPureIntro; by eapply alist_add_fst_eq. }
+
+    iDestruct (lmapsto_no_dup with "Hl_t") as "%Hdup_t".
+    iDestruct (lmapsto_no_dup with "Hl_s") as "%Hdup_s".
+  Abort.
 
 End logical_invariant_properties.
 

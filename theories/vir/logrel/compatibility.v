@@ -19,15 +19,21 @@ Section compatibility.
 (* ------------------------------------------------------------------------ *)
   (* Utility *)
 
-  Lemma local_bij_except_add {l_t l_s args_t args_s v_t v_s i_t i_s x}:
-    x ∈ (remove_ids l_t args_t).*1 ->
+  Lemma local_bij_except_add {l_t l_s v_t v_s i_t i_s x}:
+    x ∈ l_t.*1 ->
     uval_rel v_t v_s -∗
     local_bij i_t i_s
-      (alist_add x v_t (alist_remove x (remove_ids l_t args_t)))
-      (alist_add x v_s (alist_remove x (remove_ids l_s args_s))) -∗
-    local_bij_except l_t l_s i_t i_s args_t args_s.
+      (alist_add x v_t (alist_remove x l_t))
+      (alist_add x v_s (alist_remove x l_s)) -∗
+    local_bij i_t i_s (alist_add x v_t l_t) (alist_add x v_s l_s).
   Proof.
-  Admitted.
+    iIntros (Hin) "#Hv Hbij"; rewrite /local_bij_except.
+    rewrite /local_bij.
+    iDestruct "Hbij" as (?) "(Ht & Hs & Hbij)".
+    cbn in *. inv H. rewrite !alist_remove_twice in H1.
+    rewrite !alist_remove_twice.
+    iSplitL ""; first (iPureIntro ; f_equiv; done); iFrame.
+  Qed.
 
   Lemma local_bij_except_add_notin {l_t l_s args_t args_s v_t v_s i_t i_s x}:
     x ∉ (remove_ids l_t args_t).*1 ->
@@ -256,11 +262,15 @@ Section compatibility.
 
       iApply ("HΦ" with "[AI Hf HL Hxs Hxt]"); iFrame.
       iPoseProof (local_bij_add with "Hxt Hxs Hv HL") as "Hbij".
-      { admit. }
-      iExists args_t, args_s; iFrame.
+      { intro; apply Hnt.
+        admit. }
+      iExists (alist_add x v_t args_t), (alist_add x v_s args_s); iFrame.
       rewrite /local_bij_except.
 
-      iApply (local_bij_except_add e with "Hv Hbij"). }
+      iPoseProof (local_bij_except_add e with "Hv Hbij") as "H";
+        rewrite /local_inv; iFrame.
+
+      iFrame. admit. }
 
     (* The location is not in bijection *)
     { destruct_local_inv.
@@ -337,7 +347,8 @@ Section compatibility.
     iIntros (Hwf Hwf') "Hi"; iIntros (??) "CI"; cbn.
     vsimp. setoid_rewrite instr_conv_ret.
 
-    iInduction c as [| a l] "IHl" forall (c' Hwf' i_t i_s A_t A_s); cbn...
+    iInduction c as [| a l] "IHl" forall (c' Hwf' i_t i_s A_t A_s);
+      cbn -[denote_instr]...
     { iDestruct (big_sepL2_nil_inv_l with "Hi") as %Hx;
         subst; cbn...
       Cut... do 2 vfinal; iExists ∅, ∅; iFrame. }
@@ -348,17 +359,17 @@ Section compatibility.
     apply code_WF_cons_inv in Hwf'; destruct Hwf' as (Hwf'1 & Hwf'2).
 
     Cut...
-    (* mono: (iApply ("CI1" with "CI")) with "[CI2]"... *)
-    (* Cut... iDestruct "HΦ" as (??) "CI". *)
-    (* iSpecialize ("IHl" $! Hwf2 _ Hwf'2 with "CI2 CI"). *)
-    (* iPoseProof (sim_expr_fmap_inv with "IHl") as "H". *)
+    mono: (iApply ("CI1" with "CI")) with "[CI2]"...
+    Cut... iDestruct "HΦ" as (??) "CI".
+    iSpecialize ("IHl" $! Hwf2 _ Hwf'2 with "CI2 CI").
+    iPoseProof (sim_expr_fmap_inv with "IHl") as "H".
 
-    (* mono: iApply "H"... *)
-    (* iDestruct "HΦ" as (??????) "H". destruct r_t, r_s. *)
-    (* repeat vfinal. *)
-    (* iExists (nA_t0 ++ nA_t), (nA_s0 ++ nA_s). *)
-    (* by rewrite !app_assoc. *)
-  Admitted.
+    mono: iApply "H"...
+    iDestruct "HΦ" as (??????) "H". destruct r_t, r_s.
+    repeat vfinal.
+    iExists (nA_t0 ++ nA_t), (nA_s0 ++ nA_s).
+    by rewrite !app_assoc.
+  Qed.
 
   Theorem block_compat ΠL ΠA b b' bid A_t A_s:
     block_WF b ->
