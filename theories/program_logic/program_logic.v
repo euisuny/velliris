@@ -6,7 +6,6 @@ From velliris.program_logic Require Export
      language
      simulation
      weakest_pre
-     weakbisim
      sim_properties
      reduction
      wellformedness

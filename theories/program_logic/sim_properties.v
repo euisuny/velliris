@@ -1,6 +1,6 @@
 From iris.prelude Require Import options.
 
-From velliris.program_logic Require Export weakest_pre weakbisim.
+From velliris.program_logic Require Export weakest_pre.
 From velliris.utils Require Import tactics.
 
 From ITree Require Import ITree Eq EqAxiom Events.State Events.StateFacts.
@@ -201,16 +201,16 @@ Section sim_expr_properties.
     specialize (SEP _ _ EQ _ _ EQ');
     iApply SEP; clear SEP; clear EQ EQ'.
 
-  Ltac sim_rewrite_eutt EQ EQ' R1 R2 Φ :=
-    let H_eq := fresh "EQ" in
-    let H_eq' := fresh "EQ'" in
-    pose proof @EQ as H_eq; symmetry in H_eq;
-    pose proof @EQ' as H_eq'; symmetry in H_eq';
-    pose proof @sim_coindF_eutt_Proper as SEP;
-    pose proof @lift_expr_rel_Φ_Proper as LEP;
-    specialize (SEP R1 R2); specialize (LEP R1 R2 Φ);
-    specialize (SEP _ LEP); clear LEP; cbn in SEP;
-    specialize (SEP _ _ H_eq _ _ H_eq'); iApply SEP; clear H_eq H_eq' SEP.
+  (* Ltac sim_rewrite_eutt EQ EQ' R1 R2 Φ := *)
+  (*   let H_eq := fresh "EQ" in *)
+  (*   let H_eq' := fresh "EQ'" in *)
+  (*   pose proof @EQ as H_eq; symmetry in H_eq; *)
+  (*   pose proof @EQ' as H_eq'; symmetry in H_eq'; *)
+  (*   pose proof @sim_coindF_eutt_Proper as SEP; *)
+  (*   pose proof @lift_expr_rel_Φ_Proper as LEP; *)
+  (*   specialize (SEP R1 R2); specialize (LEP R1 R2 Φ); *)
+  (*   specialize (SEP _ LEP); clear LEP; cbn in SEP; *)
+  (*   specialize (SEP _ _ H_eq _ _ H_eq'); iApply SEP; clear H_eq H_eq' SEP. *)
 
   Ltac sim_coindF_ne := unshelve eapply sim_coindF_ne; exact η.
 
@@ -493,13 +493,6 @@ Section sim_expr_properties.
     (∀ σ_t σ_s, state_interp σ_t σ_s ==∗
       (lift_rel Φ (observe (⟦ Vis (inl1 c) k_t⟧ σ_t)) (observe (⟦ Vis (inl1 c0) k_s⟧ σ_s))) ∨
 
-      (∃ C, state_interp σ_t σ_s ∗ call_args_eq c c0 C∗
-        (∀ v_t v_s : state Λ * Res (call_events Λ),
-           state_interp v_t.1 v_s.1 ∗ res_val_rel v_t.2 v_s.2 C ==∗
-           sim_coindF (lift_rel Φ)
-              (observe (Tau (⟦k_t (call_returns c v_t.2)⟧ v_t.1)))
-              (observe (Tau (⟦k_s (call_returns c0 v_s.2)⟧ v_s.1))))) ∨
-
       (∃ C, state_interp σ_t σ_s ∗ call_ev c c0 C ∗
         (∀ v_t v_s, state_interp v_t.1 v_s.1 ∗ call_ans c v_t.2 c0 v_s.2 C ==∗
           sim_coindF (lift_rel Φ) (observe (Tau (interp_state (handle_L0_L2 η) (k_t v_t.2) v_t.1)))
@@ -535,9 +528,7 @@ Section sim_expr_properties.
 
     cbn; repeat unfold resum, ReSum_id, id_, Id_IFun.
     simp handle_call_events.
-    iDestruct "H" as "[ Hinner | Hinner ]";
-        [iLeft | iRight];
-    iDestruct "Hinner" as (?) "(SI & Hcall & Hinner)"; iExists _; iFrame;
+    iDestruct "H" as (?) "(SI & Hcall & Hinner)"; iExists _; iFrame;
     iModIntro; iIntros (??) "H";
     iSpecialize ("Hinner" with "H");
     eapply bisimulation_is_eq in H2, H1; rewrite <- H2; rewrite <- H1; try done.
@@ -691,7 +682,6 @@ Section sim_expr_properties.
       simp handle_call_events.
 
       iDestruct "Hlock_step" as (?) "(Hev & Hcont)"; iFrame.
-      iRight.
       iDestruct "Hcont" as "(Hev & Hcont)"; iFrame.
       iExists _; iFrame.
       iIntros (??) "Hans". iSpecialize ("Hcont" with "Hans").

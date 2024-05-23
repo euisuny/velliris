@@ -15,7 +15,7 @@ theories/logic/satisfiable.v
 theories/program_logic/language.v
 theories/program_logic/simulation.v
 theories/program_logic/weakest_pre.v
-theories/program_logic/weakbisim.v
+# theories/program_logic/weakbisim.v
 theories/program_logic/sim_properties.v
 theories/program_logic/reduction.v
 theories/program_logic/wellformedness.v

@@ -1711,21 +1711,6 @@ Section vir_sim_expr_util.
     - rewrite Ht in Heq; inversion Heq.
   Qed.
 
-  Ltac to_inner G :=
-    change
-      (|==>
-        ∃ c : sim_case,
-          match c with
-          | BASE => ?Φ ?x ?y
-          | STUTTER_L => stutter_l
-          | STUTTER_R => stutter_r
-          | TAU_STEP => tau_step
-          | VIS_STEP => vis_step ?x ?y
-          | SOURCE_UB => source_ub
-          | SOURCE_EXC => source_exc
-          end)%I with
-          (sim_expr_inner G (sim_indF G) Φ x y).
-
   Lemma interp_L2_vis_inv' {R X}
     (a : itree _ R) σ (e : language.L2 vir_lang X) k:
     ⟦ a ⟧ σ ≅ Vis e k ->
@@ -2075,6 +2060,21 @@ Section vir_sim_expr_util.
     iApply (sim_coindF_bupd_mono with "[HΦ]"); [ | iApply "H"]; done.
   Qed.
 
+  Ltac to_inner G :=
+    change
+      (|==>
+        ∃ c : sim_case,
+          match c with
+          | BASE => ?Φ ?x ?y
+          | STUTTER_L => stutter_l _ _ _
+          | STUTTER_R => stutter_r _ _ _
+          | TAU_STEP => tau_step _ _ _
+          | VIS_STEP => vis_step _ ?x ?y
+          | SOURCE_UB => source_ub _ _
+          | SOURCE_EXC => source_exc _ _
+          end)%I with
+          (sim_expr_inner G (sim_indF G) Φ x y).
+
   Lemma sim_coindF_leaf {R1 R2} Q (e_t : _ R1) (e_s : _ R2):
     sim_coindF
       (lift_expr_rel
@@ -2204,15 +2204,15 @@ Section vir_sim_expr_util.
       { destruct c, c0. destruct p, p0.
         simp handle_call_events.
 
-        iDestruct "IH" as "[IH | IH]".
-        { iDestruct "IH" as (?) "(SI&Hcall&IH)".
-          iLeft; iFrame.
+        iDestruct "IH" as (?) "(SI&Hcall&IH)".
+        iFrame.
           iExists C; iFrame.
           iIntros (??) "Hpre".
           iSpecialize ("IH" with "Hpre"); iMod "IH".
           iLeft. iModIntro.
           cbn in v_t, v_s.
           iExists Q. iSplitL "".
+
           { iIntros (??) "Hl".
             rewrite /lift_expr_rel_leaf.
             iDestruct "Hl" as (??????) "(SI & (Hl & %Hl1 & %Hl2))".
@@ -2227,30 +2227,6 @@ Section vir_sim_expr_util.
 
           iApply sim_coindF_bupd_mono; [ | iApply "IH"].
           iIntros (??) "H'". iModIntro; by iApply "H". }
-
-        { iDestruct "IH" as (?) "(SI&Hcall&IH)".
-          iRight; iFrame.
-          iExists C; iFrame.
-          iIntros (??) "Hpre".
-          iSpecialize ("IH" with "Hpre"); iMod "IH".
-          iLeft. iModIntro.
-          cbn in v_t, v_s.
-          iExists Q. iSplitL "".
-
-          { iIntros (??) "Hl".
-            rewrite /lift_expr_rel_leaf.
-            iDestruct "Hl" as (??????) "(SI & (Hl & %Hl1 & %Hl2))".
-            iDestruct "Hl" as (????) "HQ".
-            repeat iExists _. repeat (iSplitL ""; first done); iFrame.
-            iSplitL "HQ".
-            { repeat iExists _. repeat (iSplitL ""; first done); by iFrame. }
-            apply eqit_inv_Ret in H1, H2; subst.
-            iModIntro. iSplitL; iPureIntro.
-            { eapply Leaf.LeafVis; eauto; by rewrite -itree_eta in Hl1. }
-            { eapply Leaf.LeafVis; eauto; by rewrite -itree_eta in Hl2. } }
-
-          iApply sim_coindF_bupd_mono; [ | iApply "IH"].
-          iIntros (??) "H'". iModIntro; by iApply "H". } }
 
       destruct s, s0; try destruct s, s0; try done.
       destruct f, f0; rewrite /handle_E.

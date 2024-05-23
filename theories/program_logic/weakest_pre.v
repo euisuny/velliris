@@ -32,21 +32,6 @@ Section fix_lang.
     Notation expr_rel := (@exprO Λ R1 -d> @exprO Λ R2 -d> PROP).
     Notation st_expr_rel := (@st_exprO Λ R1 -d> @st_exprO Λ R2 -d> PROP).
 
-    Definition call_args_eq {X Y} :
-      CallE (call_events Λ) X -> CallE (call_events Λ) Y -> checkedout_sets -> PROP :=
-      λ (X0 : CallE (call_events Λ) X) (X1 : CallE (call_events Λ) Y) C,
-        let Data0 := call_data (call_events Λ) X X0 in
-        let Data1 := call_data (call_events Λ) Y X1 in
-        let X2 := args (call_events Λ) X X0 in
-        let X3 := args (call_events Λ) Y X1 in
-        (arg_val_rel X2 X3 C ∗ ⌜Data0 = Data1⌝)%I.
-
-    Definition call_returns {X}
-      (e : @CallE (call_events Λ) X) (v : Res (call_events Λ)) : X.
-    Proof.
-      apply Hval in e. by rewrite -e in v.
-    Defined.
-
     (* Each kind of event is handled with separate handlers. *)
     Equations handle_call_events {X Y}
                (greatest_rec : st_expr_rel')
@@ -56,19 +41,12 @@ Section fix_lang.
       handle_call_events _ k_t k_s
          (StateEff (call_events Λ) (σ_t, ev_t))
          (StateEff (call_events Λ) (σ_s, ev_s)) :=
-        ((* arguments and answers are related and these are in simulation, or *)
-          (∃ C, state_interp σ_t σ_s ∗ call_args_eq ev_t ev_s C ∗
-            (∀ v_t v_s,
-                state_interp v_t.1 v_s.1 ∗ res_val_rel v_t.2 v_s.2 C ==∗
-              greatest_rec
-                (observe (k_t (v_t.1, call_returns ev_t v_t.2)))
-                (observe (k_s (v_s.1, call_returns ev_s v_s.2))))) ∨
 
         (* we check that the calls meet a specification *)
-         ((∃ C, state_interp σ_t σ_s ∗ call_ev ev_t ev_s C ∗
+         (∃ C, state_interp σ_t σ_s ∗ call_ev ev_t ev_s C ∗
             (∀ v_t v_s, state_interp v_t.1 v_s.1 ∗
                 call_ans ev_t v_t.2 ev_s v_s.2 C ==∗
-                  greatest_rec (observe (k_t v_t)) (observe (k_s v_s))))))%I.
+                  greatest_rec (observe (k_t v_t)) (observe (k_s v_s))))%I.
 
     Definition handle_E {Ev} {X Y}
                (greatest_rec : st_expr_rel')
@@ -230,7 +208,7 @@ Ltac provide_case := iModIntro; repeat iExists _; repeat (iSplitL ""; [ done |])
 Tactic Notation "provide_case:" constr(H) :=
   iModIntro; iExists H; repeat iExists _; repeat (iSplitL ""; [ done | ]).
 
-Arguments sim_expr_ {_ _ _ _ _ _ _} [_ _] /.
+Arguments sim_expr_ {_ _ _ _ _} [_ _] /.
 
 Section sim_properties.
 
@@ -279,7 +257,7 @@ Section sim_properties.
 
   (** Instantiate Sim typeclasses. Instances are local, see hitn and comment at
   the bottom of this file. *)
-  Definition sim_expr_aux : seal (@sim_expr_ _ _ _ _ Λ η _).
+  Definition sim_expr_aux : seal (@sim_expr_ _ _ Λ η _).
   Proof. by eexists. Qed.
   Local Instance sim_expr_stutter : SimE PROP Λ := (sim_expr_aux).(unseal).
   Lemma sim_expr_eq {R1 R2} : sim_expr =
@@ -355,17 +333,10 @@ Section sim_properties.
         [ simp handle_call_events | rewrite /handle_E].
     { destruct c, p, c0, p.
       simp handle_call_events.
-      iDestruct "Hcont" as "[Hcont | Hcont ]".
-      { iDestruct "Hcont" as (?) "(SI & Hev & Hcont)".
-        iLeft; iFrame.
-        iExists C; iFrame.
-        iIntros (??) "H"; iDestruct ("Hcont" with "H") as ">Hcont".
-        iModIntro; iApply ("Hmon" with "Hcont"). }
-      { iDestruct "Hcont" as (?) "(SI & Hev & Hcont)".
-        iRight; iFrame.
-        iExists C; iFrame.
-        iIntros (??) "H"; iDestruct ("Hcont" with "H") as ">Hcont".
-        iModIntro; iApply ("Hmon" with "Hcont"). } }
+      iDestruct "Hcont" as (?) "(SI & Hev & Hcont)".
+      iExists C; iFrame.
+      iIntros (??) "H"; iDestruct ("Hcont" with "H") as ">Hcont".
+      iModIntro; iApply ("Hmon" with "Hcont"). }
     { destruct s, s0; [ done.. |].
       destruct s, s0; [ done.. |].
       iDestruct "Hcont" as "[HCEI HCI]". iFrame.
@@ -385,16 +356,10 @@ Section sim_properties.
     { destruct c, p, c0, p.
       simp handle_call_events.
 
-      iDestruct "Hcont" as "[ Hcont | Hcont ]".
-      { iDestruct "Hcont" as (?) "(?&?&Hcont)".
-        iLeft; iFrame.
-        iExists C; iFrame.
-        iIntros (??) "H"; iDestruct ("Hcont" with "H") as ">Hcont".
-        iApply ("Hmon" with "Hcont"). }
-      { iDestruct "Hcont" as (?) "(?&?&Hcont)".
-        iRight; iFrame. iExists C; iFrame.
-        iIntros (??) "H"; iDestruct ("Hcont" with "H") as ">Hcont".
-        iApply ("Hmon" with "Hcont"). } }
+      iDestruct "Hcont" as (?) "(?&?&Hcont)".
+      iFrame. iExists C; iFrame.
+      iIntros (??) "H"; iDestruct ("Hcont" with "H") as ">Hcont".
+      iApply ("Hmon" with "Hcont"). }
     { destruct s, s0; [ done.. |].
       destruct s, s0; [ done.. |].
       iDestruct "Hcont" as "[HCEI HCI]". iFrame.
@@ -1094,9 +1059,7 @@ Section sim_properties.
       destruct et eqn: Het, es eqn: Hes; cbn;
         rewrite /handle_E; try done;
         [destruct c, p, c0, p; simp handle_call_events | destruct s, s0; [ done ..|]].
-      { iDestruct "Hinner" as "[Hinner | Hinner ]";
-          [ iLeft | iRight];
-          iDestruct "Hinner" as (?) "(SI & Hcall & Hinner)"; iExists _; iFrame ;
+      { iDestruct "Hinner" as (?) "(SI & Hcall & Hinner)"; iExists _; iFrame ;
           iFrame;
           iIntros (v_t v_s) "ECI"; iSpecialize ("Hinner" with "ECI"); iLeft;
           repeat iExists _; iMod "Hinner"; iModIntro.
@@ -1241,13 +1204,11 @@ Section sim_properties.
         destruct et eqn: Het, es eqn: Hes; cbn;
           rewrite /handle_E; try done;
           [destruct c, p, c0, p; simp handle_call_events | destruct s, s0; [ done ..|]]; subst.
-        { iDestruct "Hinner" as "[ Hinner | Hinner ]";
-            [iLeft | iRight];
-              iDestruct "Hinner" as (?) "(SI & Hcall & Hinner)"; iExists _;  iFrame;
+        { iDestruct "Hinner" as (?) "(SI & Hcall & Hinner)"; iExists _;  iFrame;
           iIntros (v_t v_s) "ECI"; iSpecialize ("Hinner" with "ECI"); iLeft;
           repeat iExists _; iMod "Hinner"; iModIntro.
           all : iSplitR; [ | iSplitR]; last first.
-          1,4: iApply (sim_coindF_bupd_mono with "[Hcont] Hinner");
+          1: iApply (sim_coindF_bupd_mono with "[Hcont] Hinner");
             iIntros (e_t' e_s') "HΨ"; iModIntro;
                 iSpecialize ("Hcont" with "HΨ"); done.
           all: do 2 rewrite <- itree_eta; iPureIntro; solve [eapply H0 | eapply H2]. }
@@ -1523,9 +1484,7 @@ Section sim_properties.
       destruct et eqn: Het, es eqn: Hes; cbn;
         rewrite /handle_E; try done;
         [destruct c, p, c0, p; simp handle_call_events | destruct s, s0; [ done ..|]].
-      { iDestruct "Hinner" as "[ Hinner | Hinner ]";
-          [iLeft | iRight];
-            iDestruct "Hinner" as (?) "(SI & Hcall & Hinner)"; iExists _; iFrame ;
+      { iDestruct "Hinner" as (?) "(SI & Hcall & Hinner)"; iExists _; iFrame ;
         iIntros (v_t v_s) "ECI"; iSpecialize ("Hinner" with "ECI"); iLeft;
         iMod "Hinner"; iModIntro;
         iApply (sim_coindF_bupd_mono with "[Hcont] Hinner");
@@ -1921,7 +1880,7 @@ Section sim_properties.
 
   Lemma sim_coind_exc {R1 R2 X}
     (Φ: expr_rel R1 R2) (ev: exc_events Λ X) e_t k:
-    ⊢ sim_coind (η := η) Φ e_t (vis ev k).
+    ⊢ sim_coind Φ e_t (vis ev k).
   Proof.
     rewrite /sim_coind. rewrite sim_coindF_unfold sim_indF_unfold /sim_expr_inner.
     by provide_case: SOURCE_EXC.
@@ -2126,9 +2085,7 @@ Section sim_properties.
         rewrite /handle_E; try done;
         [destruct c, p, c0, p; simp handle_call_events | destruct s, s0; [ done ..|]].
 
-      { iDestruct "Hinner" as "[ Hinner | Hinner ]";
-          [iLeft | iRight];
-            iDestruct "Hinner" as (?) "(SI & Hcall & Hinner)"; iExists _; iFrame;
+      { iDestruct "Hinner" as (?) "(SI & Hcall & Hinner)"; iExists _; iFrame;
           iIntros (v_t v_s) "ECI"; iSpecialize ("Hinner" with "ECI"); iLeft;
         iMod "Hinner"; iModIntro;
 
@@ -2207,9 +2164,9 @@ Global Hint Extern 0 (Sim _ _) => apply sim_val : typeclass_instances.
 Global Hint Extern 0 (SimE _ _) => apply sim_expr_stutter : typeclass_instances.
 Global Hint Extern 0 (NonExpansive sim_coindF) => apply sim_coindF_ne : typeclasses_instances.
 
-Arguments stutter_l {_ _ _ _ _ _ _ _} : simpl never.
-Arguments stutter_r {_ _ _ _ _ _ _ _} : simpl never.
-Arguments tau_step {_ _ _ _ _ _ _ _} : simpl never.
-Arguments vis_step {_ _ _ _ _ _ _ _ _ _ _} : simpl never.
-Arguments source_ub {_ _ _ _ _ _} : simpl never.
-Arguments source_exc {_ _ _ _ _ _} : simpl never.
+Arguments stutter_l {_ _ _ _ _} : simpl never.
+Arguments stutter_r {_ _ _ _ _} : simpl never.
+Arguments tau_step {_ _ _ _ _} : simpl never.
+Arguments vis_step {_ _ _ _ _ _ _} : simpl never.
+Arguments source_ub {_ _ _ _} : simpl never.
+Arguments source_exc {_ _ _ _} : simpl never.

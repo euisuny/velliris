@@ -1244,16 +1244,18 @@ Section logical_relations_properties.
   Qed.
 
   Lemma call_refl v_t v_s e_t e_s d i_t i_s l A_t A_s C:
+    attribute_interp (ExternalCall d v_t e_t l) (ExternalCall d v_s e_s l) C ->
     code_refl_inv C i_t i_s A_t A_s -∗
     dval_rel v_t v_s -∗
     ([∗ list] x_t; x_s ∈ e_t;e_s, uval_rel x_t x_s) -∗
+
     (trigger (ExternalCall d v_t e_t l))
     ⪯
     (trigger (ExternalCall d v_s e_s l))
     [{ (v_t, v_s), uval_rel v_t v_s ∗
         code_refl_inv C i_t i_s A_t A_s }].
   Proof.
-    iIntros "CI #Hv #He". rewrite /code_refl_inv.
+    iIntros (Hin) "CI #Hv #He". rewrite /code_refl_inv.
     destruct_code_inv.
 
     rewrite /instr_conv.
@@ -1275,16 +1277,17 @@ Section logical_relations_properties.
     iModIntro.
     rewrite /handle_event; cbn -[state_interp].
     rewrite /resum /ReSum_id /id_ /Id_IFun.
-    simp handle_call_events. iLeft.
+    simp handle_call_events.
     iFrame. destruct_local_inv. destruct_frame.
     iExists (C, i_t, i_s).
     do 2 destruct_frame.
     iSplitL "Hs_t Hs_s CI".
-    { rewrite /call_args_eq / arg_val_rel; cbn; iFrame.
-      iFrame "WF_frame".
-      iSplitL ""; last done; iSplitL "Hv"; try done. }
+    { rewrite /call_ev / arg_val_rel; cbn; iFrame.
+      simp vir_call_ev.
+      iFrame "WF_frame". iFrame "Hv He"; by iFrame. }
 
     iIntros (??) "(SI & V)".
+    rewrite /call_ans; cbn -[state_interp]. simp vir_call_ans.
     iDestruct "V" as "(?&?&?&?)".
     cbn -[state_interp].
     iApply sim_coindF_tau; iApply sim_coindF_base.
@@ -1308,6 +1311,7 @@ Section logical_relations_properties.
        rewrite (interp_state_vis _ _ _ σ_s) ; cbn; rewrite /add_tau;
        rewrite !bind_tau; iApply sim_coind_tauR; cbn;
         rewrite !bind_bind bind_vis; iApply sim_coind_exc.
+    Unshelve. all: typeclasses eauto.
   Qed.
 
   Lemma load_must_be_addr τ x_t x_s Φ:
@@ -1411,6 +1415,7 @@ Section logical_relations_properties.
         setoid_rewrite bind_trigger;
           by rewrite bind_vis | ];
       iModIntro; iApply sim_coind_exc.
+    Unshelve. all: typeclasses eauto.
   Qed.
 
   Lemma store_must_be_addr x_t p_t x_s p_s Φ:

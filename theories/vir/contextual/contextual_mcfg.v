@@ -2,19 +2,8 @@ From iris.prelude Require Import options.
 
 From Coq Require Import Program.Equality.
 
-From velliris.program_logic Require Import program_logic.
-From velliris.vir Require Import
-  vir val_rel heapbij adequacy spec globalbij logical_relations fundamental
-  interp_properties.
-
-From Vellvm Require Import Syntax.DynamicTypes Handlers Syntax.LLVMAst
-  Semantics.InterpretationStack.
-
-From Equations Require Import Equations.
-
-From ITree Require Import
-  ITree Recursion Eq.Eqit Events.StateFacts Interp.InterpFacts.
-From Equations Require Import Equations.
+From velliris.logic Require Import satisfiable.
+From velliris.vir Require Import lang logrel.
 
 Set Default Proof Using "Type*".
 
@@ -66,7 +55,7 @@ Section CR.
           call_ev call1 call2 C -∗
           ⟅ f _ (Call dt1 fn1 args1 attr1) ⟆ ⪯
           ⟅ g _ (Call dt2 fn2 args2 attr2) ⟆
-          [[ (fun v1 v2 => call_ans call1 v1 call2 v2 C) ⤉ ]]) )%I.
+          ⦉ (fun v1 v2 => call_ans call1 v1 call2 v2 C) ⤉ ⦊) )%I.
 
   (* Should follow by reflexivity theorem *)
   Definition context_rel_refl
@@ -76,7 +65,7 @@ Section CR.
           arg_val_rel (fn1, args1) (fn2, args2) C -∗
           ⟅ f _ (Call dt fn1 args1 attr) ⟆ ⪯
           ⟅ g _ (Call dt fn2 args2 attr) ⟆
-          [[ (fun x y => res_val_rel x y C) ⤉ ]]))%I.
+          ⦉ (fun x y => res_val_rel x y C) ⤉ ⦊))%I.
 
   Definition context_call
       (f : ∀ T : Type, CallE T → L0'expr T) :=
@@ -84,7 +73,7 @@ Section CR.
       f uvalue (Call τ addr args (FNATTR_Internal :: attrs)) =
       f uvalue (Call τ addr args attrs)) /\
     (forall τ addr args attrs,
-      f uvalue (Call τ addr args (FNATTR_External:: attrs)) =
+      f uvalue (Call τ addr args (FNATTR_External :: attrs)) =
       f uvalue (Call τ addr args attrs)).
 
   Definition context_rel
