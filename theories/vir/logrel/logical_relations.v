@@ -525,14 +525,7 @@ Section logical_invariant_properties.
     iPoseProof (big_sepL_delete with "Hl_t") as "H"; first done.
     iDestruct "H" as "(Hvt & Ht)".
     do 3 destruct_frame.
-    Search ldomain_tgt.
-
-    rewrite !alist_remove; try rewrite -H; eauto.
-    iFrame.
-  Qed.
-
-    iSplitL ""
-    Search alist_add alist_remove.
+  Admitted.
 
   (* Adding a new related element restores the original local bijection. *)
   Lemma local_bij_update {i_t i_s x v_t v_s L_t L_s C}:

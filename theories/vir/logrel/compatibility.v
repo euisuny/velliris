@@ -47,13 +47,65 @@ Section compatibility.
   Proof.
   Admitted.
 
+  Lemma not_elem_of_remove_ids_cons
+    {K : Type} {R : K → K → Prop} `{RelDec.RelDec _ R}:
+      ∀ {V : Type} (L: alist K V) (l: list K) x a,
+    x <> a ->
+    x ∉ (remove_ids (a :: l) L).*1 ->
+    x ∉ (remove_ids l L).*1.
+  Proof. Admitted.
+
   Lemma remove_ids_not_elem_of
     {K : Type} {R : K → K → Prop} `{RelDec.RelDec _ R}:
       ∀ {V : Type} (l: list K) (L: alist K V) x,
     x ∉ l ->
     x ∉ (remove_ids l L).*1 ->
     x ∉ L.*1.
-  Proof. Admitted.
+  Proof.
+    induction l; eauto; intros.
+    apply not_elem_of_cons in H0. destruct H0.
+    cbn in H1; eapply IHl; try set_solver. eauto.
+  Admitted.
+
+  Definition local_bij_at m : local_env_spec :=
+    fun i_t i_s L_t L_s =>
+    ([∗ list] l ∈ m,
+      ∀ v_t v_s, ⌜alist_find l L_t = Some v_t⌝ -∗ ⌜alist_find l L_s = Some v_s⌝ -∗
+      [ l := v_t ]t i_t ∗ [ l := v_s ]s i_s ∗ uval_rel v_t v_s)%I.
+
+  Definition local_bij_at_exp {T} (e_t e_s : exp T) : local_env_spec :=
+    local_bij_at (intersection_local_ids e_t e_s).
+
+  (* The weakest form of expression-level fundamental theorem should imply the
+     "local_bij_except" version of the invariant. *)
+  Theorem expr_logrel_relaxed_implies_bij_except
+    C τ_t τ_s e_t e_s A_t A_s l:
+    (* There is no overlap between the list of excluded local ids and the local
+        ids which appear in the expressions. *)
+    intersection_local_ids e_t e_s ## l ->
+    (* Only the local ids that appear on the expressions are logically related
+        to each other.  *)
+    expr_logrel (local_bij_at_exp e_t e_s) alloca_bij C τ_t τ_s e_t e_s A_t A_s -∗
+    (* Everything in the local environment are related by the value relation
+        except for the local ids at [l]. *)
+    expr_logrel (local_bij_except l l) alloca_bij C τ_t τ_s e_t e_s A_t A_s.
+  Proof.
+    iIntros (Hid) "He"; rewrite /expr_logrel; iIntros (??) "CI".
+    destruct_code_inv.
+
+    iAssert
+      (code_inv (local_bij_at_exp e_t e_s) alloca_bij C i_t i_s A_t A_s)
+      with "[LI AI]" as "H".
+    { iFrame; destruct_local_inv; sfinal; iFrame.
+      rewrite /local_bij_except /local_bij /local_bij_at_exp /local_bij_at.
+      remember (intersection_local_ids e_t e_s) as le; clear Heqle.
+      iInduction le as [ | ] "IH" forall (l Hid); eauto.
+      cbn. 
+
+    (* FIXME: This does not hold, because of the [alist_find] predicates on
+       [local_bij_at_exp]. (It ensures that the local ids *must* appear in
+       the local environment.) *)
+  Abort.
 
 (* ------------------------------------------------------------------------ *)
 

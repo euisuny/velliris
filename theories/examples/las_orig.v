@@ -15,42 +15,31 @@ Section las_example.
   (* [promotable] is the register that will be analyzed for load after store
      [stored_value] is the current register whose value is stored in the address
       at [promotable]. *)
- Definition las_instr {T}
-   (promotable : raw_id) (stored_val : option raw_id) (i : _ * instr T) (allocated : bool) :=
-    if allocated then
-      match i with
-      (* A load instruction from a stored [raw_id] that hasn't been modified. *)
-      | (IId promotable_id, INSTR_Load _ _ (_, EXP_Ident (ID_Local ptr)) _) =>
+ Definition las_instr {A : Set} {T}
+   (promotable : raw_id) (stored_val : option raw_id) (i : A * instr T) :=
+    match i with
+    (* A load instruction from a stored [raw_id] that hasn't been modified. *)
+    | (promotable_id, INSTR_Load _ _ (_, EXP_Ident (ID_Local ptr)) _) =>
+      if decide (promotable = ptr) then
+        match stored_val with
+          | Some c =>
+              (* The promotable location has been written to; substitute the load
+                 for the local identifier for the promotable location instead. *)
+              ((promotable_id, INSTR_Op (EXP_Ident (ID_Local promotable))), stored_val)
+          | None => (i, stored_val)
+        end
+      else (i, stored_val)
+    (* A store instruction to the promoted local identifier. *)
+    | (_, INSTR_Store _
+              (_, EXP_Ident (ID_Local v'))
+              (_, EXP_Ident (ID_Local ptr)) _) =>
         if decide (promotable = ptr) then
-          match stored_val with
-            | Some c =>
-                (* The promotable location has been written to; substitute the load
-                  for the local identifier for the promotable location instead. *)
-                ((IId promotable_id, INSTR_Op (EXP_Ident (ID_Local c))), stored_val, allocated)
-            | None => (i, stored_val, allocated)
-          end
-        else (i, stored_val, allocated)
-      (* A store instruction to the promoted local identifier. *)
-      | (IVoid _, INSTR_Store _
-                (_, EXP_Ident (ID_Local v'))
-                (_, EXP_Ident (ID_Local ptr)) _) =>
-          if decide (promotable = ptr) then
-            (* Update the stored value *)
-            (i, Some v', allocated)
-          else
-            (i, stored_val, allocated)
-      | x => (i, stored_val, allocated)
-      end
-    else
-      match i with
-      (* The alloca instruction with promotable id. *)
-      | (IId id, INSTR_Alloca _ _ _) =>
-        if decide (promotable = id)
-        then (i, stored_val, true)
-        else (i, stored_val, allocated)
-      | _ => (i, stored_val, allocated)
-      end
-   .
+          (* Update the stored value *)
+          (i, Some v')
+        else
+          (i, stored_val)
+    | x => (i, stored_val)
+    end.
 
   (* Given a code block [c] and a promotable location, (i.e. a local identifier
      that stores a non-aliased location that has been allocated in the current block),
@@ -65,14 +54,14 @@ Section las_example.
       - Figure out if there is a normal form that can be enforced to make
                 sure expressions refer to [local_id]s. *)
   Fixpoint las_code {T}
-    (promotable : local_id) (stored_val : option raw_id) (c : code T) (allocated : bool) :=
+    (promotable : local_id) (stored_val : option raw_id) (c : code T) :=
     match c with
     | nil => nil
     | x :: tl =>
-        let '(x, v, allocated) :=
-          las_instr promotable stored_val x allocated
+        let '(x, v) :=
+          las_instr promotable stored_val x
         in
-        x :: las_code promotable v tl allocated
+        x :: las_code promotable v tl
     end.
 
   Definition las_block {T} (a : raw_id) (v : option raw_id) (b : LLVMAst.block T) :
@@ -80,7 +69,7 @@ Section las_example.
       mk_block
         (blk_id b)
         (blk_phis b)
-        (las_code a v (blk_code b) false)
+        (las_code a v (blk_code b))
         (blk_term b)
         (blk_comments b).
 
@@ -186,7 +175,7 @@ Example code1 : code dtyp :=
                   (DTYPE_I 32, EXP_Ident (ID_Local (Name "b")))
                   (DTYPE_Pointer, EXP_Ident (ID_Local (Name "a")))
                    None) ::
-  (IId (Name "c"), INSTR_Load true (DTYPE_I 32)
+  (IId (Name "b"), INSTR_Load true (DTYPE_I 32)
       (DTYPE_I 32, EXP_Ident (ID_Local (Name "a"))) None) ::
   nil.
 
@@ -209,7 +198,7 @@ Example cfg1 : cfg dtyp :=
 Compute (find_promotable_alloca cfg1).
 
 Compute (las cfg1).
-Compute (las_code (Name "a") None code1 false).
+Compute (las_code (Name "a") None code1).
 
 (* ------------------------------------------------------------------- *)
 (* Specification of the Load-after-store optimization. *)
@@ -247,9 +236,9 @@ Lemma las_block_WF a0 a s:
   block_WF (las_block a0 s a).
 Proof. Admitted.
 
-Lemma las_code_WF a0 a s b:
+Lemma las_code_WF a0 a s:
   code_WF a0 ->
-  code_WF (las_code a s a0 b).
+  code_WF (las_code a s a0).
 Proof. Admitted.
 
 Lemma las_fun_WF f:
@@ -325,33 +314,22 @@ Section las_example_proof.
   (* ------------------------------------------------------------------- *)
 
   (* TODO: Get from [fundamental.v] *)
-  Theorem expr_logrel_refl dt e C A_t A_s :
-    (⊢ expr_logrel local_bij alloca_bij C dt dt e e A_t A_s)%I.
-  Proof. Admitted.
-
-  Theorem instr_logrel_refl id e A_t A_s i_t i_s:
-    instr_WF e ->
-    (⊢ instr_logrel local_bij alloca_bij i_t i_s id e id e ∅ A_t A_s)%I.
-  Proof with vsimp. Admitted.
-
   Theorem fun_logrel_refl f attr:
     fun_WF f ->
     (⊢ fun_logrel attr_inv attr f f ∅)%I.
   Proof. Admitted.
 
-  Theorem term_logrel_refl ϒ C:
-    (⊢ term_logrel local_bij alloca_bij ϒ ϒ C)%I.
-  Proof with vsimp. Admitted.
+  Definition local_bij_except_promotable promotable i_t i_s L_t L_s :=
+    (local_bij_except [promotable] [promotable] i_t i_s L_t L_s ∗
+    (* If the promotable location is already part of the domain, get ownership
+       over this. *)
+    (⌜promotable ∈ L_t.*1⌝ -∗ ∃ v_t : local_val, [ promotable := v_t ]t i_t) ∗
+    (⌜promotable ∈ L_s.*1⌝ -∗ ∃ v_s : local_val, [ promotable := v_s ]s i_s))%I.
 
-  Theorem phis_compat ΠA C bid Φ Φ' A_t A_s l_t l_s:
-    Φ.*1 ## l_t ->
-    Φ'.*1 ## l_s ->
-    Φ.*1 = Φ'.*1 ->
-    ([∗ list] ϕ;ϕ' ∈ Φ; Φ',
-       phi_logrel local_bij
-         ΠA bid bid ϕ ϕ' C A_t A_s) -∗
-    phis_logrel local_bij ΠA bid bid Φ Φ' C A_t A_s.
-  Proof with vsimp. Admitted.
+  Lemma local_bij_implies_local_bij_except_promotable i_t i_s L_t L_s promotable:
+    local_bij i_t i_s L_t L_s -∗
+    local_bij_except_promotable promotable i_t i_s L_t L_s.
+  Proof. Admitted.
 
   Opaque find_promotable_alloca.
 
@@ -365,9 +343,9 @@ Section las_example_proof.
   (* FIXME: Use simulation relation directly *)
   Lemma las_instr_sim_load
     promotable v_t v_s i_t i_s ptr ptr' A_t A_s id val align b τ τ' l_t l_s:
-    let '((id', i'), v, b) :=
+    let '((id', i'), v) :=
       (las_instr promotable (Some val)
-         (IId id, INSTR_Load b τ (τ', EXP_Ident (ID_Local promotable)) align) true) in
+         (IId id, INSTR_Load b τ (τ', EXP_Ident (ID_Local promotable)) align)) in
     (* The promotable local id stores a pointer that is allocated on both source
        and target. *)
     [ id := l_s ]s i_s -∗
@@ -398,131 +376,107 @@ Section las_example_proof.
       rewrite /denote_instr_exp; cbn -[denote_op].
       iApply target_red_eq_itree.
       { by rewrite eq_itree_exp_conv_to_instr. }
-    (*   iApply (target_local_id with "Hs_t Hlt"). *)
-    (*   iIntros "Hs_t Ht"; sfinal. } *)
-    (* iIntros "Ht Hd_t Hs_t". *)
+      iApply (target_local_id with "Hs_t Hlt").
+      iIntros "Hs_t Ht"; sfinal. }
+    iIntros "Ht Hd_t Hs_t".
 
-    (* iApply source_red_sim_expr. *)
-    (* iApply (source_instr_load with "Hps Hls Hd_s Hs_s"); last first. *)
-    (* (* Hd_s Hids [Hls]"); cycle 1; eauto. *) *)
-    (* { iIntros "Hid Hdt_t Hs_t' Hd_s Hs_s". *)
-    (*   Base. do 2 sfinal. *)
-    (*   iFrame "WF_frame". *)
+    iApply source_red_sim_expr.
+    iApply (source_instr_load with "Hps Hls Hd_s Hs_s"); last first.
+    (* Hd_s Hids [Hls]"); cycle 1; eauto. *)
+    { iIntros "Hid Hdt_t Hs_t' Hd_s Hs_s".
+      Base. do 2 sfinal.
+      iFrame "WF_frame".
   Abort.
 
   Lemma las_simulation_code a b A_t A_s :
     code_WF (blk_code b) ->
     ⊢ code_logrel
-        local_bij
+        (local_bij_except_promotable a)
         alloca_bij
         (blk_code (las_block a None b))
         (blk_code b)
         ∅ A_t A_s.
-  Local Ltac las_trivial Hlas :=
-    cbn in *; destruct_match; inv Hlas; destruct_if;
-    iIntros; try iApply instr_logrel_refl;
-    try by destructb.
   Proof.
     iIntros (?); iApply code_compat; eauto;
       first by apply las_code_WF.
-    remember None. clear Heqo.
-    cbn; remember (blk_code b); clear b Heqc.
-    remember false.
-    iAssert (
-        ⌜b = true⌝ -∗
-        ∀ id, ⌜o = Some id⌝ -∗
-        ∀ i_s i_t L_s L_t,
-          frame_src i_s L_s -∗
-          frame_tgt i_t L_t -∗
-          ∃ ptr v_t v_s,
-            dval_rel v_t v_s ∗
-            [ id := dvalue_to_uvalue v_t ]t i_t ∗
-            [ a := UVALUE_Addr (ptr,0)%Z ]s i_s ∗
-            ptr ↦s v_s ∗
-            frame_tgt i_t L_t ∗
-            frame_src i_s L_s)%I as "H".
-    { iIntros (?); subst; done. }
-    clear Heqb.
 
-    iInduction c as [ | ] "IH" forall (o b) "H"; eauto; cbn.
-    destruct (las_instr a o a0) eqn: Hlas.
-    destruct p.
-    cbn. iSplitR ""; cycle 1.
-    { assert (code_WF c).
-      { apply code_WF_cons_inv in H0; destruct H0; eauto. }
-      iApply ("IH" $! H1 _). iModIntro.
-      admit. }
-
-    iClear "IH".
-    destruct p, a0, b;
-    (* Not allocated yet; trivial by reflexivity, since nothing changed *)
-      [ | las_trivial Hlas].
-
-    iSpecialize ("H" $! eq_refl).
-    iIntros (????); cbn in Hlas; las_trivial Hlas.
-
-    (* Load case *)
-    clear H1 H3 H4 H5 H6 H7 H8; destructb.
-    iIntros "CI". destruct_code_inv.
-    destruct_local_inv. destruct_frame.
-    iDestruct ("H" $! _ eq_refl with "Hfs Hft") as
-      (???) "(#Hdv & Hl & Hid & Hptr & Hf_t & Hf_s)".
-
-    assert (is_supported t) by admit.
-    assert (dvalue_has_dtyp v_s t) by admit.
-    assert (id ∉ (list_to_set args_s.*1 : gset _)). { admit. }
-    assert (id ∉ (list_to_set args_t.*1 : gset _)). { admit. }
-    iApply source_red_sim_expr.
-    do 2 destruct_frame.
-    iApply (source_red_mono with "[Hd_t Hs_t CI HL AI Hl]"); cycle 1.
-    { iApply (source_instr_load _ _ _ _ _ _ _ _ _ _ _
-                (fun x => ⌜x = Ret tt⌝ ∗
-              [ id1 := UVALUE_Addr (ptr, 0%Z) ]s i_s ∗
-              [ id := v_s ̂ ]s i_s ∗
-              ptr ↦s v_s ∗
-              ldomain_src i_s ({[id]} ∪ list_to_set args_s.*1) ∗ stack_src i_s)%I
-               with "Hptr Hid Hd_s Hs_s"); eauto.
-      iIntros "H1 Hv Hp Hd Hs". by iFrame. }
-
-    iIntros (?) "H'".
-    iDestruct "H'" as (?) "(Hid1 & Hid & Hptr & Hd & Hs)".
-
-    iApply target_red_sim_expr.
-    iApply (target_red_mono with "[CI HL AI Hid1 Hid Hptr Hd Hs]"); cycle 1.
-    { iApply (target_instr_pure with "Hs_t Hd_t [Hl]"); eauto.
-      { iIntros "Hdt Hst".
-        iApply (target_local_id with "Hst Hl").
-        iIntros "Hst Hr"; sfinal. }
-      iIntros "Hid Hd Hs". Unshelve.
-      2 : exact (fun x => ⌜x = Ret tt⌝ ∗
-                   [ id := v_t ̂ ]t i_t ∗
-                   ldomain_tgt i_t ({[id]} ∪ list_to_set args_t.*1) ∗
-                   stack_tgt i_t)%I.
-      by iFrame. }
-
-    iIntros (?) "Hf".
-    iDestruct "Hf" as (?) "(Hid1' & Hdt & Hst)"; iFrame. subst.
-    Base. sfinal. iExists ∅, ∅; sfinal.
-
-    (* Extended local environment, like the alloca environment. *)
+    (* TODO: MEDIUM
+        [las_instr custom logical relation]. *)
   Admitted.
 
   Lemma las_simulation_term a b:
     term_WF (blk_term b) ->
     ⊢ term_logrel
-        local_bij
+        (local_bij_except_promotable a)
         alloca_bij
         (blk_term (las_block a None b))
         (blk_term b)
         ∅.
   Proof.
-    iIntros (?); iApply term_logrel_refl.
-  Qed.
+    (* TODO: Show reflexivity of [except] for terminators, analogous to
+            expressions. *)
+  Admitted.
+
+   Definition phis_inv ΠL ΠA C i_t i_s A_t A_s L_t L_s : iPropI Σ :=
+    (local_inv ΠL i_t i_s L_t L_s C ∗ alloca_inv ΠA i_t i_s A_t A_s C)%I.
+
+   (* Got extended with a new domain *)
+   Definition phis_post_inv ΠL ΠA C i_t i_s A_t A_s
+     (L_t L_s : local_env) (Φ_t Φ_s : list local_id)
+     : iPropI Σ :=
+    (∃ (L_t' L_s' : local_env),
+        ⌜(list_to_set L_t.*1 ∪ list_to_set Φ_t : gset _) ≡
+          (list_to_set L_t'.*1 : gset local_id)⌝ ∗
+        ⌜(list_to_set L_s.*1 ∪ list_to_set Φ_s : gset _) ≡
+          (list_to_set L_s'.*1 : gset local_id)⌝ ∗
+        local_inv ΠL i_t i_s L_t' L_s' C ∗ alloca_inv ΠA i_t i_s A_t A_s C)%I.
+
+   Definition phis_logrel ΠL ΠA bid_t bid_s Φ_t Φ_s C A_t A_s : iPropI Σ :=
+    (∀ i_t i_s L_t L_s, phis_inv ΠL ΠA C i_t i_s A_t A_s L_t L_s -∗
+       instr_conv (denote_phis bid_t Φ_t) ⪯ instr_conv (denote_phis bid_s Φ_s)
+       [{ (r_t, r_s),
+           phis_post_inv ΠL ΠA C i_t i_s A_t A_s L_t L_s (Φ_t.*1) (Φ_s.*1) }])%I.
+
+  Theorem block_compat ΠL ΠA b b' bid A_t A_s:
+    block_WF b ->
+    block_WF b' ->
+    phis_logrel ΠL ΠA
+      bid bid (blk_phis b) (blk_phis b')
+      ∅ A_t A_s -∗
+    code_logrel ΠL ΠA
+      (blk_code b)
+      (blk_code b')
+      ∅ A_t A_s -∗
+    term_logrel ΠL ΠA
+      (blk_term b)
+      (blk_term b')
+      ∅ -∗
+    block_logrel ΠL ΠA b b' bid ∅ A_t A_s.
+  Proof with vsimp.
+  Admitted.
+
+  Theorem phis_compat ΠA C bid Φ Φ' A_t A_s l_t l_s:
+    Φ.*1 ## l_t ->
+    Φ'.*1 ## l_s ->
+    Φ.*1 = Φ'.*1 ->
+    ([∗ list] ϕ;ϕ' ∈ Φ; Φ',
+       phi_logrel (local_bij_except l_t l_s)
+         ΠA bid bid ϕ ϕ' C A_t A_s) -∗
+    phis_logrel (local_bij_except l_t l_s)
+      ΠA bid bid Φ Φ' C A_t A_s.
+  Proof with vsimp. Admitted.
+
+  Lemma expr_logrel_refl_bij_except t e A_t A_s L:
+    exp_local_ids e ## L ->
+    ⊢ expr_logrel
+        (local_bij_except L L)
+        alloca_bij ∅ (Some t) (Some t) e e A_t A_s.
+  Proof. Admitted.
 
   Lemma las_simulation_phis a be b A_t A_s :
     (blk_phis b).*1 ## (a :: nil) ->
     ⊢ phis_logrel
-        local_bij alloca_bij
+        (local_bij_except [a] [a]) alloca_bij
         be be
         (blk_phis (las_block a None b))
         (blk_phis b)
@@ -536,8 +490,17 @@ Section las_example_proof.
 
     destruct a0; iApply phi_compat; destruct p.
     destruct (Util.assoc be args) eqn: Hlu; eauto.
-    iApply expr_logrel_refl.
-  Qed.
+    iApply expr_logrel_refl_bij_except; eauto; cbn in *.
+
+    (* TODO: EASY, but tedius.
+        [expr_logrel] with [local_bij_except]. *)
+    (* TODO: Might need to strengthen
+        Propagate from [find_promotable_alloca] that we have
+        a disjoint set. *)
+    (* TODO: Not sure
+        [local_bij_except] does not include the subpredicates
+        of [local_bij_except_promotable]. *)
+  Admitted.
 
   Lemma las_simulation_cfg (f : cfg dtyp) a i A_t A_s:
     cfg_WF f ->
@@ -545,7 +508,9 @@ Section las_example_proof.
     (∀ b, b ∈ blks f -> ((blk_phis b).*1 ## a :: nil)) ->
     (* Promotable location is found. *)
     find_promotable_alloca f = Some (IId a, i) ->
-    ⊢ cfg_logrel local_bij alloca_bij (las f) f ∅ A_t A_s.
+    ⊢ cfg_logrel
+        (local_bij_except_promotable a)
+        alloca_bij (las f) f ∅ A_t A_s.
   Proof.
     intros Hwf Hnophi Halloc.
     iApply cfg_compat; eauto;
@@ -577,7 +542,20 @@ Section las_example_proof.
     iApply block_compat; eauto; [ by apply las_block_WF | .. ].
 
     (* Phis logrel *)
-    { iApply las_simulation_phis; set_solver. }
+    { iIntros (????) "(HL & HA)".
+      destruct_local_inv.
+      iDestruct "HL" as "(HL & Hp)".
+
+      assert ((blk_phis a0).*1 ## a :: nil). { set_solver. }
+      mono: iApply las_simulation_phis with "[Hp]"; last sfinal.
+      iIntros (??) "H".
+      iDestruct "H" as (????) "H"; sfinal.
+      iDestruct "H" as (????) "(HlI & AI)".
+      sfinal; destruct_local_inv; iFrame.
+      iDestruct "Hp" as "(Hp1 & Hp2)".
+      iSplitL "Hp1".
+      { iModIntro; iIntros (?); iApply "Hp1". iPureIntro. set_solver. }
+      { iModIntro; iIntros (?); iApply "Hp2". iPureIntro. set_solver. } }
 
     (* Code logrel *)
     { by iApply las_simulation_code. }
@@ -610,7 +588,9 @@ Section las_example_proof.
     rename H1 into fun_WF_src.
 
     (* Use compatibility of functions *)
-    iApply (fun_compat local_bij);
+    iApply
+      (fun_compat
+        (local_bij_except_promotable promotable));
       eauto; cycle 3.
 
     (* Well-formedness is maintained by the [las] transformation. *)
@@ -618,9 +598,9 @@ Section las_example_proof.
       by rewrite /las_fun /las Promotable_found in fun_WF_src. }
 
     (* State the invariant first. *)
-    { cbn; iIntros (??????) "Hlt Hls Hargs". iFrame.
-      (* iApply local_bij_implies_local_bij_except_promotable; *)
-      (*   rewrite /local_bij; iFrame. *)
+    { cbn; iIntros (??????) "Hlt Hls Hargs".
+      iApply local_bij_implies_local_bij_except_promotable;
+        rewrite /local_bij; iFrame.
       rewrite -H0; done. }
 
     (* CFG's are related to each other. *)
