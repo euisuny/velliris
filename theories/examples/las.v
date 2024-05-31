@@ -508,7 +508,7 @@ Section las_example_proof.
 
     (* Induction on code block. *)
     (* Inductive case. (base case is trivial) *)
-    iInduction c as [ | ] "IH" forall (o b) "H"; eauto; cbn.
+    iInduction c as [ | ] "IH" forall (o b A_t A_s) "H"; eauto; cbn.
     { iIntros (??) "CI". cbn. vsimp. rewrite instr_conv_ret. vsimp.
       vfinal. iExists ∅, ∅. by cbn. }
 
@@ -521,13 +521,26 @@ Section las_example_proof.
     iIntros (??) "CI".
 
     (* Current instruction. *)
+    assert (Hlas_orig := Hlas).
     apply las_instr_inv in Hlas. destruct Hlas as [ Heq | (?&?&?&?&?&?&?&?&?&?&?&?) ].
     { (* Isntruction unchanged. *) inv Heq.
-      rewrite !denote_code_cons. do 2 rewrite instr_conv_bind. Cut...
+      rewrite !denote_code_cons; do 2 rewrite instr_conv_bind; Cut...
       (* FIXME: We need to case analyze on the alloca case here so that we can use the
          inductive hypothesis. *)
+      cbn in H0; destruct p; destructb.
 
-      (* mono: iApply (instr_logrel_refl with "CI"). *)
+      mono: iApply (instr_logrel_refl with "CI")... clear H1; vsimp.
+      iDestruct "HΦ" as (??) "HΦ".
+      assert (WF_c: code_WF c) by done.
+      iSpecialize ("IH" $! WF_c _ _ (nA_t ++ A_t) (nA_s ++ A_s)).
+
+      mono: iApply "IH"; eauto...
+      { iIntros (??) "H'". iDestruct "H'" as (????) "H'".
+        sfinal. iDestruct "H'" as (??) "H'".
+        iExists (nA_t0 ++ nA_t), (nA_s0 ++ nA_s); rewrite !app_assoc; by iFrame. }
+
+      iModIntro; iIntros (???????) "Hf Hs"; subst.
+      (* TODO : say something more explicit about the [instr_refl] A_t A_s result. *)
       (* cbn in *; destruct_match; destructb; by (iIntros; iApply instr_logrel_refl). } *)
       admit. }
 
