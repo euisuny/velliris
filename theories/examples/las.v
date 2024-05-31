@@ -457,7 +457,6 @@ Section las_example_proof.
     destruct_match; eauto. right. repeat eexists; done.
   Qed.
 
-
   Lemma las_instr_Some_id_inv {T a o a0 id p b b'}:
     las_instr (T := T) a o a0 b' = (p, Some id, b) ->
     (o = Some id /\ a0 = p /\ b' = false /\
@@ -476,6 +475,7 @@ Section las_example_proof.
     - left; repeat (split; eauto).
   Qed.
 
+  (* TODO: MOVE *)
   Lemma target_instr_local_read {x : LLVMAst.raw_id} {v : uvalue} {a i L Ψ}:
     ⊢ stack_tgt i -∗ ldomain_tgt i L -∗ [ x := v ]t i -∗
       ([ a := v ]t i -∗
@@ -492,7 +492,7 @@ Section las_example_proof.
         (blk_code b)
         ∅ A_t A_s.
   Proof.
-    iIntros (?); iApply code_compat; eauto; first by apply las_code_WF.
+    iIntros (?).
     (* Prepping the goal for induction. *)
     remember None; clear Heqo; cbn; remember (blk_code b); clear b Heqc; remember false.
 
@@ -507,30 +507,43 @@ Section las_example_proof.
     clear Heqb.
 
     (* Induction on code block. *)
+    (* Inductive case. (base case is trivial) *)
     iInduction c as [ | ] "IH" forall (o b) "H"; eauto; cbn.
+    { iIntros (??) "CI". cbn. vsimp. rewrite instr_conv_ret. vsimp.
+      vfinal. iExists ∅, ∅. by cbn. }
 
     rename a into promotable,
            o into stored_val,
            a0 into i,
            b into allocated.
 
-    (* Inductive case. (base case is trivial) *)
-    destruct (las_instr promotable stored_val i) eqn: Hlas; destruct p; cbn; iSplitR "".
+    destruct (las_instr promotable stored_val i) eqn: Hlas; destruct p; cbn.
+    iIntros (??) "CI".
 
     (* Current instruction. *)
-    { apply las_instr_inv in Hlas. destruct Hlas as [ Heq | (?&?&?&?&?&?&?&?&?&?&?&?) ].
-      { (* Isntruction unchanged. *) inv Heq.
-        destruct p.
-        cbn in *; destruct_match; destructb; by (iIntros; iApply instr_logrel_refl). }
+    apply las_instr_inv in Hlas. destruct Hlas as [ Heq | (?&?&?&?&?&?&?&?&?&?&?&?) ].
+    { (* Isntruction unchanged. *) inv Heq.
+      rewrite !denote_code_cons. do 2 rewrite instr_conv_bind. Cut...
+      (* FIXME: We need to case analyze on the alloca case here so that we can use the
+         inductive hypothesis. *)
 
-      symmetry in H2, H3. subst. rename x5 into stored_val.
-      rename x0 into τ, x1 into τ'.
+      (* mono: iApply (instr_logrel_refl with "CI"). *)
+      (* cbn in *; destruct_match; destructb; by (iIntros; iApply instr_logrel_refl). } *)
+      admit. }
+
+      rewrite !denote_code_cons. do 2 rewrite instr_conv_bind. Cut...
+
+      match goal with
+        | |- environments.envs_entails _ (sim_expr ?Φ _ _) => set (post := Φ)
+      end.
+
+      symmetry in H2, H3. subst. rename x5 into stored_val; rename x0 into τ, x1 into τ'.
 
       (* 1. It was a load instruction from the promotable location that's been stored to;
-         things changed. *)
+          things changed. *)
       subst.
       iSpecialize ("H" $! eq_refl _ eq_refl).
-      iIntros (????) "CI". destruct_code_inv; destruct_local_inv. destruct_frame.
+      destruct_code_inv; destruct_local_inv; destruct_frame.
       iSpecialize ("H" $! _ _ _ _ with "Hfs Hft");
       iDestruct "H" as (???) "(#Hv & Ht & Hx2 & Hp & Hft & Hfs)".
       do 2 destruct_frame.
@@ -552,27 +565,27 @@ Section las_example_proof.
       iApply target_red_sim_expr.
       iApply (target_red_mono with "[CI HL AI Hx Hptr Hx2 Hs_s Hd_s]"); cycle 1.
       { iApply (target_instr_local_read with "Hs_t Hd_t Ht"); iIntros; iFrame. admit. }
-      admit. }
+      admit.
 
-    assert (code_WF c). (* Well-formedness *)
-    { apply code_WF_cons_inv in H0; destruct H0; eauto. }
+    (* assert (code_WF c). (* Well-formedness *) *)
+    (* { apply code_WF_cons_inv in H0; destruct H0; eauto. } *)
 
-    iSpecialize ("IH" $! H1).
+    (*   iSpecialize ("IH" $! H1). *)
 
-    iApply "IH"; iModIntro; iIntros (???????) "Hft Hfs"; subst.
-    apply las_instr_Some_id_inv in Hlas.
-    destruct Hlas as [ (?&?&?&?) | [ (?&?&?) | [ (?&?) | (?&?&?&?&?&?&?&?&?) ] ] ]; subst.
+    (*   iApply "IH"; iModIntro; iIntros (???????) "Hft Hfs"; subst. *)
+    (*   apply las_instr_Some_id_inv in Hlas. *)
+    (*   destruct Hlas as [ (?&?&?&?) | [ (?&?&?) | [ (?&?) | (?&?&?&?&?&?&?&?&?) ] ] ]; subst. *)
 
-    { (* (2) Alloca.  *)
-      (* FIXME: This is not quite right; we don't get inherited stuff from the previous instr. *)
-      admit. }
+    (*   { (* (2) Alloca.  *) *)
+    (*     (* FIXME: This is not quite right; we don't get inherited stuff from the previous instr. *) *)
+    (*     admit. } *)
 
-    { iSpecialize ("H" $! eq_refl _ eq_refl). iApply ("H" with "Hft Hfs"). }
-    { iSpecialize ("H" $! eq_refl _ eq_refl). iApply ("H" with "Hft Hfs"). }
+    (*   { iSpecialize ("H" $! eq_refl _ eq_refl). iApply ("H" with "Hft Hfs"). } *)
+    (*   { iSpecialize ("H" $! eq_refl _ eq_refl). iApply ("H" with "Hft Hfs"). } *)
 
-    (* (3) Store. *)
-    { admit. }
-    (* Extended local environment, like the alloca environment. *)
+  (*   (* (3) Store. *) *)
+  (*   { admit. } *)
+  (*   (* Extended local environment, like the alloca environment. *) *)
   Admitted.
 
   Lemma las_simulation_term a b:

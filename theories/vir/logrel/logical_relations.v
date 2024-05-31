@@ -108,6 +108,8 @@ Section logical_relations_def.
        instr_conv (denote_phis bid_t Φ_t) ⪯ instr_conv (denote_phis bid_s Φ_s)
        [{ (r_t, r_s), code_inv C i_t i_s A_t A_s }])%I.
 
+   (* FIXME: This form is too weak; we need to induct over the list and
+      accumulate information. *)
    Definition code_logrel c_t c_s C A_t A_s : iPropI Σ :=
     (∀ i_t i_s,
        code_inv C i_t i_s A_t A_s -∗
