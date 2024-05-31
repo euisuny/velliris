@@ -268,6 +268,14 @@ Ltac invert_WF :=
         apply fun_WF_inv in H;
         destruct H as (WF_args & WF_cfg)
   end.
+
+(* TODO *)
+Ltac reflectb :=
+  repeat match goal with
+  | [ H : NoDup_b _ = true |- _] => apply NoDup_b_NoDup in H
+  | [ H : Nat.eqb _ _ = true |- _] => apply Nat.eqb_eq in H
+  | [ H : forallb _ _ = true |- _] => rewrite forallb_True in H
+  end.
 (* ------------------------------------------------------------------- *)
 (* Well-formedness is preserved in the LAS transformation. *)
 
@@ -312,14 +320,6 @@ Lemma las_ocfg_WF f a:
 Proof.
   intros. induction f; eauto.
 Admitted.
-
-(* TODO *)
-Ltac reflectb :=
-  repeat match goal with
-  | [ H : NoDup_b _ = true |- _] => apply NoDup_b_NoDup in H
-  | [ H : Nat.eqb _ _ = true |- _] => apply Nat.eqb_eq in H
-  | [ H : forallb _ _ = true |- _] => rewrite forallb_True in H
-  end.
 
 Lemma las_fun_WF f:
   fun_WF f ->
@@ -649,7 +649,7 @@ Section las_example_proof.
       eauto; last first.
     { by rewrite /las Promotable_found. }
     { eapply SSA_fun_implies_promotable_phi_disjoint; eauto. }
-    apply fun_WF_inv in fun_WF_src; eauto.
+    apply fun_WF_inv in fun_WF_src; destruct fun_WF_src; eauto.
   Qed.
 
   Theorem las_correct (c : function) :
