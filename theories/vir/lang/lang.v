@@ -11,4 +11,5 @@ From velliris.vir.lang Require Export
     spec
     vir_sim_properties
     interp_properties
-    tactics.
+    tactics
+    notation.

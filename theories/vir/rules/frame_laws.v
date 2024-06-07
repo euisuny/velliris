@@ -12,6 +12,8 @@ From Vellvm Require Import Handlers.Handlers.
 
 Import LLVMEvents.
 
+Open Scope nat_scope.
+
 Section local_properties.
 
   Context {Σ : gFunctors} `{!vellirisGS Σ}.

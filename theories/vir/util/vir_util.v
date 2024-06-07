@@ -45,6 +45,20 @@ Definition lb_mem (b : logical_block) : mem_block :=
     | LBlock _ m _ => m
   end.
 
+(* Put here because of a universe inconsistency when introduced earlier
+  in the compilation chain..  From [Theory/DenotationTheory.v] *)
+Lemma denote_code_cons :
+  forall i c,
+    denote_code (i::c) ≅ ITree.bind (denote_instr i) (fun i => denote_code c).
+Proof.
+  intros.
+  cbn. rewrite bind_bind.
+  apply eq_itree_clo_bind with (UU := eq);
+    first done; intros; subst.
+  rewrite bind_bind.
+  setoid_rewrite bind_ret_l.
+  reflexivity.
+Qed.
 
 (* ------------------------------------------------------------------------ *)
 (** *Utilities for [dtyp] *)

@@ -624,6 +624,21 @@ Proof.
   destruct a as [ | [ | ] ]; done.
 Qed.
 
+Lemma eq_itree_exp_conv_to_instr :
+  forall T e,
+    instr_conv (translate (T := T) exp_to_instr e) ≅ exp_conv e.
+Proof.
+  intros.
+  rewrite /instr_conv /exp_conv.
+  rewrite !interp_translate.
+  rewrite (eq_itree_interp
+              (λ (T0 : Type) (e : exp_E T0), Vis (instrE_conv T0 (exp_to_instr e)) Monad.ret));
+    try done.
+  repeat intro. destruct a; cbn; eauto.
+  - rewrite /exp_to_instr; reflexivity.
+  - rewrite /exp_to_instr; destruct s; reflexivity.
+Qed.
+
 Opaque exp_conv.
 Opaque instr_conv.
 Opaque L0'expr_conv.

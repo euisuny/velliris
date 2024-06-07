@@ -36,6 +36,7 @@ theories/vir/lang/spec.v
 theories/vir/lang/vir_sim_properties.v
 theories/vir/lang/interp_properties.v
 theories/vir/lang/tactics.v
+theories/vir/lang/notation.v
 theories/vir/lang/lang.v
 
 # Rules for the program logic
