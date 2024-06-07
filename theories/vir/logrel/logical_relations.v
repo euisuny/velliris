@@ -454,7 +454,9 @@ Section logical_invariant_properties.
   Lemma local_bij_remove {i_t i_s L_t L_s} x:
     x ∈ L_t.*1 ->
     local_bij i_t i_s L_t L_s -∗
-    ∃ v_t v_s,
+    ∃ i v_t v_s,
+      ⌜L_t !! i = Some (x, v_t)⌝ ∗
+      ⌜L_s !! i = Some (x, v_s)⌝ ∗
       [ x := v_t ]t i_t ∗
       [ x := v_s ]s i_s ∗
       uval_rel v_t v_s ∗
@@ -474,7 +476,7 @@ Section logical_invariant_properties.
       eauto; cbn.
     pose proof (no_dup_fst_list_some _ _ _ _ _ _ _ Hdup_t Hdup_s H0 H1 H2);
       subst.
-    iExists x1, x3; iFrame.
+    iExists x2, x1, x3; iFrame.
 
     iAssert (uval_rel x1 x3) as "#Hv'".
     { iDestruct (big_sepL2_lookup _ _ _ x2 with "Hl_bij") as "H"; eauto.
@@ -487,6 +489,7 @@ Section logical_invariant_properties.
       as "Hl_t"; iFrame.
     iPoseProof (big_sepL_alist_remove _ _ _ _ _ H2 Hdup_s with "Hl_s")
       as "Hl_s"; iFrame.
+    do 2 (iSplitL ""; first done).
     iSplitL "".
     { iPureIntro. by apply alist_remove_fst_eq. }
 
@@ -514,20 +517,22 @@ Section logical_invariant_properties.
     iFrame.
   Qed.
 
-  Lemma local_bij_add1 {i_t i_s L_t L_s} x_t x_s v_t v_s:
+  Lemma local_bij_add1 {i_t i_s L_t L_s} i x v_t v_s:
     L_t.*1 = L_s.*1 ->
-    [ x_t := v_t ]t i_t -∗
-    [ x_s := v_s ]s i_s -∗
+    L_t !! i = Some (x, v_t) ->
+    L_s !! i = Some (x, v_s) ->
+    [ x := v_t ]t i_t -∗
+    [ x := v_s ]s i_s -∗
     uval_rel v_t v_s -∗
-    local_bij i_t i_s (alist_remove x_t L_t) (alist_remove x_s L_s) -∗
+    local_bij i_t i_s (alist_remove x L_t) (alist_remove x L_s) -∗
     local_bij i_t i_s L_t L_s.
   Proof.
-    iIntros (Heq) "Hvt Hvs Hv Hbij". destruct_local_inv; iFrame.
+    iIntros (Heq Hlut Hlus) "Hvt Hvs Hv Hbij". destruct_local_inv; iFrame.
     iSplitL ""; first done.
 
     iDestruct (lmapsto_no_dup with "Hl_t") as "%Hdup_t".
     iDestruct (lmapsto_no_dup with "Hl_s") as "%Hdup_s".
-  Abort.
+  Admitted.
 
   (* For a location already in the target side, we can update the local env. predicate. *)
   Lemma local_env_update_target {i_t i_s x v_t C} {L_t L_s : local_env}:
@@ -1175,7 +1180,7 @@ Section logical_relations_properties.
     destruct (decide (x ∈ args_t.*1)).
     { destruct_local_inv.
       iDestruct (local_bij_dom_eq with "HL") as %Heq.
-      iDestruct (local_bij_remove x with "HL") as (??) "(Hxt & Hxs & #Hv & HL)";
+      iDestruct (local_bij_remove x with "HL") as (?????) "(Hxt & Hxs & #Hv & HL)";
         auto.
 
       mono: iApply (sim_local_write_frame with "Hf Hxt Hxs") with "[AI HL]".
@@ -1278,20 +1283,19 @@ Section logical_relations_properties.
     destruct (decide (x ∈ args_t.*1)).
     { destruct_local_inv.
       iDestruct (local_bij_dom_eq with "HL") as %Heq.
-      iDestruct (local_bij_remove x with "HL") as (??) "(Hxt & Hxs & #Hv & HL)";
+      iDestruct (local_bij_remove x with "HL") as (?????) "(Hxt & Hxs & #Hv & HL)";
         auto.
       mono: iApply (sim_local_read_frame with "Hxt Hxs Hf") with "[AI HL]".
       (iIntros (??) "HΦ"; iDestruct "HΦ" as (??????) "(Ht & Hs & Hf & H)"); iFrame.
       subst; sfinal. iFrame "Hv". iExists args_t,args_s; iFrame.
-
-      admit. }
+      iApply (local_bij_add1 with "Ht Hs Hv HL"); eauto. }
     { destruct_local_inv.
       iDestruct (local_bij_dom_eq with "HL") as %Heq.
       do 3 destruct_frame.
       iApply (sim_local_read_not_in_domain with "Hd_s Hs_s").
       rewrite -Heq.
       set_solver. }
-  Admitted.
+  Qed.
 
   Lemma local_read_refl_cfg C x i_t i_s :
     ⊢ CFG_refl_inv C i_t i_s -∗
