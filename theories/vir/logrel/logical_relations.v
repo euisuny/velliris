@@ -514,6 +514,22 @@ Section logical_invariant_properties.
     iFrame.
   Qed.
 
+  Lemma local_bij_add1 {i_t i_s L_t L_s} x_t x_s v_t v_s:
+    L_t.*1 = L_s.*1 ->
+    [ x_t := v_t ]t i_t -∗
+    [ x_s := v_s ]s i_s -∗
+    uval_rel v_t v_s -∗
+    local_bij i_t i_s (alist_remove x_t L_t) (alist_remove x_s L_s) -∗
+    local_bij i_t i_s L_t L_s.
+  Proof.
+    iIntros (Heq) "Hvt Hvs Hv Hbij". destruct_local_inv; iFrame.
+    iSplitL ""; first done.
+
+    iDestruct (lmapsto_no_dup with "Hl_t") as "%Hdup_t".
+    iDestruct (lmapsto_no_dup with "Hl_s") as "%Hdup_s".
+  Abort.
+
+  (* For a location already in the target side, we can update the local env. predicate. *)
   Lemma local_env_update_target {i_t i_s x v_t C} {L_t L_s : local_env}:
     x ∈ L_t.*1 ->
     frameR i_t i_s L_t.*1 L_s.*1 C -∗
@@ -527,7 +543,11 @@ Section logical_invariant_properties.
     iPoseProof (big_sepL_delete with "Hl_t") as "H"; first done.
     iDestruct "H" as "(Hvt & Ht)".
     do 3 destruct_frame.
-  Admitted.
+    rewrite /alist_add; cbn.
+
+    iSplitR "Ht"; cycle 1.
+    { iPoseProof (big_sepL_alist_remove with "Ht") as "Ht"; eauto. }
+  Abort.
 
   (* Adding a new related element restores the original local bijection. *)
   Lemma local_bij_update {i_t i_s x v_t v_s L_t L_s C}:
@@ -641,7 +661,7 @@ Section logical_relations_properties.
     i_t i_s L_t L_s (l : list (T * exp T)):
     ([∗ list] x ∈ l, local_bij_at (exp_local_ids x.2) i_t i_s L_t L_s) ⊣⊢
     local_bij_at
-      (concat (map (λ x, exp_local_ids_ x.2 []) l))
+      (concat (List.map (λ x, exp_local_ids_ x.2 []) l))
       i_t i_s
       L_t L_s.
   Proof.
@@ -1071,6 +1091,8 @@ Section logical_relations_properties.
     eapply alist_remove_elem_of; eauto; typeclasses eauto.
   Qed.
 
+  Axiom leibniz_equiv_gset : ∀ γ i, Proper (equiv ==> equiv) (ldomain γ i).
+
   Lemma frame_alist_add_remove {B} γ i x (l : list (_ * B)):
     x ∈ l.*1 ->
     frame_γ γ i l.*1 -∗
@@ -1079,7 +1101,28 @@ Section logical_relations_properties.
     iIntros (He) "Hf".
     destruct_frame; iFrame; iSplitL "".
     { iPureIntro. eapply NoDup_fst_alist_remove; eauto. typeclasses eauto. }
-  Admitted.
+    cbn.
+    assert (list_to_set l.*1 ≡ {[x]} ∪ (list_to_set (alist_remove x l).*1 : gset _)).
+    { revert x He. induction l; try set_solver.
+      cbn in *; intros. apply elem_of_cons in He; destruct He; subst; eauto.
+      { assert (List.filter (λ x : local_id * B, negb (RelDec.rel_dec a.1 x.1)) l = l).
+        { apply NoDup_cons in H. destruct H. clear IHl.
+          induction l; eauto. cbn in *.
+          apply not_elem_of_cons in H. destruct H.
+          rewrite RelDec.rel_dec_neq_false; last done; cbn.
+          f_equiv; eauto. apply NoDup_cons in H0; destruct H0.
+          eapply IHl; eauto. }
+        rewrite H0.
+      rewrite RelDec.rel_dec_eq_true; eauto; cbn. }
+
+    apply NoDup_cons in H. destruct H.
+    assert (x <> a.1). { set_solver. }
+    rewrite RelDec.rel_dec_neq_false; last done; cbn.
+    rewrite union_assoc.
+    rewrite (union_comm (singleton x)).
+    rewrite -union_assoc. f_equiv. apply IHl; eauto. }
+    iApply leibniz_equiv_gset; done.
+  Qed.
 
   Lemma sim_local_write_frame
     (x_t x_s : LLVMAst.raw_id) (v_t v_s : uvalue) v_t' v_s' i_t i_s L_t L_s C:
@@ -1239,8 +1282,8 @@ Section logical_relations_properties.
         auto.
       mono: iApply (sim_local_read_frame with "Hxt Hxs Hf") with "[AI HL]".
       (iIntros (??) "HΦ"; iDestruct "HΦ" as (??????) "(Ht & Hs & Hf & H)"); iFrame.
-      subst; sfinal. iFrame "Hv". iExists _,_; iFrame "HL"; iFrame.
-      iDestruct "H" as "(HC & Hf_t & Hf_s)"; iFrame.
+      subst; sfinal. iFrame "Hv". iExists args_t,args_s; iFrame.
+
       admit. }
     { destruct_local_inv.
       iDestruct (local_bij_dom_eq with "HL") as %Heq.
