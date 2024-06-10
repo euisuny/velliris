@@ -67,6 +67,6 @@ theories/vir/soundness/soundness.v
 # theories/vir/examples/examples.v
 # theories/vir/examples/loop.v
 
-# theories/base_logic/gen_sim_heap.v
-# theories/base_logic/gen_sim_prog.v
+theories/base_logic/gen_sim_heap.v
+theories/base_logic/gen_sim_prog.v
 # theories/base_logic/gen_heap_bij.v
