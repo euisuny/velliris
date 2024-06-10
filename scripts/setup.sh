@@ -13,7 +13,7 @@ opam pin add coq 8.17.0 $OPAMFLAGS
 opam pin add coq-mathcomp-ssreflect 2.0.0 $OPAMFLAGS
 #make -C vellvm/src opam
 opam install coq-ext-lib coq-paco coq-flocq coq-ceres coq-mathcomp-ssreflect coq-simple-io coq-quickchick ocamlbuild dune menhir qcheck cppo $OPAMFLAGS
-make -C vellvm/src -j
 opam install coq-itree.dev $OPAMFLAGS
 opam install coq-itree-extra $OPAMFLAGS
+make -C vellvm/src -j
 make builddep
