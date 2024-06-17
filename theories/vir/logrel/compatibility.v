@@ -4,8 +4,6 @@ From velliris.vir.lang Require Import lang.
 From velliris.vir.rules Require Import rules.
 From velliris.vir.logrel Require Import wellformedness logical_relations.
 
-Set Default Proof Using "Type*".
-
 Import ListNotations.
 Import SemNotations.
 Import LLVMAst.
@@ -306,43 +304,43 @@ Section compatibility.
     (* The location is in bijection *)
     destruct (decide (x ∈ (remove_ids l_t args_t).*1)).
     { destruct_local_inv.
-      iDestruct (local_bij_remove x with "HL") as (??)
-        "(Hxt & Hxs & #Hv' & HL)"; auto.
+    (*   iDestruct (local_bij_remove x with "HL") as (??) *)
+    (*     "(Hxt & Hxs & #Hv' & HL)"; auto. *)
 
-      iApply (local_write_frame_source with "Hf Hxs"); iIntros "Hxs Hf".
-      iApply (local_write_frame_target with "Hf Hxt"); iIntros "Hxt Hf".
+    (*   iApply (local_write_frame_source with "Hf Hxs"); iIntros "Hxs Hf". *)
+    (*   iApply (local_write_frame_target with "Hf Hxt"); iIntros "Hxt Hf". *)
 
-      iApply ("HΦ" with "[AI Hf HL Hxs Hxt]"); iFrame.
-      iPoseProof (local_bij_add with "Hxt Hxs Hv HL") as "Hbij".
-      { intro; apply Hnt.
-        admit. }
-      iExists (alist_add x v_t args_t), (alist_add x v_s args_s); iFrame.
-      rewrite /local_bij_except.
+    (*   iApply ("HΦ" with "[AI Hf HL Hxs Hxt]"); iFrame. *)
+    (*   iPoseProof (local_bij_add with "Hxt Hxs Hv HL") as "Hbij". *)
+    (*   { intro; apply Hnt. *)
+    (*     admit. } *)
+    (*   iExists (alist_add x v_t args_t), (alist_add x v_s args_s); iFrame. *)
+    (*   rewrite /local_bij_except. *)
 
-      iPoseProof (local_bij_except_add e with "Hv Hbij") as "H";
-        rewrite /local_inv; iFrame.
+    (*   iPoseProof (local_bij_except_add e with "Hv Hbij") as "H"; *)
+    (*     rewrite /local_inv; iFrame. *)
 
-      iFrame. admit. }
+    (*   iFrame. admit. } *)
 
-    (* The location is not in bijection *)
-    { destruct_local_inv.
+    (* (* The location is not in bijection *) *)
+    (* { destruct_local_inv. *)
 
-      iDestruct (local_bij_elem_of with "HL") as %Hdom.
-      rewrite Hdom in n.
-      mono: iApply (local_write_frame_source_alloc Q with "Hf").
-      { by iIntros (??) "H". }
-      { eapply (remove_ids_not_elem_of l_s); eauto. }
-      iIntros "Hs Hf".
+    (*   iDestruct (local_bij_elem_of with "HL") as %Hdom. *)
+    (*   rewrite Hdom in n. *)
+    (*   mono: iApply (local_write_frame_source_alloc Q with "Hf"). *)
+    (*   { by iIntros (??) "H". } *)
+    (*   { eapply (remove_ids_not_elem_of l_s); eauto. } *)
+    (*   iIntros "Hs Hf". *)
 
-      mono: iApply (local_write_frame_target_alloc Q with "Hf").
-      { by iIntros (??) "H". }
-      { rewrite -Hdom in n;
-        eapply (remove_ids_not_elem_of l_t); eauto. }
-      iIntros "Ht Hf".
-      iApply "HΦ"; iFrame.
-      iExists (alist_add x v_t args_t), (alist_add x v_s args_s); iFrame.
-      iApply (local_bij_except_add_notin with "Hv HL Hs Ht").
-      by rewrite Hdom. }
+    (*   mono: iApply (local_write_frame_target_alloc Q with "Hf"). *)
+    (*   { by iIntros (??) "H". } *)
+    (*   { rewrite -Hdom in n; *)
+    (*     eapply (remove_ids_not_elem_of l_t); eauto. } *)
+    (*   iIntros "Ht Hf". *)
+    (*   iApply "HΦ"; iFrame. *)
+    (*   iExists (alist_add x v_t args_t), (alist_add x v_s args_s); iFrame. *)
+    (*   iApply (local_bij_except_add_notin with "Hv HL Hs Ht"). *)
+    (*   by rewrite Hdom. } *)
   Admitted.
 
   (* Phi instructions are compatible up to equivalent phi identifiers and that
@@ -407,6 +405,7 @@ Section compatibility.
 
     iDestruct (big_sepL2_cons_inv_l with "Hi") as (???) "(CI1 & CI2)".
     destruct a, x2; subst; cbn -[denote_instr]... Cut...
+
     apply code_WF_cons_inv in Hwf; destruct Hwf as (Hwf1 & Hwf2).
     apply code_WF_cons_inv in Hwf'; destruct Hwf' as (Hwf'1 & Hwf'2).
 
@@ -745,7 +744,7 @@ Section compatibility.
         "(Hs_t & Hs_s & Ha_t & Ha_s & Hd_t & Hd_s & Harg_t & Harg_s)".
     rewrite H3 H4; clear H3 H4.
     vsimp. Tau. iApply sim_expr'_base...
-    Cut... iApply instr_to_L0'.
+    Cut... iApply vir_sim_properties.instr_to_L0'.
 
     iDestruct "Hv" as "#Hv".
     iApply sim_expr'_bupd_mono;
