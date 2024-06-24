@@ -145,6 +145,8 @@ Section fundamental_exp.
 
   (* [Binop]-y operations *)
 
+  Notation expr_inv := local_bij_at_exp.
+
   (* [OP_IBinop] *)
   Lemma expr_logrel_OP_IBinop:
     ∀ I (iop : ibinop) (t : dtyp) (e1 e2 : exp dtyp) (dt : option dtyp)

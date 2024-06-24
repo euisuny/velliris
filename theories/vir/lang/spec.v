@@ -42,8 +42,8 @@ Section spec.
   (* | NOFREE *)
   | ARGMONLY
   | READONLY
-  | INACC_OR_ARGMONLY
-  | OTHER.
+  | INACC_OR_ARGMONLY.
+  (* | OTHER. *)
 
   Definition call_ev_spec := gmap (loc * loc) Qp -> list uvalue -> list uvalue -> Prop.
 
@@ -77,7 +77,7 @@ Section spec.
 
   Definition other_spec : call_ev_spec :=
    fun (C : gmap (loc * loc) Qp) (args_t args_s : list uvalue) =>
-     args_t = args_s /\ C = ∅.
+     C = ∅.
 
   Definition attribute_spec (c : attr_case) :=
     match c with
@@ -85,7 +85,7 @@ Section spec.
       | ARGMONLY => argmemonly_spec
       | READONLY => readonly_spec
       | INACC_OR_ARGMONLY => inacc_or_argmemonly_spec
-      | NONE => other_spec
+      (* | NONE => other_spec *)
     end.
 
   Definition has_attr_case (attrs : list fn_attr) (c : attr_case) : Prop :=
@@ -95,12 +95,12 @@ Section spec.
     | ARGMONLY => has FNATTR_Argmemonly /\ not (has FNATTR_Readonly)
     | READONLY => has FNATTR_Readonly /\ not (has FNATTR_Argmemonly)
     | INACC_OR_ARGMONLY => has FNATTR_Inaccessiblemem_or_argmemonly
-    | NONE =>
-        not (has FNATTR_Argmemonly) /\
-        not (has FNATTR_Readonly) /\
-        not (has FNATTR_Writeonly) /\
-        not (has FNATTR_Nofree) /\
-        not (has FNATTR_Inaccessiblemem_or_argmemonly)
+    (* | NONE => *)
+    (*     not (has FNATTR_Argmemonly) /\ *)
+    (*     not (has FNATTR_Readonly) /\ *)
+    (*     not (has FNATTR_Writeonly) /\ *)
+    (*     not (has FNATTR_Nofree) /\ *)
+    (*     not (has FNATTR_Inaccessiblemem_or_argmemonly) *)
     end.
 
   (** *Specification of memory-related function attributes
@@ -115,9 +115,10 @@ Section spec.
       (ExternalCall a f args_t attr_t)
       (ExternalCall a0 f0 args_s attr_s) C :=
       attr_t = attr_s /\
-       ∃ (c : attr_case),
+      ((C = ∅) ∨
+      (∃ (c : attr_case),
          has_attr_case attr_t c /\
-         attribute_spec c C args_t args_s.
+         attribute_spec c C args_t args_s)).
 
   Equations vir_call_ev {X Y} :
     language.CallE (call_events vir_lang) X →

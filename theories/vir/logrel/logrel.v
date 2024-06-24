@@ -6,7 +6,7 @@ From velliris.vir.logrel Require Export
     wellformedness
     logical_relations
     compatibility
-    (* fundamental_exp *)
+    fundamental_exp
     (* fundamental_exp_relaxed *)
-    (* fundamental *)
+    fundamental
 .

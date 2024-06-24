@@ -54,18 +54,18 @@ Section fundamental.
   (* ------------------------------------------------------------------------ *)
   (* Instr-level reflexivity lemmas *)
 
-  Lemma instr_call_refl C fn attrs args id  i_t i_s A_t A_s:
-    ⊢ (code_refl_inv C i_t i_s A_t A_s -∗
+  Lemma instr_call_refl fn attrs args id  i_t i_s A_t A_s:
+    ⊢ (code_refl_inv ∅ i_t i_s A_t A_s -∗
       instr_conv
-       (denote_instr (IId id, INSTR_Call fn args attrs)) ⪯
+       (denote_instr (IVoid id, INSTR_Call fn args attrs)) ⪯
        instr_conv
-       (denote_instr (IId id, INSTR_Call fn args attrs))
+       (denote_instr (IVoid id, INSTR_Call fn args attrs))
        [{ (r_t, r_s),
-           code_refl_inv C i_t i_s A_t A_s }])%I.
+           code_refl_inv ∅ i_t i_s A_t A_s }])%I.
   Proof with vsimp.
     iIntros "CI".
     cbn; destruct fn...
-    Cut.
+    Cut... Cut.
     mono: iApply (denote_exp_map_monad args _ with "CI").
     iDestruct "HΦ" as "(CI & #H)"...
 
@@ -78,47 +78,17 @@ Section fundamental.
     Cut.
     mono: (iApply (instr_conv_concretize_or_pick_strong with "Hv")) with "[CI]".
     iDestruct "HΦ" as "(Hdv & %Hdu_t & %Hdu_s)"...
-    Cut...
 
-    mono: iApply (call_refl with "CI Hdv H").
+    mono: iApply (call_refl with "CI Hdv H")...
+
+    2 : { simp attribute_interp; split; eauto. }
     iDestruct "HΦ" as "(#Hv2 & CI)"...
 
     (* 3. Local write simulation *)
     final...
-    mono: iApply (local_write_refl with "CI Hv2").
+    final...
 
-    vfinal.
-  Qed.
-
-  Lemma instr_call_void_refl C fn args attrs n i_t i_s A_t A_s:
-    ⊢ (code_refl_inv C i_t i_s A_t A_s -∗
-      instr_conv
-       (denote_instr (IVoid n, INSTR_Call fn args attrs)) ⪯
-       instr_conv
-       (denote_instr (IVoid n, INSTR_Call fn args attrs))
-       [{ (r_t, r_s), code_refl_inv C i_t i_s A_t A_s }])%I.
-  Proof with vsimp.
-    iIntros "CI".
-    cbn; destruct fn...
-    Cut.
-    mono: iApply (denote_exp_map_monad args _ with "CI").
-    iDestruct "HΦ" as "(CI & #H)"...
-
-    (* 1. expression refl *)
-    Cut...
-    mono: iApply expr_logrel_refl.
-    iDestruct "HΦ" as "(#Hv & CI)"...
-
-    (* 2. Call simulation *)
-    Cut.
-    mono: (iApply (instr_conv_concretize_or_pick_strong with "Hv")) with "[CI]".
-
-    iDestruct "HΦ" as "(Hdv & %Hdu_t & %Hdu_s)"...
-    Cut...
-
-    mono: iApply (call_refl with "CI Hdv H").
-    iDestruct "HΦ" as "(#Hv2 & CI)".
-    do 2 vfinal.
+    sfinal.
   Qed.
 
   Lemma instr_alloca_refl C id t nb align i_t i_s A_t A_s :
@@ -132,14 +102,16 @@ Section fundamental.
   Proof with vsimp.
     iIntros (WF) "CI". cbn.
     vsimp; Cut; vsimp. cbn in *.
-    iApply (sim_expr_bupd_mono with "[] [CI]"); [ |
-      iApply (alloca_refl_bij with "CI")]; cycle 1.
-    { cbn; intros; apply non_void_b_non_void;
+    destructb.
+    Cut...
+    (* iApply (sim_expr_bupd_mono with "[] [CI]"); [ | *)
+    mono: iApply (alloca_refl_bij with "CI").
+    2 : { cbn; intros; apply non_void_b_non_void;
         destruct (non_void_b t); auto. }
 
-    iIntros (??) "H".
+    vsimp. do 2 (final; vsimp).
 
-    iDestruct "H" as (??->->??) "(#Hv & CI)"... final.
+    iDestruct "HΦ" as (??) "(#Hv & CI)"...
     iDestruct (dval_rel_lift with "Hv") as "Hdv"...
 
     mono: iApply (local_write_refl with "CI Hdv").
@@ -158,6 +130,7 @@ Section fundamental.
     iIntros (WF) "CI"; cbn; destruct ptr...
     Cut...
 
+    Cut...
     (* Process the value *)
     mono: iApply (expr_logrel_refl (Some d) with "CI")...
     iDestruct "HΦ" as "(#Hv & CI)".
@@ -171,8 +144,6 @@ Section fundamental.
     iDestruct (dval_rel_poison_neg_inv with "Hv'") as "%Hv".
     specialize (Hv n).
     destruct (@dvalue_eq_dec dv_t DVALUE_Poison) eqn: Hb; [ done | ]...
-
-    Cut...
 
     assert (Hwf_t : dtyp_WF t).
     { cbn in WF. destructb.
@@ -197,7 +168,7 @@ Section fundamental.
     iIntros (WF) "CI".
     cbn in WF; destruct ptr, d, val; try solve [inversion WF]; cbn...
 
-    Cut... mono: iApply (expr_logrel_refl with "CI")...
+    Cut... Cut... mono: iApply (expr_logrel_refl with "CI")...
     iDestruct "HΦ" as "(H & HL)"...
 
     Cut...
@@ -211,11 +182,11 @@ Section fundamental.
     apply dvalue_has_dtyp_fun_sound in Hτ.
     iDestruct (dval_rel_dvalue_has_dtyp with "Hv'") as %Hτ'.
     specialize (Hτ' Hτ). rewrite -dvalue_has_dtyp_eq in Hτ'.
-    rewrite Hτ'; cbn...
+    rewrite Hτ'; cbn... rewrite instr_conv_bind bind_bind.
 
     Cut... mono: iApply (expr_logrel_refl with "HL")...
     iDestruct "HΦ" as "(H & HL)".
-    Cut...
+    Cut... Cut...
     mono: (iApply instr_conv_concretize_or_pick_strong) with "[HL]"...
 
     iDestruct "HΦ" as "(#Hv''' & %Hc'' & %Hc''')"...
@@ -234,7 +205,7 @@ Section fundamental.
     vsimp. rewrite !subevent_subevent.
     mono: iApply (store_refl with "HL Hv''' Hv'")...
     2 : rewrite dvalue_has_dtyp_eq in Hτ'; auto.
-    vfinal.
+    vfinal... vfinal... vfinal...
   Qed.
 
 (* ------------------------------------------------------------------------ *)
