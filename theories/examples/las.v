@@ -267,6 +267,11 @@ Ltac invert_WF :=
         let WF_cfg := fresh "WF_cfg" in
         apply fun_WF_inv in H;
         destruct H as (WF_args & WF_cfg)
+    | [ H : is_true (code_WF (cons _ _)) |- _ ] =>
+        let WF_hd := fresh "WF_hd" in
+        let WF_tl := fresh "WF_tl" in
+        apply code_WF_cons_inv in H;
+        destruct H as (WF_hd & WF_tl)
   end.
 
 (* TODO *)
@@ -445,7 +450,9 @@ Section las_example_proof.
 
   Lemma las_instr_inv {T a o a0 id p b b'}:
     las_instr (T := T) a o a0 b' = (p, id, b) ->
+    (* Instruction did not change or *)
     a0 = p \/
+    (* It did change and ... *)
      exists id0 t t0 id2 align volatile r,
        b' = true /\
        a  = id2 /\
@@ -457,6 +464,19 @@ Section las_example_proof.
     destruct_match; eauto. right. repeat eexists; done.
   Qed.
 
+  (* Case analysis on when the instruction is unchanged. *)
+  Lemma las_instr_unchanged_inv {T a o id p b b'}:
+    las_instr (T := T) a o p b' = (p, id, b) ->
+    (* The allocation state did not change or... *)
+    b' = b \/
+    (* It was an alloca instruction. *)
+    (b = true /\ ∃ τ e i, p.2 = INSTR_Alloca τ e i).
+  Proof.
+    intros; rewrite /las_instr in H0.
+    destruct_match; eauto. right. repeat eexists; done.
+  Qed.
+
+  (* Some more case analysis on when the instruction changes *)
   Lemma las_instr_Some_id_inv {T a o a0 id p b b'}:
     las_instr (T := T) a o a0 b' = (p, Some id, b) ->
     (o = Some id /\ a0 = p /\ b' = false /\
@@ -481,7 +501,7 @@ Section las_example_proof.
       ([ a := v ]t i -∗
         [ x := v ]t i -∗ ldomain_tgt i L -∗ stack_tgt i -∗ Ψ (Ret ())) -∗
       target_red (η := vir_handler) (<{ %(IId a) = (INSTR_Op (' x ')) }>) Ψ.
-  Proof. Admitted.
+  Proof. Admitted. (* MOVE *)
 
   Lemma las_simulation_code a b A_t A_s :
     code_WF (blk_code b) ->
@@ -500,22 +520,22 @@ Section las_example_proof.
        It holds trivially in the beginning because no location has been found,
         yet. *)
     iAssert (⌜b = true⌝ -∗
-        ∀ id, ⌜o = Some id⌝ -∗ ∀ i_s i_t L_s L_t, frame_src i_s L_s -∗ frame_tgt i_t L_t -∗
+        ∀ id, ⌜o = Some id⌝ -∗
+          ∀ i_s i_t L_s L_t, frame_src i_s L_s -∗ frame_tgt i_t L_t -∗
           ∃ ptr v_t v_s,
             dval_rel v_t v_s ∗ [ id := dvalue_to_uvalue v_t ]t i_t ∗ [ a := UVALUE_Addr (ptr,0)%Z ]s i_s ∗
             ptr ↦s v_s ∗ frame_tgt i_t L_t ∗ frame_src i_s L_s)%I as "H". { iIntros (?); subst; done. }
     clear Heqb.
 
     (* Induction on code block. *)
-    (* Inductive case. (base case is trivial) *)
     iInduction c as [ | ] "IH" forall (o b A_t A_s) "H"; eauto; cbn.
+
+    (* Trivial base case *)
     { iIntros (??) "CI". cbn. vsimp. rewrite instr_conv_ret. vsimp.
       vfinal. iExists ∅, ∅. by cbn. }
 
-    rename a into promotable,
-           o into stored_val,
-           a0 into i,
-           b into allocated.
+    (* Inductive case. *)
+    rename a into promotable, o into stored_val, a0 into i, b into allocated.
 
     destruct (las_instr promotable stored_val i) eqn: Hlas; destruct p; cbn.
     iIntros (??) "CI".
@@ -523,78 +543,86 @@ Section las_example_proof.
     (* Current instruction. *)
     assert (Hlas_orig := Hlas).
     apply las_instr_inv in Hlas. destruct Hlas as [ Heq | (?&?&?&?&?&?&?&?&?&?&?&?) ].
-    { (* Isntruction unchanged. *) inv Heq.
-      rewrite !denote_code_cons; do 2 rewrite instr_conv_bind; Cut...
-      (* FIXME: We need to case analyze on the alloca case here so that we can use the
-         inductive hypothesis. *)
-      cbn in H0; destruct p; destructb.
 
-      mono: iApply (instr_logrel_refl with "CI")... clear H1; vsimp.
+    (* TODO: Factor out *)
+    { (* CASE 0: Isntruction unchanged. *) inv Heq.
+      rewrite !denote_code_cons; do 2 rewrite instr_conv_bind; Cut...
+      invert_WF.
+
+      (* FIXME (?): We need to case analyze on the alloca case here so that we can use the
+         inductive hypothesis. *)
+      destruct p; destructb; clear H1; rename i into id, i0 into i.
+
+      (* Instructions are reflexive *)
+      mono: iApply (instr_logrel_refl with "CI")... vsimp.
       iDestruct "HΦ" as (??) "HΦ".
-      assert (WF_c: code_WF c) by done.
-      iSpecialize ("IH" $! WF_c _ _ (nA_t ++ A_t) (nA_s ++ A_s)).
+      iSpecialize ("IH" $! WF_tl _ _ (nA_t ++ A_t) (nA_s ++ A_s)).
 
       mono: iApply "IH"; eauto...
-      { iIntros (??) "H'". iDestruct "H'" as (????) "H'".
+      { iIntros (??) "H'"; iDestruct "H'" as (????) "H'".
         sfinal. iDestruct "H'" as (??) "H'".
         iExists (nA_t0 ++ nA_t), (nA_s0 ++ nA_s); rewrite !app_assoc; by iFrame. }
 
+      apply las_instr_unchanged_inv in Hlas_orig.
+      destruct Hlas_orig; last admit.
+
       iModIntro; iIntros (???????) "Hf Hs"; subst.
+      iApply "H"; try done.
       (* TODO : say something more explicit about the [instr_refl] A_t A_s result. *)
       (* cbn in *; destruct_match; destructb; by (iIntros; iApply instr_logrel_refl). } *)
       admit. }
 
-      rewrite !denote_code_cons. do 2 rewrite instr_conv_bind. Cut...
+    rewrite !denote_code_cons. do 2 rewrite instr_conv_bind. Cut...
 
-      match goal with
-        | |- environments.envs_entails _ (sim_expr ?Φ _ _) => set (post := Φ)
-      end.
+    match goal with
+      | |- environments.envs_entails _ (sim_expr ?Φ _ _) => set (post := Φ)
+    end.
 
-      symmetry in H2, H3. subst. rename x5 into stored_val; rename x0 into τ, x1 into τ'.
+    symmetry in H2, H3. subst. rename x5 into stored_val; rename x0 into τ, x1 into τ'.
 
-      (* 1. It was a load instruction from the promotable location that's been stored to;
-          things changed. *)
-      subst.
-      iSpecialize ("H" $! eq_refl _ eq_refl).
-      destruct_code_inv; destruct_local_inv; destruct_frame.
-      iSpecialize ("H" $! _ _ _ _ with "Hfs Hft");
-      iDestruct "H" as (???) "(#Hv & Ht & Hx2 & Hp & Hft & Hfs)".
-      do 2 destruct_frame.
+    (* CASE 1: It was a load instruction from the promotable location that's been stored to;
+        things changed. *)
+    subst.
+    iSpecialize ("H" $! eq_refl _ eq_refl).
+    destruct_code_inv; destruct_local_inv; destruct_frame.
+    iSpecialize ("H" $! _ _ _ _ with "Hfs Hft");
+    iDestruct "H" as (???) "(#Hv & Ht & Hx2 & Hp & Hft & Hfs)".
+    do 2 destruct_frame.
 
-      (* Source step. *)
-      iApply source_red_sim_expr.
-      iApply (source_red_mono with "[CI HL AI Ht Hs_t Hd_t]"); cycle 1.
-      { iApply (source_instr_load _ _ _ _ _ _ _ _ _ _ _
-                (fun vx => ⌜vx = Ret tt⌝ ∗
-                [ promotable := UVALUE_Addr (ptr, 0%Z) ]s i_s ∗
-                [ x := v_s ̂ ]s i_s ∗
-                ptr ↦s v_s ∗ ldomain_src i_s ({[x]} ∪ list_to_set args_s.*1) ∗ stack_src i_s)%I
-                with "Hp Hx2 Hd_s Hs_s"); eauto.
-        1-3: admit.
-        iIntros "H1 Hv' Hp Hd Hs". by iFrame. }
-      iIntros (?) "H"; iDestruct "H" as (?) "(Hx2 & Hx & Hptr & Hd_s & Hs_s)"; subst.
+    (* Source step. *)
+    iApply source_red_sim_expr.
+    iApply (source_red_mono with "[CI HL AI Ht Hs_t Hd_t]"); cycle 1.
+    { iApply (source_instr_load _ _ _ _ _ _ _ _ _ _ _
+              (fun vx => ⌜vx = Ret tt⌝ ∗
+              [ promotable := UVALUE_Addr (ptr, 0%Z) ]s i_s ∗
+              [ x := v_s ̂ ]s i_s ∗
+              ptr ↦s v_s ∗ ldomain_src i_s ({[x]} ∪ list_to_set args_s.*1) ∗ stack_src i_s)%I
+              with "Hp Hx2 Hd_s Hs_s"); eauto.
+      1-3: admit.
+      iIntros "H1 Hv' Hp Hd Hs". by iFrame. }
+    iIntros (?) "H"; iDestruct "H" as (?) "(Hx2 & Hx & Hptr & Hd_s & Hs_s)"; subst.
 
-      (* Target step. *)
-      iApply target_red_sim_expr.
-      iApply (target_red_mono with "[CI HL AI Hx Hptr Hx2 Hs_s Hd_s]"); cycle 1.
-      { iApply (target_instr_local_read with "Hs_t Hd_t Ht"); iIntros; iFrame. admit. }
-      admit.
+    (* Target step. *)
+    iApply target_red_sim_expr.
+    iApply (target_red_mono with "[CI HL AI Hx Hptr Hx2 Hs_s Hd_s]"); cycle 1.
+    { iApply (target_instr_local_read with "Hs_t Hd_t Ht"); iIntros; iFrame. admit. }
+    admit.
 
-    (* assert (code_WF c). (* Well-formedness *) *)
-    (* { apply code_WF_cons_inv in H0; destruct H0; eauto. } *)
+  (* assert (code_WF c). (* Well-formedness *) *)
+  (* { apply code_WF_cons_inv in H0; destruct H0; eauto. } *)
 
-    (*   iSpecialize ("IH" $! H1). *)
+  (*   iSpecialize ("IH" $! H1). *)
 
-    (*   iApply "IH"; iModIntro; iIntros (???????) "Hft Hfs"; subst. *)
-    (*   apply las_instr_Some_id_inv in Hlas. *)
-    (*   destruct Hlas as [ (?&?&?&?) | [ (?&?&?) | [ (?&?) | (?&?&?&?&?&?&?&?&?) ] ] ]; subst. *)
+  (*   iApply "IH"; iModIntro; iIntros (???????) "Hft Hfs"; subst. *)
+  (*   apply las_instr_Some_id_inv in Hlas. *)
+  (*   destruct Hlas as [ (?&?&?&?) | [ (?&?&?) | [ (?&?) | (?&?&?&?&?&?&?&?&?) ] ] ]; subst. *)
 
-    (*   { (* (2) Alloca.  *) *)
-    (*     (* FIXME: This is not quite right; we don't get inherited stuff from the previous instr. *) *)
-    (*     admit. } *)
+  (*   { (* (2) Alloca.  *) *)
+  (*     (* FIXME: This is not quite right; we don't get inherited stuff from the previous instr. *) *)
+  (*     admit. } *)
 
-    (*   { iSpecialize ("H" $! eq_refl _ eq_refl). iApply ("H" with "Hft Hfs"). } *)
-    (*   { iSpecialize ("H" $! eq_refl _ eq_refl). iApply ("H" with "Hft Hfs"). } *)
+  (*   { iSpecialize ("H" $! eq_refl _ eq_refl). iApply ("H" with "Hft Hfs"). } *)
+  (*   { iSpecialize ("H" $! eq_refl _ eq_refl). iApply ("H" with "Hft Hfs"). } *)
 
   (*   (* (3) Store. *) *)
   (*   { admit. } *)
