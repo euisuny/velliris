@@ -112,7 +112,7 @@ Section CR_definition.
         [denote_mcfg]. *)
   Definition fill_ctx (C : context) e :=
     Monad.bind (mcfg_definitions (fill_mcfg_defs C e))
-        (fun defs => denote_mcfg defs ret_typ (DVALUE_Addr main) args nil).
+        (fun defs => denote_mcfg defs ret_typ (DVALUE_Addr main) args).
 
   (* Contextual refinement. *)
   Definition ctx_ref e_t e_s: Prop :=

@@ -239,7 +239,7 @@ Section fundamental.
       try solve [
       cbn; vsimp;
           try rewrite instr_conv_ret; vsimp; try iApply instr_conv_raise].
-    { (* Comment *)
+  (*  { (* Comment *)
       cbn...
       rewrite instr_conv_ret...
        vfinal. }
@@ -253,7 +253,7 @@ Section fundamental.
 
     { cbn... Cut...
       mono: iApply (expr_logrel_refl with "HI")...
-      iApply instr_conv_raise. }
+      iApply instr_conv_raise. } *)
 
   (*   { mono: iApply (instr_call_refl with "HI"). *)
   (*     cbn. iIntros (??) "H". *)
