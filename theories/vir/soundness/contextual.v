@@ -589,420 +589,421 @@ Proof.
   (* pose proof (mcfg_definitions_leaf _ _ _ _ _ _ Hl1 Hl2) as Hsame. *)
   (* rewrite /mcfg_definitions in Hl1. *)
 
-  iAssert (inv [γf] [γf0])%I with "[Hc1 Hs_t Hs_s]" as "Hinv".
-  { iFrame. auto. }
-
-  (* Lemma. Proof of compatibility. *)
-  iPoseProof
-    (Proper_interp_mrec' _ _ _ _ (λ x y : uvalue, ⌜obs_val x y⌝)%I [γf] [γf0]
-      with "Hinv") as "Hrec"; eauto.
-  iApply (sim_expr'_bupd_mono with "[] [Hrec]"); last iApply "Hrec".
-  { iIntros (??) "HΨ"; iDestruct "HΨ" as (????) "(%HΨ & HI)".
-    iExists _, _; iFrame. done. }
-  { rewrite /context_rel.
-
-    (* Related contexts *)
-    iSplitL ""; [ | iSplitL "" ].
-    (* context_call *)
-    { iPureIntro. red. split.
-      - cbn. intros; eauto.
-      - cbn. intros; eauto. }
-    { iPureIntro. red. split.
-      - cbn. intros; eauto.
-      - cbn. intros; eauto. }
-
-    iSplitL ""; cycle 1.
-    {  (* REFL *)
-      iIntros (??).
-      iModIntro.
-      iIntros (?????).
-      destruct C0 as ((?&?)&?).
-      rewrite /arg_val_rel. cbn -[denote_function].
-      iIntros "Hev".
-      iDestruct "Hev" as "(#HWF & HC & Hst & Hss & #Hfn & #Hargs)".
-      subst.
-
-      destruct (lookup_defn fn2 ((dv', e_s) :: r_s))
-        eqn: Hs; cycle 1.
-
-      (* External call case *)
-      { cbn in Hs. destruct_if; reldec.
-        iDestruct (dval_rel_ne_inj with "Hfn Hdv") as %Hne.
-        assert (dv' <> fn2) by eauto.
-        specialize (Hne H1). cbn -[denote_function].
-        destruct (RelDec.rel_dec fn1 dv) eqn: Hfn1; reldec; try done.
-        iPoseProof (dval_rel_lookup_none with "Hfn Hv") as "%Hlu".
-        rewrite H4.
-        rewrite /lookup_defn.
-        specialize (Hlu Hs); rewrite Hlu.
-
-        iApply (sim_expr'_bupd_mono);
-          last iApply (sim_external_call with "HWF Hst Hss HC Hfn Hargs").
-
-        rewrite /call_ev; cbn. simp vir_call_ev.
-        iIntros (??) "H'".
-        rewrite /lift_post.
-        iDestruct "H'" as (????) "(#Hv' & HC & Hs_t & Hs_s)".
-        iExists _, _; iFrame.
-        repeat (iSplitL ""; first done).
-        simp vir_call_ans; by iFrame. }
-
-      (* Internal call case *)
-      { rewrite /fundefs_rel_WF.
-
-        apply lookup_defn_cons_Some in Hs.
-        destruct Hs.
-        (* It is the [e_s] function (the hole) *)
-        { destruct H0; subst; cbn -[denote_function].
-          iDestruct (dval_rel_inj with "Hdv Hfn") as %Hdef; subst.
-          destruct (RelDec.rel_dec fn1 fn1) eqn: Hf; reldec; subst; last done.
-          destruct (RelDec.rel_dec dv' dv') eqn: Hf'; reldec; subst; last done.
-          subst.
-
-          iDestruct "HWF" as %HWF; subst.
-
-          iSpecialize ("Hf" $! _ _ _ _ _ HWF with "Hst Hss Hargs").
-          rewrite WF_attr_t WF_attr_s.
-
-          (* FIXME This is where we need to assume that the function satisfies
-              the specification on the attributes. *)
-
-          (* In our logical relation, we should state instead that the protocols
-           hold for the functions. *)
-
-          (* TODO: Not enough of an assumption for the internal call *)
-          (* iApply sim_expr'_bupd_mono; last (iApply "Hf'"). *)
-          (* iIntros (??) "H'". *)
-          (* rewrite /lift_post. *)
-          (* iDestruct "H'" as (????) "(Hs_t & Hs_s & HC & Hval)". *)
-          (* iExists _, _; iFrame. subst; iModIntro. *)
-          (* repeat (iSplitL ""; first done). *)
-          (* simp vir_call_ans; by iFrame. } *)
-          admit. }
-
-        (* It is a function in the context *)
-        { destruct H0. cbn -[denote_function].
-
-          iDestruct (dval_rel_ne_inj with "Hdv Hfn") as "%Hne"; subst.
-          specialize (Hne H0); subst.
-          destruct (RelDec.rel_dec fn1 dv) eqn: Hf; reldec; subst; first done.
-          destruct (RelDec.rel_dec fn2 dv') eqn: Hf'; reldec; subst; first done.
-          clear H2 Hne Hf.
-          iPoseProof (dval_rel_lookup_some with "Hfn Hv") as "%Hlu".
-          specialize (Hlu _ H1). destruct Hlu as (?&?).
-          rewrite /lookup_defn in H1.
-          rewrite /lookup_defn; rewrite H1 H2.
-
-          (* Juicing out information from the WF of fundefs *)
-          unfold fundefs_WF in WF_s.
-          apply andb_prop_elim in WF_s.
-          destruct WF_s as (Hlen & Wdup_s).
-          apply andb_prop_elim in Hlen. destruct Hlen as (Hlen & Hfun_wf).
-          apply forallb_True in Hfun_wf.
-          rewrite List.Forall_forall in Hfun_wf.
-          assert (Hr_s := H1).
-          apply lookup_defn_Some_In in H1.
-          (* Function [d] is well-formed. *)
-          specialize (Hfun_wf _ H1); cbn in Hfun_wf.
-
-          (* Using [fundefs_logrel] *)
-          assert (Hlen': (length [γf0] > 0)%Z → (length [γf] > 0)%Z) by auto.
-          rewrite /fundefs_logrel. rewrite /lookup_defn in Hr_s.
-          apply lookup_defn_Some_lookup in Hr_s.
-          destruct Hr_s.
-          (* Juice information out of fundef rel WF *)
-          iDestruct "Hrel" as "(Hrel & Hn)".
-          iSpecialize ("Hrel" $! _ _ _ H4).
-          iDestruct "Hrel" as (???) "(#Hdv' & %Hattr & %Hattr' & %Hft & %Hfs)".
-
-          iDestruct (dval_rel_inj with "Hfn Hdv'") as %Hf; subst.
-
-          iSpecialize ("Hlr" $! _ _ _ _ _ _ H5 H4 Hattr Hattr'
-                        with "Hdv'").
-          iDestruct "HWF" as %HWF.
-          (* TODO: Again, some constraint that says that [g] is ∅ *)
-          (* iSpecialize ("Hlr" $! _ _ _ _ HWF with "Hst Hss Hargs HC"). *)
-
-          eapply lookup_defn_Some in H2; eauto;cycle 1.
-          { clear -WF_t.
-
-            unfold fundefs_WF in WF_t.
-            apply andb_prop_elim in WF_t.
-            destruct WF_t as (Hlen & Wdup_t).
-            apply andb_prop_elim in Hlen. destruct Hlen as (Hlen & Hfun_wf).
-            apply forallb_True in Hfun_wf.
-            rewrite List.Forall_forall in Hfun_wf.
-            apply Is_true_true_1 in Wdup_t.
-            by apply NoDup_b_NoDup. }
-          subst.
-
-          (* TODO
-              Assume that everything in context has the empty attribute *)
-          admit. } } }
-          (* iApply sim_expr'_bupd_mono; last iApply "Hlr". *)
-          (* iIntros (??) "Hin". *)
-          (* iDestruct "Hin" as (????) "(Hst & Hss & HC & Hval)". *)
-          (* iExists _, _. *)
-          (* repeat (iSplitL ""; first done). *)
-          (* simp vir_call_ans; subst; by iFrame. } } } *)
-
-    { (* CALL INV *)
-      iIntros (??).
-      iModIntro.
-      iIntros (???????).
-      destruct C0 as ((?&?)&?).
-      rewrite /call_ev. cbn -[denote_function].
-      iIntros "Hev".
-
-
-      (* --------------------------------------------- *)
-
-      simp vir_call_ev.
-      iDestruct "Hev" as
-        "(#Hfn &%Hdt & %Hattr& #Hargs & HC & #HWF & Hst & Hss & %Hinterp)".
-      subst.
-
-      destruct (lookup_defn fn2 ((dv', e_s) :: r_s))
-        eqn: Hs; cycle 1.
-
-      (* External call case *)
-      { cbn in Hs. destruct_if; reldec.
-        iDestruct (dval_rel_ne_inj with "Hfn Hdv") as %Hne.
-        assert (dv' <> fn2) by eauto.
-        specialize (Hne H1). cbn -[denote_function].
-        destruct (RelDec.rel_dec fn1 dv) eqn: Hfn1; reldec; try done.
-        iPoseProof (dval_rel_lookup_none with "Hfn Hv") as "%Hlu".
-        rewrite /lookup_defn.
-        specialize (Hlu Hs); rewrite Hlu.
-
-        rewrite /call_ev; cbn; simp vir_call_ev.
-        rewrite /lookup_defn in Hs. rewrite Hs.
-
-        (* specialize (WF_attr _ _ _ _ _ _ _ _ Hinterp); subst. *)
-        (* TODO: Again *)
-
-        iApply (sim_expr'_bupd_mono);
-          last iApply (sim_external_call with "HWF Hst Hss HC Hfn Hargs").
-        iIntros (??) "H'".
-        rewrite /lift_post.
-        iDestruct "H'" as (????) "(#Hv' & HC & Hs_t & Hs_s)".
-        iExists _, _; iFrame.
-        repeat (iSplitL ""; first done).
-        simp vir_call_ans; by iFrame. }
-
-      (* Internal call case *)
-      { rewrite /fundefs_rel_WF.
-
-        apply lookup_defn_cons_Some in Hs.
-        destruct Hs.
-        (* It is the [e_s] function (the hole) *)
-        { destruct H2; subst; cbn -[denote_function].
-          iDestruct (dval_rel_inj with "Hdv Hfn") as %Hdef; subst.
-          destruct (RelDec.rel_dec fn1 fn1) eqn: Hf; reldec; subst; last done.
-          destruct (RelDec.rel_dec dv' dv') eqn: Hf'; reldec; subst; last done.
-          subst.
-
-          iDestruct "HWF" as %HWF; subst.
-          iDestruct ("Hf" $! _ _ _) as "(_ & Hf')".
-          specialize (WF_attr _ _ _ _ _ _ _ _ Hinterp); subst.
-
-          iSpecialize ("Hf'" $! _ _ _ _ HWF with "Hst Hss Hargs HC").
-          iApply sim_expr'_bupd_mono; last (iApply "Hf'").
-          iIntros (??) "H'".
-          rewrite /lift_post.
-          iDestruct "H'" as (????) "(Hs_t & Hs_s & HC & Hval)".
-          iExists _, _; iFrame. subst; iModIntro.
-          repeat (iSplitL ""; first done).
-          simp vir_call_ans; by iFrame. }
-
-        (* It is a function in the context *)
-        { destruct H2. cbn -[denote_function].
-
-          iDestruct (dval_rel_ne_inj with "Hdv Hfn") as "%Hne"; subst.
-          specialize (Hne H2); subst.
-          destruct (RelDec.rel_dec fn1 dv) eqn: Hf; reldec; subst; first done.
-          destruct (RelDec.rel_dec fn2 dv') eqn: Hf'; reldec; subst; first done.
-          clear H2 Hne Hf.
-          iPoseProof (dval_rel_lookup_some with "Hfn Hv") as "%Hlu".
-          specialize (Hlu _ H3). destruct Hlu as (?&?).
-          rewrite /lookup_defn in H3.
-          rewrite /lookup_defn; rewrite H2 H3.
-
-          (* Juicing out information from the WF of fundefs *)
-          unfold fundefs_WF in WF_s.
-          apply andb_prop_elim in WF_s.
-          destruct WF_s as (Hlen & Wdup_s).
-          apply andb_prop_elim in Hlen. destruct Hlen as (Hlen & Hfun_wf).
-          apply forallb_True in Hfun_wf.
-          rewrite List.Forall_forall in Hfun_wf.
-          assert (Hr_s := H3).
-          apply lookup_defn_Some_In in H3.
-          (* Function [d] is well-formed. *)
-          specialize (Hfun_wf _ H3); cbn in Hfun_wf.
-
-          (* Using [fundefs_logrel] *)
-          assert (Hlen': (length [γf0] > 0)%Z → (length [γf] > 0)%Z) by auto.
-          rewrite /fundefs_logrel. rewrite /lookup_defn in Hr_s.
-          apply lookup_defn_Some_lookup in Hr_s.
-          destruct Hr_s.
-          (* Juice information out of fundef rel WF *)
-          iDestruct "Hrel" as "(Hrel & Hn)".
-          iSpecialize ("Hrel" $! _ _ _ H6).
-          iDestruct "Hrel" as (???) "(#Hdv' & %Hattr & %Hattr' & %Hft & %Hfs)".
-
-          iDestruct (dval_rel_inj with "Hfn Hdv'") as %Hf; subst.
-
-          specialize (WF_attr _ _ _ _ _ _ _ _ Hinterp); subst.
-          iSpecialize ("Hlr" $! _ _ _ _ _ _ H7 H6 Hattr Hattr'
-                        with "Hdv'").
-          iDestruct "HWF" as %HWF.
-          iSpecialize ("Hlr" $! _ _ _ _ HWF with "Hst Hss Hargs HC").
-
-          eapply lookup_defn_Some in H2; eauto;cycle 1.
-          { clear -WF_t.
-
-            unfold fundefs_WF in WF_t.
-            apply andb_prop_elim in WF_t.
-            destruct WF_t as (Hlen & Wdup_t).
-            apply andb_prop_elim in Hlen. destruct Hlen as (Hlen & Hfun_wf).
-            apply forallb_True in Hfun_wf.
-            rewrite List.Forall_forall in Hfun_wf.
-            apply Is_true_true_1 in Wdup_t.
-            by apply NoDup_b_NoDup. }
-          subst.
-
-          iApply sim_expr'_bupd_mono; last iApply "Hlr".
-          iIntros (??) "Hin".
-          iDestruct "Hin" as (????) "(Hst & Hss & HC & Hval)".
-          iExists _, _.
-          repeat (iSplitL ""; first done).
-          simp vir_call_ans; subst; by iFrame. } } } }
-
-  (* Other obligation that "feels like a duplicate obligation",
-   but is a separate one coming from the body of the [mrec] *)
-  { iModIntro. iIntros "(#HWF & HC & Hst & Hss)".
-
-    iAssert (dval_rel (DVALUE_Addr main) (DVALUE_Addr main))%I as "#Hmain".
-    { rewrite (dval_rel_unfold (DVALUE_Addr _)).
-      cbn. iSplitL ""; try done.
-      iDestruct "Haddr_main" as "(Haddr_main & _)"; done. }
-
-    destruct (lookup_defn (DVALUE_Addr main) ((dv', e_s) :: r_s))
-      eqn: Hs; cycle 1.
-
-    (* External call case *)
-    { cbn in Hs. destruct_if; reldec.
-      iDestruct (dval_rel_ne_inj with "Hmain Hdv") as %Hne.
-      assert (dv' <> DVALUE_Addr main) by eauto.
-      specialize (Hne H3). cbn -[denote_function map_monad].
-      destruct (RelDec.rel_dec (DVALUE_Addr main) dv) eqn: Hfn1;
-        reldec; try done.
-      iPoseProof (dval_rel_lookup_none with "Hmain Hv") as "%Hlu".
-      rewrite /lookup_defn.
-      specialize (Hlu Hs); rewrite Hlu.
-
-      iApply (sim_expr'_bupd_mono);
-        last iApply (sim_external_call with "HWF Hst Hss HC Hmain"); try done.
-      iIntros (??) "H'".
-      rewrite /lift_post.
-      iDestruct "H'" as (????) "(#Hv' & HC & Hs_t & Hs_s)".
-      iExists _, _; iFrame.
-      repeat (iSplitL ""; first done).
-      (iSplitR ""; last done).
-
-      iApply (uval_rel_implies_obs_val with "Hv'"). }
-
-    (* Internal call case *)
-    { apply lookup_defn_cons_Some in Hs.
-      destruct Hs.
-      (* It is the [e_s] function (the hole) *)
-      { destruct H2; inv H2; subst. cbn -[denote_function].
-        iDestruct (dval_rel_inj with "Hdv Hmain") as %Hdef; subst.
-        destruct (RelDec.rel_dec (DVALUE_Addr main) (DVALUE_Addr main))
-          eqn: Hf; reldec; subst; last done.
-        rewrite /fun_logrel.
-        iDestruct "HWF" as %HWF.
-        iDestruct ("Hf" $! _ _ _) as "(_ & Hf')".
-
-        iSpecialize ("Hf'" $! _ _ nil nil HWF with "Hst Hss").
-        cbn -[denote_function].
-        iSpecialize ("Hf'" $! Logic.I with "HC").
-
-        iApply sim_expr'_bupd_mono; last (iApply "Hf'").
-        iIntros (??) "H'".
-        rewrite /lift_post.
-        iDestruct "H'" as (????) "(Hs_t & Hs_s & HC & Hval)".
-        iExists _, _; iFrame. subst; iModIntro.
-        repeat (iSplitL ""; first done).
-        (iSplitR ""; last done).
-        iApply (uval_rel_implies_obs_val with "Hval"). }
-
-      (* It is a function in the context *)
-      { destruct H2; cbn -[denote_function].
-
-        iDestruct (dval_rel_ne_inj with "Hdv Hmain") as "%Hne"; subst.
-        specialize (Hne H2); subst.
-        destruct (RelDec.rel_dec (DVALUE_Addr main) dv) eqn: Hf;
-          reldec; subst; first done.
-        clear H2 Hne Hf.
-        iPoseProof (dval_rel_lookup_some with "Hmain Hv") as "%Hlu".
-        specialize (Hlu _ H3). destruct Hlu as (?&?).
-        rewrite /lookup_defn H2.
-
-        (* Juicing out information from the WF of fundefs *)
-        unfold fundefs_WF in WF_s.
-        apply andb_prop_elim in WF_s.
-        destruct WF_s as (Hlen & Wdup_s).
-        apply andb_prop_elim in Hlen. destruct Hlen as (Hlen & Hfun_wf).
-        apply forallb_True in Hfun_wf.
-        rewrite List.Forall_forall in Hfun_wf.
-        assert (Hr_s := H3).
-        apply lookup_defn_Some_In in H3.
-        (* Function [d] is well-formed. *)
-        specialize (Hfun_wf _ H3); cbn in Hfun_wf.
-
-        (* Using [fundefs_logrel] *)
-        assert (Hlen': (length [γf0] > 0)%Z → (length [γf] > 0)%Z) by auto.
-        rewrite /fundefs_logrel.
-        apply lookup_defn_Some_lookup in Hr_s.
-        destruct Hr_s.
-        (* Juice information out of fundef rel WF *)
-        iDestruct "Hrel" as "(Hrel & Hn)".
-        iSpecialize ("Hrel" $! _ _ _ H6).
-        iDestruct "Hrel" as (???)
-                              "(#Hdv' & %Hattr & %Hattr' & %Hft & %Hfs)".
-
-        iSpecialize ("Hlr" $! _ _ _ _ _ _ H7 H6 Hattr Hattr'
-                      with "Hdv'").
-        iSpecialize ("Hlr" $! _ _ nil nil Hlen' with "Hst Hss").
-        cbn -[denote_function].
-        iSpecialize ("Hlr" $! Logic.I with "HC").
-
-        iDestruct (dval_rel_inj with "Hmain Hdv'") as %Hf; subst.
-
-        eapply lookup_defn_Some in H2; eauto;cycle 1.
-        { clear -WF_t.
-
-          unfold fundefs_WF in WF_t.
-          apply andb_prop_elim in WF_t.
-          destruct WF_t as (Hlen & Wdup_t).
-          apply andb_prop_elim in Hlen. destruct Hlen as (Hlen & Hfun_wf).
-          apply forallb_True in Hfun_wf.
-          rewrite List.Forall_forall in Hfun_wf.
-          apply Is_true_true_1 in Wdup_t.
-          by apply NoDup_b_NoDup. }
-        eauto.
-        subst.
-
-        iApply sim_expr'_bupd_mono; last iApply "Hlr".
-        iIntros (??) "Hin".
-        iDestruct "Hin" as (????) "(Hst & Hss & HC & Hval)".
-        iExists _, _; subst.
-        repeat (iSplitL ""; first done); iFrame.
-        (iSplitR ""; last done).
-
-        iApply (uval_rel_implies_obs_val with "Hval"). } } }
-    Unshelve.
-    all : eauto. all: do 2 constructor.
-
-Qed.
+  (* iAssert (inv [γf] [γf0])%I with "[Hc1 Hs_t Hs_s]" as "Hinv". *)
+  (* { iFrame. auto. } *)
+
+  (* (* Lemma. Proof of compatibility. *) *)
+  (* iPoseProof *)
+  (*   (Proper_interp_mrec' _ _ _ _ (λ x y : uvalue, ⌜obs_val x y⌝)%I [γf] [γf0] *)
+  (*     with "Hinv") as "Hrec"; eauto. *)
+  (* iApply (sim_expr'_bupd_mono with "[] [Hrec]"); last iApply "Hrec". *)
+  (* { iIntros (??) "HΨ"; iDestruct "HΨ" as (????) "(%HΨ & HI)". *)
+  (*   iExists _, _; iFrame. done. } *)
+  (* { rewrite /context_rel. *)
+
+  (*   (* Related contexts *) *)
+  (*   iSplitL ""; [ | iSplitL "" ]. *)
+  (*   (* context_call *) *)
+  (*   { iPureIntro. red. split. *)
+  (*     - cbn. intros; eauto. *)
+  (*     - cbn. intros; eauto. } *)
+  (*   { iPureIntro. red. split. *)
+  (*     - cbn. intros; eauto. *)
+  (*     - cbn. intros; eauto. } *)
+
+  (*   iSplitL ""; cycle 1. *)
+  (*   {  (* REFL *) *)
+  (*     iIntros (??). *)
+  (*     iModIntro. *)
+  (*     iIntros (?????). *)
+  (*     destruct C0 as ((?&?)&?). *)
+  (*     rewrite /arg_val_rel. cbn -[denote_function]. *)
+  (*     iIntros "Hev". *)
+  (*     iDestruct "Hev" as "(#HWF & HC & Hst & Hss & #Hfn & #Hargs)". *)
+  (*     subst. *)
+
+  (*     destruct (lookup_defn fn2 ((dv', e_s) :: r_s)) *)
+  (*       eqn: Hs; cycle 1. *)
+
+  (*     (* External call case *) *)
+  (*     { cbn in Hs. destruct_if; reldec. *)
+  (*       iDestruct (dval_rel_ne_inj with "Hfn Hdv") as %Hne. *)
+  (*       assert (dv' <> fn2) by eauto. *)
+  (*       specialize (Hne H1). cbn -[denote_function]. *)
+  (*       destruct (RelDec.rel_dec fn1 dv) eqn: Hfn1; reldec; try done. *)
+  (*       iPoseProof (dval_rel_lookup_none with "Hfn Hv") as "%Hlu". *)
+  (*       rewrite H4. *)
+  (*       rewrite /lookup_defn. *)
+  (*       specialize (Hlu Hs); rewrite Hlu. *)
+
+  (*       iApply (sim_expr'_bupd_mono); *)
+  (*         last iApply (sim_external_call with "HWF Hst Hss HC Hfn Hargs"). *)
+
+  (*       rewrite /call_ev; cbn. simp vir_call_ev. *)
+  (*       iIntros (??) "H'". *)
+  (*       rewrite /lift_post. *)
+  (*       iDestruct "H'" as (????) "(#Hv' & HC & Hs_t & Hs_s)". *)
+  (*       iExists _, _; iFrame. *)
+  (*       repeat (iSplitL ""; first done). *)
+  (*       simp vir_call_ans; by iFrame. } *)
+
+  (*     (* Internal call case *) *)
+  (*     { rewrite /fundefs_rel_WF. *)
+
+  (*       apply lookup_defn_cons_Some in Hs. *)
+  (*       destruct Hs. *)
+  (*       (* It is the [e_s] function (the hole) *) *)
+  (*       { destruct H0; subst; cbn -[denote_function]. *)
+  (*         iDestruct (dval_rel_inj with "Hdv Hfn") as %Hdef; subst. *)
+  (*         destruct (RelDec.rel_dec fn1 fn1) eqn: Hf; reldec; subst; last done. *)
+  (*         destruct (RelDec.rel_dec dv' dv') eqn: Hf'; reldec; subst; last done. *)
+  (*         subst. *)
+
+  (*         iDestruct "HWF" as %HWF; subst. *)
+
+  (*         iSpecialize ("Hf" $! _ _ _ _ _ HWF with "Hst Hss Hargs"). *)
+  (*         rewrite WF_attr_t WF_attr_s. *)
+
+  (*         (* FIXME This is where we need to assume that the function satisfies *)
+  (*             the specification on the attributes. *) *)
+
+  (*         (* In our logical relation, we should state instead that the protocols *)
+  (*          hold for the functions. *) *)
+
+  (*         (* TODO: Not enough of an assumption for the internal call *) *)
+  (*         (* iApply sim_expr'_bupd_mono; last (iApply "Hf'"). *) *)
+  (*         (* iIntros (??) "H'". *) *)
+  (*         (* rewrite /lift_post. *) *)
+  (*         (* iDestruct "H'" as (????) "(Hs_t & Hs_s & HC & Hval)". *) *)
+  (*         (* iExists _, _; iFrame. subst; iModIntro. *) *)
+  (*         (* repeat (iSplitL ""; first done). *) *)
+  (*         (* simp vir_call_ans; by iFrame. } *) *)
+  (*         admit. } *)
+
+  (*       (* It is a function in the context *) *)
+  (*       { destruct H0. cbn -[denote_function]. *)
+
+  (*         iDestruct (dval_rel_ne_inj with "Hdv Hfn") as "%Hne"; subst. *)
+  (*         specialize (Hne H0); subst. *)
+  (*         destruct (RelDec.rel_dec fn1 dv) eqn: Hf; reldec; subst; first done. *)
+  (*         destruct (RelDec.rel_dec fn2 dv') eqn: Hf'; reldec; subst; first done. *)
+  (*         clear H2 Hne Hf. *)
+  (*         iPoseProof (dval_rel_lookup_some with "Hfn Hv") as "%Hlu". *)
+  (*         specialize (Hlu _ H1). destruct Hlu as (?&?). *)
+  (*         rewrite /lookup_defn in H1. *)
+  (*         rewrite /lookup_defn; rewrite H1 H2. *)
+
+  (*         (* Juicing out information from the WF of fundefs *) *)
+  (*         unfold fundefs_WF in WF_s. *)
+  (*         apply andb_prop_elim in WF_s. *)
+  (*         destruct WF_s as (Hlen & Wdup_s). *)
+  (*         apply andb_prop_elim in Hlen. destruct Hlen as (Hlen & Hfun_wf). *)
+  (*         apply forallb_True in Hfun_wf. *)
+  (*         rewrite List.Forall_forall in Hfun_wf. *)
+  (*         assert (Hr_s := H1). *)
+  (*         apply lookup_defn_Some_In in H1. *)
+  (*         (* Function [d] is well-formed. *) *)
+  (*         specialize (Hfun_wf _ H1); cbn in Hfun_wf. *)
+
+  (*         (* Using [fundefs_logrel] *) *)
+  (*         assert (Hlen': (length [γf0] > 0)%Z → (length [γf] > 0)%Z) by auto. *)
+  (*         rewrite /fundefs_logrel. rewrite /lookup_defn in Hr_s. *)
+  (*         apply lookup_defn_Some_lookup in Hr_s. *)
+  (*         destruct Hr_s. *)
+  (*         (* Juice information out of fundef rel WF *) *)
+  (*         iDestruct "Hrel" as "(Hrel & Hn)". *)
+  (*         iSpecialize ("Hrel" $! _ _ _ H4). *)
+  (*         iDestruct "Hrel" as (???) "(#Hdv' & %Hattr & %Hattr' & %Hft & %Hfs)". *)
+
+  (*         iDestruct (dval_rel_inj with "Hfn Hdv'") as %Hf; subst. *)
+
+  (*         iSpecialize ("Hlr" $! _ _ _ _ _ _ H5 H4 Hattr Hattr' *)
+  (*                       with "Hdv'"). *)
+  (*         iDestruct "HWF" as %HWF. *)
+  (*         (* TODO: Again, some constraint that says that [g] is ∅ *) *)
+  (*         (* iSpecialize ("Hlr" $! _ _ _ _ HWF with "Hst Hss Hargs HC"). *) *)
+
+  (*         eapply lookup_defn_Some in H2; eauto;cycle 1. *)
+  (*         { clear -WF_t. *)
+
+  (*           unfold fundefs_WF in WF_t. *)
+  (*           apply andb_prop_elim in WF_t. *)
+  (*           destruct WF_t as (Hlen & Wdup_t). *)
+  (*           apply andb_prop_elim in Hlen. destruct Hlen as (Hlen & Hfun_wf). *)
+  (*           apply forallb_True in Hfun_wf. *)
+  (*           rewrite List.Forall_forall in Hfun_wf. *)
+  (*           apply Is_true_true_1 in Wdup_t. *)
+  (*           by apply NoDup_b_NoDup. } *)
+  (*         subst. *)
+
+  (*         (* TODO *)
+  (*             Assume that everything in context has the empty attribute *) *)
+  (*         admit. } } } *)
+  (*         (* iApply sim_expr'_bupd_mono; last iApply "Hlr". *) *)
+  (*         (* iIntros (??) "Hin". *) *)
+  (*         (* iDestruct "Hin" as (????) "(Hst & Hss & HC & Hval)". *) *)
+  (*         (* iExists _, _. *) *)
+  (*         (* repeat (iSplitL ""; first done). *) *)
+  (*         (* simp vir_call_ans; subst; by iFrame. } } } *) *)
+
+  (*   { (* CALL INV *) *)
+  (*     iIntros (??). *)
+  (*     iModIntro. *)
+  (*     iIntros (???????). *)
+  (*     destruct C0 as ((?&?)&?). *)
+  (*     rewrite /call_ev. cbn -[denote_function]. *)
+  (*     iIntros "Hev". *)
+
+
+  (*     (* --------------------------------------------- *) *)
+
+  (*     simp vir_call_ev. *)
+  (*     iDestruct "Hev" as *)
+  (*       "(#Hfn &%Hdt & %Hattr& #Hargs & HC & #HWF & Hst & Hss & %Hinterp)". *)
+  (*     subst. *)
+
+  (*     destruct (lookup_defn fn2 ((dv', e_s) :: r_s)) *)
+  (*       eqn: Hs; cycle 1. *)
+
+  (*     (* External call case *) *)
+  (*     { cbn in Hs. destruct_if; reldec. *)
+  (*       iDestruct (dval_rel_ne_inj with "Hfn Hdv") as %Hne. *)
+  (*       assert (dv' <> fn2) by eauto. *)
+  (*       specialize (Hne H1). cbn -[denote_function]. *)
+  (*       destruct (RelDec.rel_dec fn1 dv) eqn: Hfn1; reldec; try done. *)
+  (*       iPoseProof (dval_rel_lookup_none with "Hfn Hv") as "%Hlu". *)
+  (*       rewrite /lookup_defn. *)
+  (*       specialize (Hlu Hs); rewrite Hlu. *)
+
+  (*       rewrite /call_ev; cbn; simp vir_call_ev. *)
+  (*       rewrite /lookup_defn in Hs. rewrite Hs. *)
+
+  (*       (* specialize (WF_attr _ _ _ _ _ _ _ _ Hinterp); subst. *) *)
+  (*       (* TODO: Again *) *)
+
+  (*       iApply (sim_expr'_bupd_mono); *)
+  (*         last iApply (sim_external_call with "HWF Hst Hss HC Hfn Hargs"). *)
+  (*       iIntros (??) "H'". *)
+  (*       rewrite /lift_post. *)
+  (*       iDestruct "H'" as (????) "(#Hv' & HC & Hs_t & Hs_s)". *)
+  (*       iExists _, _; iFrame. *)
+  (*       repeat (iSplitL ""; first done). *)
+  (*       simp vir_call_ans; by iFrame. } *)
+
+  (*     (* Internal call case *) *)
+  (*     { rewrite /fundefs_rel_WF. *)
+
+  (*       apply lookup_defn_cons_Some in Hs. *)
+  (*       destruct Hs. *)
+  (*       (* It is the [e_s] function (the hole) *) *)
+  (*       { destruct H2; subst; cbn -[denote_function]. *)
+  (*         iDestruct (dval_rel_inj with "Hdv Hfn") as %Hdef; subst. *)
+  (*         destruct (RelDec.rel_dec fn1 fn1) eqn: Hf; reldec; subst; last done. *)
+  (*         destruct (RelDec.rel_dec dv' dv') eqn: Hf'; reldec; subst; last done. *)
+  (*         subst. *)
+
+  (*         iDestruct "HWF" as %HWF; subst. *)
+  (*         iDestruct ("Hf" $! _ _ _) as "(_ & Hf')". *)
+  (*         specialize (WF_attr _ _ _ _ _ _ _ _ Hinterp); subst. *)
+
+  (*         iSpecialize ("Hf'" $! _ _ _ _ HWF with "Hst Hss Hargs HC"). *)
+  (*         iApply sim_expr'_bupd_mono; last (iApply "Hf'"). *)
+  (*         iIntros (??) "H'". *)
+  (*         rewrite /lift_post. *)
+  (*         iDestruct "H'" as (????) "(Hs_t & Hs_s & HC & Hval)". *)
+  (*         iExists _, _; iFrame. subst; iModIntro. *)
+  (*         repeat (iSplitL ""; first done). *)
+  (*         simp vir_call_ans; by iFrame. } *)
+
+  (*       (* It is a function in the context *) *)
+  (*       { destruct H2. cbn -[denote_function]. *)
+
+  (*         iDestruct (dval_rel_ne_inj with "Hdv Hfn") as "%Hne"; subst. *)
+  (*         specialize (Hne H2); subst. *)
+  (*         destruct (RelDec.rel_dec fn1 dv) eqn: Hf; reldec; subst; first done. *)
+  (*         destruct (RelDec.rel_dec fn2 dv') eqn: Hf'; reldec; subst; first done. *)
+  (*         clear H2 Hne Hf. *)
+  (*         iPoseProof (dval_rel_lookup_some with "Hfn Hv") as "%Hlu". *)
+  (*         specialize (Hlu _ H3). destruct Hlu as (?&?). *)
+  (*         rewrite /lookup_defn in H3. *)
+  (*         rewrite /lookup_defn; rewrite H2 H3. *)
+
+  (*         (* Juicing out information from the WF of fundefs *) *)
+  (*         unfold fundefs_WF in WF_s. *)
+  (*         apply andb_prop_elim in WF_s. *)
+  (*         destruct WF_s as (Hlen & Wdup_s). *)
+  (*         apply andb_prop_elim in Hlen. destruct Hlen as (Hlen & Hfun_wf). *)
+  (*         apply forallb_True in Hfun_wf. *)
+  (*         rewrite List.Forall_forall in Hfun_wf. *)
+  (*         assert (Hr_s := H3). *)
+  (*         apply lookup_defn_Some_In in H3. *)
+  (*         (* Function [d] is well-formed. *) *)
+  (*         specialize (Hfun_wf _ H3); cbn in Hfun_wf. *)
+
+  (*         (* Using [fundefs_logrel] *) *)
+  (*         assert (Hlen': (length [γf0] > 0)%Z → (length [γf] > 0)%Z) by auto. *)
+  (*         rewrite /fundefs_logrel. rewrite /lookup_defn in Hr_s. *)
+  (*         apply lookup_defn_Some_lookup in Hr_s. *)
+  (*         destruct Hr_s. *)
+  (*         (* Juice information out of fundef rel WF *) *)
+  (*         iDestruct "Hrel" as "(Hrel & Hn)". *)
+  (*         iSpecialize ("Hrel" $! _ _ _ H6). *)
+  (*         iDestruct "Hrel" as (???) "(#Hdv' & %Hattr & %Hattr' & %Hft & %Hfs)". *)
+
+  (*         iDestruct (dval_rel_inj with "Hfn Hdv'") as %Hf; subst. *)
+
+  (*         specialize (WF_attr _ _ _ _ _ _ _ _ Hinterp); subst. *)
+  (*         iSpecialize ("Hlr" $! _ _ _ _ _ _ H7 H6 Hattr Hattr' *)
+  (*                       with "Hdv'"). *)
+  (*         iDestruct "HWF" as %HWF. *)
+  (*         iSpecialize ("Hlr" $! _ _ _ _ HWF with "Hst Hss Hargs HC"). *)
+
+  (*         eapply lookup_defn_Some in H2; eauto;cycle 1. *)
+  (*         { clear -WF_t. *)
+
+  (*           unfold fundefs_WF in WF_t. *)
+  (*           apply andb_prop_elim in WF_t. *)
+  (*           destruct WF_t as (Hlen & Wdup_t). *)
+  (*           apply andb_prop_elim in Hlen. destruct Hlen as (Hlen & Hfun_wf). *)
+  (*           apply forallb_True in Hfun_wf. *)
+  (*           rewrite List.Forall_forall in Hfun_wf. *)
+  (*           apply Is_true_true_1 in Wdup_t. *)
+  (*           by apply NoDup_b_NoDup. } *)
+  (*         subst. *)
+
+  (*         iApply sim_expr'_bupd_mono; last iApply "Hlr". *)
+  (*         iIntros (??) "Hin". *)
+  (*         iDestruct "Hin" as (????) "(Hst & Hss & HC & Hval)". *)
+  (*         iExists _, _. *)
+  (*         repeat (iSplitL ""; first done). *)
+  (*         simp vir_call_ans; subst; by iFrame. } } } } *)
+
+  (* (* Other obligation that "feels like a duplicate obligation", *)
+  (*  but is a separate one coming from the body of the [mrec] *) *)
+  (* { iModIntro. iIntros "(#HWF & HC & Hst & Hss)". *)
+
+  (*   iAssert (dval_rel (DVALUE_Addr main) (DVALUE_Addr main))%I as "#Hmain". *)
+  (*   { rewrite (dval_rel_unfold (DVALUE_Addr _)). *)
+  (*     cbn. iSplitL ""; try done. *)
+  (*     iDestruct "Haddr_main" as "(Haddr_main & _)"; done. } *)
+
+  (*   destruct (lookup_defn (DVALUE_Addr main) ((dv', e_s) :: r_s)) *)
+  (*     eqn: Hs; cycle 1. *)
+
+  (*   (* External call case *) *)
+  (*   { cbn in Hs. destruct_if; reldec. *)
+  (*     iDestruct (dval_rel_ne_inj with "Hmain Hdv") as %Hne. *)
+  (*     assert (dv' <> DVALUE_Addr main) by eauto. *)
+  (*     specialize (Hne H3). cbn -[denote_function map_monad]. *)
+  (*     destruct (RelDec.rel_dec (DVALUE_Addr main) dv) eqn: Hfn1; *)
+  (*       reldec; try done. *)
+  (*     iPoseProof (dval_rel_lookup_none with "Hmain Hv") as "%Hlu". *)
+  (*     rewrite /lookup_defn. *)
+  (*     specialize (Hlu Hs); rewrite Hlu. *)
+
+  (*     iApply (sim_expr'_bupd_mono); *)
+  (*       last iApply (sim_external_call with "HWF Hst Hss HC Hmain"); try done. *)
+  (*     iIntros (??) "H'". *)
+  (*     rewrite /lift_post. *)
+  (*     iDestruct "H'" as (????) "(#Hv' & HC & Hs_t & Hs_s)". *)
+  (*     iExists _, _; iFrame. *)
+  (*     repeat (iSplitL ""; first done). *)
+  (*     (iSplitR ""; last done). *)
+
+  (*     iApply (uval_rel_implies_obs_val with "Hv'"). } *)
+
+  (*   (* Internal call case *) *)
+  (*   { apply lookup_defn_cons_Some in Hs. *)
+  (*     destruct Hs. *)
+  (*     (* It is the [e_s] function (the hole) *) *)
+  (*     { destruct H2; inv H2; subst. cbn -[denote_function]. *)
+  (*       iDestruct (dval_rel_inj with "Hdv Hmain") as %Hdef; subst. *)
+  (*       destruct (RelDec.rel_dec (DVALUE_Addr main) (DVALUE_Addr main)) *)
+  (*         eqn: Hf; reldec; subst; last done. *)
+  (*       rewrite /fun_logrel. *)
+  (*       iDestruct "HWF" as %HWF. *)
+  (*       iDestruct ("Hf" $! _ _ _) as "(_ & Hf')". *)
+
+  (*       iSpecialize ("Hf'" $! _ _ nil nil HWF with "Hst Hss"). *)
+  (*       cbn -[denote_function]. *)
+  (*       iSpecialize ("Hf'" $! Logic.I with "HC"). *)
+
+  (*       iApply sim_expr'_bupd_mono; last (iApply "Hf'"). *)
+  (*       iIntros (??) "H'". *)
+  (*       rewrite /lift_post. *)
+  (*       iDestruct "H'" as (????) "(Hs_t & Hs_s & HC & Hval)". *)
+  (*       iExists _, _; iFrame. subst; iModIntro. *)
+  (*       repeat (iSplitL ""; first done). *)
+  (*       (iSplitR ""; last done). *)
+  (*       iApply (uval_rel_implies_obs_val with "Hval"). } *)
+
+  (*     (* It is a function in the context *) *)
+  (*     { destruct H2; cbn -[denote_function]. *)
+
+  (*       iDestruct (dval_rel_ne_inj with "Hdv Hmain") as "%Hne"; subst. *)
+  (*       specialize (Hne H2); subst. *)
+  (*       destruct (RelDec.rel_dec (DVALUE_Addr main) dv) eqn: Hf; *)
+  (*         reldec; subst; first done. *)
+  (*       clear H2 Hne Hf. *)
+  (*       iPoseProof (dval_rel_lookup_some with "Hmain Hv") as "%Hlu". *)
+  (*       specialize (Hlu _ H3). destruct Hlu as (?&?). *)
+  (*       rewrite /lookup_defn H2. *)
+
+  (*       (* Juicing out information from the WF of fundefs *) *)
+  (*       unfold fundefs_WF in WF_s. *)
+  (*       apply andb_prop_elim in WF_s. *)
+  (*       destruct WF_s as (Hlen & Wdup_s). *)
+  (*       apply andb_prop_elim in Hlen. destruct Hlen as (Hlen & Hfun_wf). *)
+  (*       apply forallb_True in Hfun_wf. *)
+  (*       rewrite List.Forall_forall in Hfun_wf. *)
+  (*       assert (Hr_s := H3). *)
+  (*       apply lookup_defn_Some_In in H3. *)
+  (*       (* Function [d] is well-formed. *) *)
+  (*       specialize (Hfun_wf _ H3); cbn in Hfun_wf. *)
+
+  (*       (* Using [fundefs_logrel] *) *)
+  (*       assert (Hlen': (length [γf0] > 0)%Z → (length [γf] > 0)%Z) by auto. *)
+  (*       rewrite /fundefs_logrel. *)
+  (*       apply lookup_defn_Some_lookup in Hr_s. *)
+  (*       destruct Hr_s. *)
+  (*       (* Juice information out of fundef rel WF *) *)
+  (*       iDestruct "Hrel" as "(Hrel & Hn)". *)
+  (*       iSpecialize ("Hrel" $! _ _ _ H6). *)
+  (*       iDestruct "Hrel" as (???) *)
+  (*                             "(#Hdv' & %Hattr & %Hattr' & %Hft & %Hfs)". *)
+
+  (*       iSpecialize ("Hlr" $! _ _ _ _ _ _ H7 H6 Hattr Hattr' *)
+  (*                     with "Hdv'"). *)
+  (*       iSpecialize ("Hlr" $! _ _ nil nil Hlen' with "Hst Hss"). *)
+  (*       cbn -[denote_function]. *)
+  (*       iSpecialize ("Hlr" $! Logic.I with "HC"). *)
+
+  (*       iDestruct (dval_rel_inj with "Hmain Hdv'") as %Hf; subst. *)
+
+  (*       eapply lookup_defn_Some in H2; eauto;cycle 1. *)
+  (*       { clear -WF_t. *)
+
+  (*         unfold fundefs_WF in WF_t. *)
+  (*         apply andb_prop_elim in WF_t. *)
+  (*         destruct WF_t as (Hlen & Wdup_t). *)
+  (*         apply andb_prop_elim in Hlen. destruct Hlen as (Hlen & Hfun_wf). *)
+  (*         apply forallb_True in Hfun_wf. *)
+  (*         rewrite List.Forall_forall in Hfun_wf. *)
+  (*         apply Is_true_true_1 in Wdup_t. *)
+  (*         by apply NoDup_b_NoDup. } *)
+  (*       eauto. *)
+  (*       subst. *)
+
+  (*       iApply sim_expr'_bupd_mono; last iApply "Hlr". *)
+  (*       iIntros (??) "Hin". *)
+  (*       iDestruct "Hin" as (????) "(Hst & Hss & HC & Hval)". *)
+  (*       iExists _, _; subst. *)
+  (*       repeat (iSplitL ""; first done); iFrame. *)
+  (*       (iSplitR ""; last done). *)
+
+  (*       iApply (uval_rel_implies_obs_val with "Hval"). } } } *)
+  (*   Unshelve. *)
+  (*   all : eauto. all: do 2 constructor. *)
+
+(* Qed. *)
+Admitted.

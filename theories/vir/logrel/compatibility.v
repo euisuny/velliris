@@ -345,6 +345,31 @@ Section compatibility.
 
   (* Phi instructions are compatible up to equivalent phi identifiers and that
      the phi identifiers are in bijection. *)
+  Theorem phis_compat_strong ΠA C bid Φ Φ' A_t A_s :
+    Φ.*1 = Φ'.*1 ->
+    ([∗ list] ϕ;ϕ' ∈ Φ; Φ',
+       phi_logrel local_bij ΠA bid bid ϕ ϕ' C A_t A_s) -∗
+    phis_logrel local_bij ΠA bid bid Φ Φ' C A_t A_s.
+  Proof with vsimp.
+    iIntros (Heq) "HΦ"; iIntros (??) "CI".
+    iPoseProof (phi_list_compat with "HΦ CI") as "H".
+    rewrite /denote_phis... Cut...
+    mono: iApply "H"...
+    iDestruct "HΦ" as (Hrt Hrs) "(H & CI)".
+    setoid_rewrite instr_conv_ret.
+
+    iInduction r_s as [] "IH" forall (r_t Hrt Hrs).
+    { iDestruct (big_sepL2_nil_inv_r with "H") as %Hx; subst; cbn...
+      Cut... do 2 vfinal. }
+
+    iDestruct (big_sepL2_cons_inv_r with "H") as (???) "(#Hv & #CI2)";
+    destruct a, x1; subst; cbn...
+    Cut...
+    iClear "H".
+
+    Cut... assert (l0 = l) by admit. subst.
+  Admitted.
+
   Theorem phis_compat ΠA C bid Φ Φ' A_t A_s l_t l_s:
     Φ.*1 ## l_t ->
     Φ'.*1 ## l_s ->
@@ -866,3 +891,4 @@ Section compatibility.
   (* Qed. *)
 
 End compatibility.
+
