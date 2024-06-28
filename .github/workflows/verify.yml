@@ -23,6 +23,8 @@ jobs:
     - name: Install dependencies
       run: OPAMFLAGS="-y" ./scripts/setup.sh
     - name: Print package versions
-      run: opam list
+      run: eval $(opam env) && opam list
+    - name: Opam switch export
+      run: eval $(opam env) && opam switch export velliris-switch.txt && cat velliris-switch.txt
     - name: Check proofs
       run: eval $(opam env) && make -j
