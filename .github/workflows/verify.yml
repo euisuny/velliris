@@ -22,5 +22,7 @@ jobs:
       run: opam init -y
     - name: Install dependencies
       run: OPAMFLAGS="-y" ./scripts/setup.sh
+    - name: Print package versions
+      run: opam list
     - name: Check proofs
       run: eval $(opam env) && make -j
