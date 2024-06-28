@@ -25,6 +25,6 @@ jobs:
     - name: Print package versions
       run: eval $(opam env) && opam list
     - name: Opam switch export
-      run: eval $(opam env) && opam switch export velliris-switch.txt && cat velliris-switch.txt
+      run: eval $(opam env) && opam switch export --full velliris-switch.txt && cat velliris-switch.txt
     - name: Check proofs
       run: eval $(opam env) && make -j
