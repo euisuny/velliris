@@ -14,10 +14,12 @@ jobs:
       with:
         persist-credentials: false
         submodules: 'recursive'
+    - name: Install brew
+      run: /bin/bash -c "$(curl -fsSL https://raw.githubusercontent.com/Homebrew/install/HEAD/install.sh)"
     - name: Install opam dependencies
-      run: sudo apt update -y && sudo apt install -y pkg-config git rsync tar unzip m4 time curl ocaml build-essential bubblewrap gawk libgmp-dev python2.7 python3 python3-distutils libmpfr-dev
+      run: brew update && brew install pkg-config git rsync gnu-tar unzip m4 gnu-time curl ocaml gawk gmp mpfr python@3.9 bubblewrap
     - name: Install opam
-      run: curl "https://github.com/ocaml/opam/releases/download/2.1.5/opam-2.1.5-x86_64-linux" -Lo /usr/local/bin/opam && chmod +x /usr/local/bin/opam
+      run: brew install opam
     - name: Setup opam
       run: opam init -y
     - name: Install dependencies
