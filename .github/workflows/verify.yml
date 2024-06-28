@@ -17,7 +17,7 @@ jobs:
     - name: Install brew
       run: /bin/bash -c "$(curl -fsSL https://raw.githubusercontent.com/Homebrew/install/HEAD/install.sh)"
     - name: Install opam dependencies
-      run: brew update && brew install pkg-config git rsync gnu-tar unzip m4 gnu-time curl ocaml gawk gmp mpfr python@3.9 bubblewrap
+      run: brew update && brew install pkg-config git rsync gnu-tar unzip m4 gnu-time curl ocaml gawk gmp mpfr python@3.9
     - name: Install opam
       run: brew install opam
     - name: Setup opam
