@@ -692,7 +692,7 @@ Ltac itree_state_simp e :=
   end.
 
 Ltac eq_itree_simp :=
-  try timeout 1 (autorewrite with itree); cbn;
+  (autorewrite with itree); cbn;
   match goal with
   | |- Tau _ ≅ Tau _ => apply eqitree_Tau
   (* Some symbolic execution under ITree rewrites on [eq_itree']*)

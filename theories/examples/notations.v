@@ -189,7 +189,7 @@ Notation "x1 = x2 '↵'" :=
 Ltac clean :=
   rewrite ?mapsto_block_to_dvalue; try solve [constructor];
   cbn -[serialize_dvalue denote_instr];
-  rewrite ?union_empty_r_L; try timeout 2 set_solver; try cont.
+  rewrite ?union_empty_r_L; try set_solver; try cont.
 
 Ltac to_block :=
   rewrite -!mapsto_block_to_dvalue; try solve [constructor].
