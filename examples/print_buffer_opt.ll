@@ -4,23 +4,23 @@ target datalayout = "e-m:e-i8:8:32-i16:16:32-i64:64-i128:128-n32:64-S128"
 target triple = "aarch64-unknown-linux-gnu"
 
 ; Function Attrs: nounwind uwtable
-define dso_local void @print_buffer(i8** nocapture noundef readonly %0, i64 noundef %1) local_unnamed_addr #0 {
+define void @print_buffer(i8** nocapture noundef readonly %0, i64 noundef %1) #0 {
   br label %3
 
 3:                                                ; preds = %3, %2
   %4 = phi i64 [ 0, %2 ], [ %7, %3 ]
   %5 = getelementptr inbounds i8*, i8** %0, i64 %4
-  %6 = load i8*, i8** %5, align 8, !tbaa !10
-  call void @print_string(i8* noundef %6) #2
+  %6 = load i8*, i8** %5, align 8
+  call void @print_string(i8* %6) #2
   %7 = add i64 %4, 1
   %8 = icmp eq i64 %7, %1
-  br i1 %8, label %9, label %3, !llvm.loop !14
+  br i1 %8, label %9, label %3
 
 9:                                                ; preds = %3
   ret void
 }
 
-declare void @print_string(i8* noundef) local_unnamed_addr #1
+declare void @print_string(i8*) #1
 
 attributes #0 = { nounwind uwtable "disable-tail-calls"="true" "frame-pointer"="non-leaf" "min-legal-vector-width"="0" "no-trapping-math"="true" "stack-protector-buffer-size"="8" "target-cpu"="generic" "target-features"="+neon,+outline-atomics,+v8a" }
 attributes #1 = { "frame-pointer"="non-leaf" "no-trapping-math"="true" "stack-protector-buffer-size"="8" "target-cpu"="generic" "target-features"="+neon,+outline-atomics,+v8a" }
@@ -43,6 +43,5 @@ attributes #2 = { nounwind }
 !11 = !{!"any pointer", !12, i64 0}
 !12 = !{!"omnipotent char", !13, i64 0}
 !13 = !{!"Simple C/C++ TBAA"}
-!14 = distinct !{!14, !15, !16}
 !15 = !{!"llvm.loop.mustprogress"}
 !16 = !{!"llvm.loop.unroll.disable"}

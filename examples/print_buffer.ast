@@ -1,0 +1,87 @@
+[TLE_Source_filename print_buffer.c; 
+TLE_Datalayout e-m:e-i8:8:32-i16:16:32-i64:64-i128:128-n32:64-S128; 
+TLE_Target aarch64-unknown-linux-gnu; 
+TLE_Definition {|
+  df_prototype := {|dc_name := (Name "print_buffer");
+                    dc_type := (TYPE_Function TYPE_Void [(TYPE_Pointer (TYPE_Pointer (TYPE_I 8%Z))); (TYPE_I 64%Z)]);
+                    dc_param_attrs := ([], [
+                    ]);
+                    dc_linkage := None;
+                    dc_visibility := None;
+                    dc_dll_storage := None;
+                    dc_cconv := None;
+                    dc_attrs := [FNATTR_Attr_grp 0%Z];
+                    dc_section := None;
+                    dc_align := None;
+                    dc_gc := None|};
+  df_args := [(Anon 0%Z); (Anon 1%Z)];
+  df_instrs := [
+                {|
+                  blk_id := (Anon 2%Z);
+                  blk_phis := [];
+                  blk_code := [(IId (Anon 3%Z), (INSTR_Alloca (TYPE_Pointer (TYPE_Pointer (TYPE_I 8%Z))) None (Some 8%Z)));
+                               (IId (Anon 4%Z), (INSTR_Alloca (TYPE_I 64%Z) None (Some 8%Z)));
+                               (IId (Anon 5%Z), (INSTR_Alloca (TYPE_I 64%Z) None (Some 8%Z)));
+                               (IVoid 0%Z, (INSTR_Store false ((TYPE_Pointer (TYPE_Pointer (TYPE_I 8%Z))), (EXP_Ident (ID_Local (Anon 0%Z)))) ((TYPE_Pointer (TYPE_Pointer (TYPE_Pointer (TYPE_I 8%Z)))), (EXP_Ident (ID_Local (Anon 3%Z)))) (Some 8%Z)));
+                               (IVoid 1%Z, (INSTR_Store false ((TYPE_I 64%Z), (EXP_Ident (ID_Local (Anon 1%Z)))) ((TYPE_Pointer (TYPE_I 64%Z)), (EXP_Ident (ID_Local (Anon 4%Z)))) (Some 8%Z)));
+                               (IVoid 2%Z, (INSTR_Store false ((TYPE_I 64%Z), (EXP_Integer (0)%Z)) ((TYPE_Pointer (TYPE_I 64%Z)), (EXP_Ident (ID_Local (Anon 5%Z)))) (Some 8%Z)))];
+                  blk_term := TERM_Br_1 (Anon 6%Z);
+                  blk_comments := None
+                |}
+                {|
+                  blk_id := (Anon 6%Z);
+                  blk_phis := [];
+                  blk_code := [(IId (Anon 7%Z), (INSTR_Load false (TYPE_Pointer (TYPE_Pointer (TYPE_I 8%Z))) ((TYPE_Pointer (TYPE_Pointer (TYPE_Pointer (TYPE_I 8%Z)))), (EXP_Ident (ID_Local (Anon 3%Z)))) (Some 8%Z)));
+                               (IId (Anon 8%Z), (INSTR_Load false (TYPE_I 64%Z) ((TYPE_Pointer (TYPE_I 64%Z)), (EXP_Ident (ID_Local (Anon 5%Z)))) (Some 8%Z)));
+                               (IId (Anon 9%Z), (INSTR_Op (OP_GetElementPtr (TYPE_Pointer (TYPE_I 8%Z)) ((TYPE_Pointer (TYPE_Pointer (TYPE_I 8%Z))),(EXP_Ident (ID_Local (Anon 7%Z)))) [((TYPE_I 64%Z),(EXP_Ident (ID_Local (Anon 8%Z))))])));
+                               (IId (Anon 10%Z), (INSTR_Load false (TYPE_Pointer (TYPE_I 8%Z)) ((TYPE_Pointer (TYPE_Pointer (TYPE_I 8%Z))), (EXP_Ident (ID_Local (Anon 9%Z)))) (Some 8%Z)));
+                               (IVoid 3%Z, (INSTR_Call (TYPE_Void, (EXP_Ident (ID_Global (Name "print_string")))) [((TYPE_Pointer (TYPE_I 8%Z)), (EXP_Ident (ID_Local (Anon 10%Z))))]));
+                               (IId (Anon 11%Z), (INSTR_Load false (TYPE_I 64%Z) ((TYPE_Pointer (TYPE_I 64%Z)), (EXP_Ident (ID_Local (Anon 5%Z)))) (Some 8%Z)));
+                               (IId (Anon 12%Z), (INSTR_Op (OP_IBinop (Add false false) (TYPE_I 64%Z) (EXP_Ident (ID_Local (Anon 11%Z))) (EXP_Integer (1)%Z))));
+                               (IVoid 4%Z, (INSTR_Store false ((TYPE_I 64%Z), (EXP_Ident (ID_Local (Anon 12%Z)))) ((TYPE_Pointer (TYPE_I 64%Z)), (EXP_Ident (ID_Local (Anon 5%Z)))) (Some 8%Z)))];
+                  blk_term := TERM_Br_1 (Anon 13%Z);
+                  blk_comments := None
+                |};
+                {|
+                  blk_id := (Anon 13%Z);
+                  blk_phis := [];
+                  blk_code := [(IId (Anon 14%Z), (INSTR_Load false (TYPE_I 64%Z) ((TYPE_Pointer (TYPE_I 64%Z)), (EXP_Ident (ID_Local (Anon 5%Z)))) (Some 8%Z)));
+                               (IId (Anon 15%Z), (INSTR_Load false (TYPE_I 64%Z) ((TYPE_Pointer (TYPE_I 64%Z)), (EXP_Ident (ID_Local (Anon 4%Z)))) (Some 8%Z)));
+                               (IId (Anon 16%Z), (INSTR_Op (OP_ICmp Ne (TYPE_I 64%Z) (EXP_Ident (ID_Local (Anon 14%Z))) (EXP_Ident (ID_Local (Anon 15%Z))))))];
+                  blk_term := TERM_Br ((TYPE_I 1%Z), (EXP_Ident (ID_Local (Anon 16%Z)))) (Anon 6%Z) (Anon 17%Z);
+                  blk_comments := None
+                |};
+                {|
+                  blk_id := (Anon 17%Z);
+                  blk_phis := [];
+                  blk_code := [];
+                  blk_term := TERM_Ret_void;
+                  blk_comments := None
+                |}]
+                |}; 
+TLE_Declaration {|dc_name := (Name "print_string");
+                  dc_type := (TYPE_Function TYPE_Void [(TYPE_Pointer (TYPE_I 8%Z))]);
+                  dc_param_attrs := ([], []);
+                  dc_linkage := None;
+                  dc_visibility := None;
+                  dc_dll_storage := None;
+                  dc_cconv := None;
+                  dc_attrs := [FNATTR_Attr_grp 1%Z];
+                  dc_section := None;
+                  dc_align := None;
+                  dc_gc := None|}; 
+TLE_Attribute_group 0%Z [FNATTR_Noinline; FNATTR_Nounwind; FNATTR_Optnone; FNATTR_Uwtable; FNATTR_Key_value (disable-tail-calls,true); FNATTR_Key_value (frame-pointer,non-leaf); FNATTR_Key_value (min-legal-vector-width,0); FNATTR_Key_value (no-trapping-math,true); FNATTR_Key_value (stack-protector-buffer-size,8); FNATTR_Key_value (target-cpu,generic); FNATTR_Key_value (target-features,+neon,+outline-atomics,+v8a)]; 
+TLE_Attribute_group 1%Z [FNATTR_Key_value (frame-pointer,non-leaf); FNATTR_Key_value (no-trapping-math,true); FNATTR_Key_value (stack-protector-buffer-size,8); FNATTR_Key_value (target-cpu,generic); FNATTR_Key_value (target-features,+neon,+outline-atomics,+v8a)]; 
+TLE_Metadata (Name "llvm.module.flags") METADATA_Node [METADATA_Id (Anon 0%Z); METADATA_Id (Anon 1%Z); METADATA_Id (Anon 2%Z); METADATA_Id (Anon 3%Z); METADATA_Id (Anon 4%Z); METADATA_Id (Anon 5%Z); METADATA_Id (Anon 6%Z); METADATA_Id (Anon 7%Z); METADATA_Id (Anon 8%Z)]; 
+TLE_Metadata (Name "llvm.ident") METADATA_Node [METADATA_Id (Anon 9%Z)]; 
+TLE_Metadata (Anon 0%Z) METADATA_Node [METADATA_Const ((TYPE_I 32%Z), (EXP_Integer (1)%Z)); METADATA_String "wchar_size"; METADATA_Const ((TYPE_I 32%Z), (EXP_Integer (4)%Z))]; 
+TLE_Metadata (Anon 1%Z) METADATA_Node [METADATA_Const ((TYPE_I 32%Z), (EXP_Integer (1)%Z)); METADATA_String "branch-target-enforcement"; METADATA_Const ((TYPE_I 32%Z), (EXP_Integer (0)%Z))]; 
+TLE_Metadata (Anon 2%Z) METADATA_Node [METADATA_Const ((TYPE_I 32%Z), (EXP_Integer (1)%Z)); METADATA_String "sign-return-address"; METADATA_Const ((TYPE_I 32%Z), (EXP_Integer (0)%Z))]; 
+TLE_Metadata (Anon 3%Z) METADATA_Node [METADATA_Const ((TYPE_I 32%Z), (EXP_Integer (1)%Z)); METADATA_String "sign-return-address-all"; METADATA_Const ((TYPE_I 32%Z), (EXP_Integer (0)%Z))]; 
+TLE_Metadata (Anon 4%Z) METADATA_Node [METADATA_Const ((TYPE_I 32%Z), (EXP_Integer (1)%Z)); METADATA_String "sign-return-address-with-bkey"; METADATA_Const ((TYPE_I 32%Z), (EXP_Integer (0)%Z))]; 
+TLE_Metadata (Anon 5%Z) METADATA_Node [METADATA_Const ((TYPE_I 32%Z), (EXP_Integer (7)%Z)); METADATA_String "PIC Level"; METADATA_Const ((TYPE_I 32%Z), (EXP_Integer (2)%Z))]; 
+TLE_Metadata (Anon 6%Z) METADATA_Node [METADATA_Const ((TYPE_I 32%Z), (EXP_Integer (7)%Z)); METADATA_String "PIE Level"; METADATA_Const ((TYPE_I 32%Z), (EXP_Integer (2)%Z))]; 
+TLE_Metadata (Anon 7%Z) METADATA_Node [METADATA_Const ((TYPE_I 32%Z), (EXP_Integer (7)%Z)); METADATA_String "uwtable"; METADATA_Const ((TYPE_I 32%Z), (EXP_Integer (1)%Z))]; 
+TLE_Metadata (Anon 8%Z) METADATA_Node [METADATA_Const ((TYPE_I 32%Z), (EXP_Integer (7)%Z)); METADATA_String "frame-pointer"; METADATA_Const ((TYPE_I 32%Z), (EXP_Integer (1)%Z))]; 
+TLE_Metadata (Anon 9%Z) METADATA_Node [METADATA_String "Ubuntu clang version 14.0.6"]; 
+TLE_Metadata (Anon 11%Z) METADATA_Node [METADATA_String "llvm.loop.mustprogress"]]
