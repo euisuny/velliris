@@ -240,9 +240,9 @@ Section primitive_rules.
   Qed.
 
   Lemma source_local_read (x : LLVMAst.raw_id) (v : uvalue) i Ψ:
-    ⊢ [x := v]s i -∗
+    ⊢ ![x := v]s i -∗
       stack_src i -∗
-      ([x := v]s i -∗
+      (![x := v]s i -∗
         stack_src i -∗
         Ψ (Ret v)) -∗
       source_red (η := vir_handler) (trigger (LocalRead x)) Ψ.
@@ -275,7 +275,7 @@ Section primitive_rules.
     x ∉ L ->
     ⊢ ldomain_src i L -∗
       stack_src i -∗
-      ([ x := v ]s i -∗
+      (![ x := v ]s i -∗
         ldomain_src i ({[x]} ∪ L) -∗
           stack_src i -∗
           Φ (Ret tt)) -∗
@@ -305,9 +305,9 @@ Section primitive_rules.
 
   Lemma source_local_write
     (x : LLVMAst.raw_id) (v v' : uvalue) i Φ :
-    ⊢ [ x := v' ]s i -∗
+    ⊢ ![ x := v' ]s i -∗
       stack_src i -∗
-      ([ x := v ]s i -∗
+      (![ x := v ]s i -∗
           stack_src i -∗
           Φ (Ret tt)) -∗
       source_red (η := vir_handler) (trigger (LocalWrite x v)) Φ.
@@ -550,9 +550,9 @@ Section primitive_rules.
   Qed.
 
   Lemma target_local_read (x : LLVMAst.raw_id) (v : uvalue) i Ψ:
-    ⊢ [x := v]t i -∗
+    ⊢ ![x := v]t i -∗
       stack_tgt i -∗
-      ([x := v]t i -∗
+      (![x := v]t i -∗
         stack_tgt i -∗
         Ψ (Ret v)) -∗
       target_red (η := vir_handler) (trigger (LocalRead x)) Ψ.
@@ -585,7 +585,7 @@ Section primitive_rules.
     x ∉ L ->
     ⊢ ldomain_tgt i L -∗
       stack_tgt i -∗
-      ([ x := v ]t i -∗
+      (![ x := v ]t i -∗
         ldomain_tgt i ({[x]} ∪ L) -∗
           stack_tgt i -∗
           Φ (Ret tt)) -∗
@@ -616,9 +616,9 @@ Section primitive_rules.
 
   Lemma target_local_write
     (x : LLVMAst.raw_id) (v v' : uvalue) i Φ :
-    ⊢ [ x := v' ]t i -∗
+    ⊢ ![ x := v' ]t i -∗
       stack_tgt i -∗
-      ([ x := v ]t i -∗
+      (![ x := v ]t i -∗
           stack_tgt i -∗
           Φ (Ret tt)) -∗
       target_red (η := vir_handler) (trigger (LocalWrite x v)) Φ.
@@ -718,13 +718,13 @@ Section primitive_rules.
   Qed.
 
   Lemma sim_local_read (x_t x_s : LLVMAst.raw_id) (v_t v_s : uvalue) i_t i_s:
-    ⊢ [ x_t := v_t ]t i_t -∗
-      [ x_s := v_s ]s i_s -∗
+    ⊢ ![ x_t := v_t ]t i_t -∗
+      ![ x_s := v_s ]s i_s -∗
       stack_tgt i_t -∗ stack_src i_s -∗
     trigger (LocalRead x_t) ⪯ trigger (LocalRead x_s)
       [{ (v_t', v_s'),
         ⌜v_t = v_t'⌝ ∗ ⌜v_s = v_s'⌝
-         ∗ [ x_t := v_t ]t i_t ∗ [ x_s := v_s ]s i_s
+         ∗ ![ x_t := v_t ]t i_t ∗ ![ x_s := v_s ]s i_s
          ∗ stack_tgt i_t ∗ stack_src i_s }].
   Proof.
     iIntros "Ht Hs Hf_t Hf_s".
@@ -779,7 +779,7 @@ Section primitive_rules.
       stack_tgt i_t -∗ stack_src i_s -∗
     trigger (LocalWrite x_t v_t) ⪯ trigger (LocalWrite x_s v_s)
       [{ (v1, v2),
-          [ x_t := v_t ]t i_t ∗ [ x_s := v_s ]s i_s ∗
+          ![ x_t := v_t ]t i_t ∗ ![ x_s := v_s ]s i_s ∗
           ldomain_tgt i_t ({[x_t]} ∪ L_t) ∗ ldomain_src i_s ({[x_s]} ∪ L_s)
           ∗ stack_tgt i_t ∗ stack_src i_s }].
   Proof.
@@ -798,10 +798,10 @@ Section primitive_rules.
     well-formed LLVM IR program. *)
   Lemma sim_local_write (x_t x_s : LLVMAst.raw_id) (v_t v_s : uvalue) v_t' v_s' i_t i_s:
     ⊢ stack_tgt i_t -∗ stack_src i_s -∗
-      [ x_t := v_t ]t i_t -∗ [ x_s := v_s ]s i_s -∗
+      ![ x_t := v_t ]t i_t -∗ ![ x_s := v_s ]s i_s -∗
     trigger (LocalWrite x_t v_t') ⪯ trigger (LocalWrite x_s v_s')
       [{ (v_t, v_s),
-          [ x_t := v_t' ]t i_t ∗ [ x_s := v_s' ]s i_s ∗
+          ![ x_t := v_t' ]t i_t ∗ ![ x_s := v_s' ]s i_s ∗
           stack_tgt i_t ∗ stack_src i_s}].
   Proof.
     iIntros  "Hs_t Hs_s Ht Hs".

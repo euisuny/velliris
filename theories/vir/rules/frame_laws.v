@@ -1090,7 +1090,7 @@ Section local_properties.
       ∗ stack_tgt (j :: i)
       ∗ alloca_tgt (j :: i) ∅
       ∗ ldomain_tgt (j :: i) (list_to_set LN.*1)
-      ∗ ([∗ list] '(l, v) ∈ LN, [ l := v]t (j :: i)).
+      ∗ ([∗ list] '(l, v) ∈ LN, ![ l := v]t (j :: i)).
   Proof.
     iIntros (Hnodup) "(SI & Hf_t)".
     iDestruct "SI" as (???)
@@ -1122,7 +1122,7 @@ Section local_properties.
       ∗ stack_src (j :: i)
       ∗ alloca_src (j :: i) ∅
       ∗ ldomain_src (j :: i) (list_to_set LN.*1)
-      ∗ ([∗ list] '(l, v) ∈ LN, [ l := v]s (j :: i)).
+      ∗ ([∗ list] '(l, v) ∈ LN, ![ l := v]s (j :: i)).
   Proof.
     iIntros (Hnodup) "(SI & Hf_s)".
     iDestruct "SI" as (???)
@@ -1161,9 +1161,9 @@ Section local_properties.
       ∗ alloca_tgt i_t' ∅
       ∗ alloca_src i_s' ∅
       ∗ ldomain_tgt i_t' (list_to_set LN_t.*1)
-      ∗ ([∗ list] '(l, v) ∈ LN_t, [ l := v]t i_t')
+      ∗ ([∗ list] '(l, v) ∈ LN_t, ![ l := v]t i_t')
       ∗ ldomain_src i_s' (list_to_set LN_s.*1)
-      ∗ ([∗ list] '(l, v) ∈ LN_s, [ l := v]s i_s').
+      ∗ ([∗ list] '(l, v) ∈ LN_s, ![ l := v]s i_s').
   Proof.
     iIntros (Hnodup_t Hnodup_s) "(SI & Hf_t & Hf_s)".
     iCombine "SI Hf_t" as "H_t".
@@ -1200,8 +1200,8 @@ Section local_properties.
       ∗ alloca_src j_s' ∅
       ∗ ldomain_tgt j_t' (list_to_set bs_t.*1)
       ∗ ldomain_src j_s' (list_to_set bs_s.*1)
-      ∗ ([∗ list] '(l,v) ∈ bs_t, [ l := v]t j_t')
-      ∗ ([∗ list] '(l,v) ∈ bs_s, [ l := v]s j_s')
+      ∗ ([∗ list] '(l,v) ∈ bs_t, ![ l := v]t j_t')
+      ∗ ([∗ list] '(l,v) ∈ bs_s, ![ l := v]s j_s')
     }].
   Proof.
     rewrite sim_expr_eq /sim_expr_.
@@ -1273,8 +1273,8 @@ Section local_properties.
       ∗ alloca_src j_s' ∅
       ∗ ldomain_tgt j_t' (list_to_set bs_t.*1)
       ∗ ldomain_src j_s' (list_to_set bs_s.*1)
-      ∗ ([∗ list] '(l, v) ∈ bs_t, [ l := v]t j_t')
-      ∗ ([∗ list] '(l, v) ∈ bs_s, [ l := v]s j_s')
+      ∗ ([∗ list] '(l, v) ∈ bs_t, ![ l := v]t j_t')
+      ∗ ([∗ list] '(l, v) ∈ bs_s, ![ l := v]s j_s')
     }].
   Proof.
     rewrite sim_expr_eq /sim_expr_.

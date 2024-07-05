@@ -478,11 +478,11 @@ Section block_laws.
     NoDup (dvs0 ++ dvs).*1 →
     stack_tgt i -∗
     ldomain_tgt i (list_to_set dvs0.*1 ∪ L) -∗
-    ([∗ list] x ∈ dvs0, [x.1 := x.2]t i) -∗
-    ([∗ list] x ∈ dvs.*1, (∃ v, [x := v]t i) ∨ ⌜x ∉ L⌝) -∗
+    ([∗ list] x ∈ dvs0, ![x.1 := x.2]t i) -∗
+    ([∗ list] x ∈ dvs.*1, (∃ v, ![x := v]t i) ∨ ⌜x ∉ L⌝) -∗
     (stack_tgt i -∗
      ldomain_tgt i (list_to_set (dvs0 ++ dvs).*1 ∪ L) -∗
-     ([∗ list] x ∈ dvs0 ++ dvs, [x.1 := x.2]t i) -∗
+     ([∗ list] x ∈ dvs0 ++ dvs, ![x.1 := x.2]t i) -∗
      Φ tt
     ) -∗
     target_red (instr_conv $ (map_monad (m := itree _) (λ '(id, dv), trigger (LocalWrite id dv)) dvs)) (lift_unary_post (λ _, Φ tt)).
@@ -529,10 +529,10 @@ Section block_laws.
     NoDup (dvs).*1 →
     stack_tgt i -∗
     ldomain_tgt i L -∗
-    ([∗ list] x ∈ dvs.*1, (∃ v, [x := v]t i) ∨ ⌜x ∉ L⌝) -∗
+    ([∗ list] x ∈ dvs.*1, (∃ v, ![x := v]t i) ∨ ⌜x ∉ L⌝) -∗
     (stack_tgt i -∗
      ldomain_tgt i (list_to_set dvs.*1  ∪ L) -∗
-     ([∗ list] x ∈ dvs, [x.1 := x.2]t i) -∗
+     ([∗ list] x ∈ dvs, ![x.1 := x.2]t i) -∗
      Φ ()
     ) -∗
     target_red (instr_conv $ (map_monad (m := itree _) (λ '(id, dv), trigger (LocalWrite id dv)) dvs)) (lift_unary_post (λ _, Φ tt)).
@@ -561,10 +561,10 @@ Section block_laws.
     phi_eval_expr_target κt.(block_from) phi_t [] (λ phis,
       ∃ i L, stack_tgt i ∗
       ldomain_tgt i L ∗
-      ([∗ list] x ∈ phis.*1, (∃ v, [x := v]t i) ∨ ⌜x ∉ L⌝) ∗
+      ([∗ list] x ∈ phis.*1, (∃ v, ![x := v]t i) ∨ ⌜x ∉ L⌝) ∗
       (stack_tgt i -∗
        ldomain_tgt i (list_to_set phis.*1 ∪ L) -∗
-      ([∗ list] x ∈ phis, [x.1 := x.2]t i) -∗
+      ([∗ list] x ∈ phis, ![x.1 := x.2]t i) -∗
       SIM{κt; κs} s: s_t t: t_t ⪯ b_s [{ Φ }])) -∗
     SIM{κt; κs} p: phi_t s: s_t t: t_t ⪯ b_s [{ Φ }].
   Proof.
@@ -601,14 +601,16 @@ Section block_laws.
     phi_eval_expr_source κs.(block_from) phi_s [] (λ phis,
       ∃ i L, stack_src i ∗
       ldomain_src i L ∗
-      ([∗ list] x ∈ phis.*1, (∃ v, [x := v]s i) ∨ ⌜x ∉ L⌝) ∗
+      ([∗ list] x ∈ phis.*1, (∃ v, ![x := v]s i) ∨ ⌜x ∉ L⌝) ∗
       (stack_src i -∗
        ldomain_src i (list_to_set phis.*1 ∪ L) -∗
-      ([∗ list] x ∈ phis, [x.1 := x.2]s i) -∗
+      ([∗ list] x ∈ phis, ![x.1 := x.2]s i) -∗
       SIM{κt; κs} b_t ⪯ s: s_s t: t_s [{ Φ }])) -∗
     SIM{κt; κs} b_t ⪯ p: phi_s s: s_s t: t_s [{ Φ }].
   Proof.
   Admitted.
+
+
 End block_laws.
 
 Section function.
@@ -627,16 +629,16 @@ Section function.
     (* precondition *)
     in_frame_tgt i_t ∅ f_t.(args) -∗
     in_frame_src i_s ∅ f_s.(args) -∗
-    ([∗ list] x; v ∈ f_t.(args); vs_t, [ x := v ]t i_t) -∗
-    ([∗ list] x; v ∈ f_s.(args); vs_s, [ x := v ]s i_s) -∗
+    ([∗ list] x; v ∈ f_t.(args); vs_t, ![ x := v ]t i_t) -∗
+    ([∗ list] x; v ∈ f_s.(args); vs_s, ![ x := v ]s i_s) -∗
     ([∗ list] v_t; v_s ∈ vs_t; vs_s, uval_rel v_t v_s) -∗
     checkout ∅ -∗
     (* postcondition *)
     (∀ r_t r_s V_t V_s,
       in_frame_tgt i_t ∅ V_t -∗
       in_frame_src i_s ∅ V_s -∗
-      ([∗ list] x ∈ V_t, ∃ v, [ x := v ]t i_t) -∗
-      ([∗ list] x ∈ V_s, ∃ v, [ x := v ]s i_s) -∗
+      ([∗ list] x ∈ V_t, ∃ v, ![ x := v ]t i_t) -∗
+      ([∗ list] x ∈ V_s, ∃ v, ![ x := v ]s i_s) -∗
       uval_rel r_t r_s -∗
       checkout ∅ -∗
       Φ (Ret r_t) (Ret r_s)

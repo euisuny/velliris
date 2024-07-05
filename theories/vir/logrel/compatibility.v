@@ -37,8 +37,8 @@ Section compatibility.
     x ∉ (remove_ids l_t args_t).*1 ->
     uval_rel v_t v_s -∗
     local_bij_except l_t l_s i_t i_s args_t args_s -∗
-    [ x := v_s ]s i_s -∗
-    [ x := v_t ]t i_t -∗
+    ![ x := v_s ]s i_s -∗
+    ![ x := v_t ]t i_t -∗
     local_bij_except l_t l_s i_t i_s
       (alist_add x v_t args_t)
       (alist_add x v_s args_s).
@@ -69,7 +69,7 @@ Section compatibility.
     fun i_t i_s L_t L_s =>
     ([∗ list] l ∈ m,
       ∀ v_t v_s, ⌜alist_find l L_t = Some v_t⌝ -∗ ⌜alist_find l L_s = Some v_s⌝ -∗
-      [ l := v_t ]t i_t ∗ [ l := v_s ]s i_s ∗ uval_rel v_t v_s)%I.
+      ![ l := v_t ]t i_t ∗ ![ l := v_s ]s i_s ∗ uval_rel v_t v_s)%I.
 
   Definition local_bij_at_exp {T} (e_t e_s : exp T) : local_env_spec :=
     local_bij_at (intersection_local_ids e_t e_s).
@@ -183,7 +183,7 @@ Section compatibility.
     {x_s v_s i_t i_s C} {L_t L_s : local_env} {e_t: _ R} Q:
     x_s ∉ L_s.*1 ->
     ⊢ frameR i_t i_s L_t.*1 L_s.*1 C -∗
-      ([ x_s := v_s ]s i_s -∗
+      (![ x_s := v_s ]s i_s -∗
       frameR i_t i_s L_t.*1 (alist_add x_s v_s L_s).*1 C -∗
       e_t ⪯ Ret () [{ Q }]) -∗
       e_t ⪯ trigger (LocalWrite x_s v_s)
@@ -199,7 +199,7 @@ Section compatibility.
     { set_solver. }
     { iIntros "Hx Hd Hs".
       Unshelve.
-      2 : exact (fun x => ⌜x = Ret tt⌝ ∗ [ x_s := v_s ]s i_s ∗
+      2 : exact (fun x => ⌜x = Ret tt⌝ ∗ ![ x_s := v_s ]s i_s ∗
          frameR i_t i_s L_t.*1 (alist_add x_s v_s L_s).*1 C)%I.
       iFrame; iFrame "WF_frame"; sfinal.
       cbn; rewrite alist_remove_not_in; eauto; iFrame.
@@ -212,7 +212,7 @@ Section compatibility.
     {x_t v_t i_t i_s C} {L_t L_s : local_env} {e_s: _ R} Q:
     x_t ∉ L_t.*1 ->
     ⊢ frameR i_t i_s L_t.*1 L_s.*1 C -∗
-      ([ x_t := v_t ]t i_t -∗
+      (![ x_t := v_t ]t i_t -∗
       frameR i_t i_s (alist_add x_t v_t L_t).*1 L_s.*1 C -∗
       Ret () ⪯ e_s [{ Q }]) -∗
       trigger (LocalWrite x_t v_t) ⪯ e_s
@@ -229,7 +229,7 @@ Section compatibility.
     { iIntros "Hx Hd Hs".
       Unshelve.
       2 : exact (fun x => ⌜x = Ret tt⌝ ∗
-                [ x_t := v_t ]t i_t ∗
+                ![ x_t := v_t ]t i_t ∗
                 frameR i_t i_s (alist_add x_t v_t L_t).*1 L_s.*1 C)%I.
       iFrame; iFrame "WF_frame"; sfinal.
       cbn; rewrite alist_remove_not_in; eauto; iFrame.
@@ -241,8 +241,8 @@ Section compatibility.
   Lemma local_write_frame_source {R}
     x_s v_s v_s' i_t i_s L_t L_s C (e_t: _ R) Q:
     ⊢ frameR i_t i_s L_t L_s C -∗
-      [ x_s := v_s ]s i_s -∗
-      ([ x_s := v_s' ]s i_s -∗
+      ![ x_s := v_s ]s i_s -∗
+      (![ x_s := v_s' ]s i_s -∗
       frameR i_t i_s L_t L_s C -∗
       e_t ⪯ Ret () [{ Q }]) -∗
       e_t ⪯ trigger (LocalWrite x_s v_s')
@@ -257,7 +257,7 @@ Section compatibility.
       last (iApply (source_local_write with "Hxs Hs_s")); cycle 1.
     { iIntros "Hx Hs".
       Unshelve.
-      2 : exact (fun x => ⌜x = Ret tt⌝ ∗ [ x_s := v_s' ]s i_s ∗ frameR i_t i_s L_t L_s C)%I.
+      2 : exact (fun x => ⌜x = Ret tt⌝ ∗ ![ x_s := v_s' ]s i_s ∗ frameR i_t i_s L_t L_s C)%I.
       iFrame; iFrame "WF_frame"; done. }
     iIntros (?) "H"; iDestruct "H" as (?) "(Hxs & Hf)".
     subst. iApply ("HΦ" with "Hxs Hf").
@@ -266,8 +266,8 @@ Section compatibility.
   Lemma local_write_frame_target {R}
     x_t v_t v_t' i_t i_s L_t L_s C (e_s: _ R) Q:
     ⊢ frameR i_t i_s L_t L_s C -∗
-      [ x_t := v_t ]t i_t -∗
-      ([ x_t := v_t' ]t i_t -∗
+      ![ x_t := v_t ]t i_t -∗
+      (![ x_t := v_t' ]t i_t -∗
       frameR i_t i_s L_t L_s C -∗
       Ret () ⪯ e_s [{ Q }]) -∗
       trigger (LocalWrite x_t v_t') ⪯ e_s
@@ -282,7 +282,7 @@ Section compatibility.
       last (iApply (target_local_write with "Hxs Hs_t")); cycle 1.
     { iIntros "Hx Hs".
       Unshelve.
-      2 : exact (fun x => ⌜x = Ret tt⌝ ∗ [ x_t := v_t' ]t i_t ∗ frameR i_t i_s L_t L_s C)%I.
+      2 : exact (fun x => ⌜x = Ret tt⌝ ∗ ![ x_t := v_t' ]t i_t ∗ frameR i_t i_s L_t L_s C)%I.
       iFrame; iFrame "WF_frame"; done. }
     iIntros (?) "H"; iDestruct "H" as (?) "(Hxs & Hf)".
     subst. iApply ("HΦ" with "Hxs Hf").
@@ -691,8 +691,8 @@ Section compatibility.
     (∀ args_t args_s i_t i_s,
       ⌜df_args f = args_s.*1⌝ -∗
       ⌜df_args f = args_t.*1⌝ -∗
-      ([∗ list] '(l_t, v_t) ∈ args_t, [ l_t := v_t ]t i_t) -∗
-      ([∗ list] '(l_s, v_s) ∈ args_s, [ l_s := v_s ]s i_s) -∗
+      ([∗ list] '(l_t, v_t) ∈ args_t, ![ l_t := v_t ]t i_t) -∗
+      ([∗ list] '(l_s, v_s) ∈ args_s, ![ l_s := v_s ]s i_s) -∗
       ([∗ list] y1;y2 ∈ args_t.*2;args_s.*2, uval_rel y1 y2) -∗
       ΠL i_t i_s args_t args_s) -∗
     (∀ A_t A_s, cfg_logrel ΠL alloca_bij (df_instrs f) (df_instrs f') ∅ A_t A_s) -∗

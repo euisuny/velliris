@@ -103,10 +103,10 @@ Notation "l ↦{ q }s [ b ]" := (vir_state.mapsto sheapG_heap_source l q b)
 Notation "l ↦{ q }t [ b ]" := (vir_state.mapsto sheapG_heap_target l q b)
                       (at level 20, format "l  ↦{ q }t  [ b ]") : bi_scope.
 
-Notation "[ l := v ]s i" := (lmapsto sheapG_heap_source (current_frame i) l v)
-                      (at level 20, format "[  l  :=  v  ]s  i") : bi_scope.
-Notation "[ l := v ]t i" := (lmapsto sheapG_heap_target (current_frame i) l v)
-                      (at level 20, format "[  l  :=  v  ]t  i") : bi_scope.
+Notation "'![' l := v ]s i" := (lmapsto sheapG_heap_source (current_frame i) l v)
+                      (at level 20, format "![  l  :=  v  ]s  i") : bi_scope.
+Notation "'![' l := v ]t i" := (lmapsto sheapG_heap_target (current_frame i) l v)
+                      (at level 20, format "![  l  :=  v  ]t  i") : bi_scope.
 
 Notation target_block_size l := (heap_block_size sheapG_heap_target l 1).
 Notation source_block_size l := (heap_block_size sheapG_heap_source l 1).

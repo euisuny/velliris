@@ -202,7 +202,7 @@ Section logical_relations_instance.
     fun i_t i_s L_t L_s =>
     ([∗ list] l ∈ m,
       ∃ v_t v_s, ⌜alist_find l L_t = Some v_t⌝ ∗ ⌜alist_find l L_s = Some v_s⌝ ∗
-      [ l := v_t ]t i_t ∗ [ l := v_s ]s i_s ∗ uval_rel v_t v_s)%I.
+      ![ l := v_t ]t i_t ∗ ![ l := v_s ]s i_s ∗ uval_rel v_t v_s)%I.
 
   Definition local_bij_at_exp {T} (e_t e_s : exp T) : local_env_spec :=
     local_bij_at (intersection_local_ids e_t e_s).
@@ -210,8 +210,8 @@ Section logical_relations_instance.
   Definition local_bij : local_env_spec :=
     fun i_t i_s L_t L_s =>
       (⌜L_t.*1 = L_s.*1⌝ ∗
-        ([∗ list] '(l_t, v_t) ∈ L_t, [ l_t := v_t ]t i_t) ∗
-        ([∗ list] '(l_s, v_s) ∈ L_s, [ l_s := v_s ]s i_s) ∗
+        ([∗ list] '(l_t, v_t) ∈ L_t, ![ l_t := v_t ]t i_t) ∗
+        ([∗ list] '(l_s, v_s) ∈ L_s, ![ l_s := v_s ]s i_s) ∗
         ([∗ list] v_t; v_s ∈ L_t.*2;L_s.*2, uval_rel v_t v_s))%I.
 
   Definition local_inv_bij {T} e_t e_s :=
@@ -457,8 +457,8 @@ Section logical_invariant_properties.
     ∃ i v_t v_s,
       ⌜L_t !! i = Some (x, v_t)⌝ ∗
       ⌜L_s !! i = Some (x, v_s)⌝ ∗
-      [ x := v_t ]t i_t ∗
-      [ x := v_s ]s i_s ∗
+      ![ x := v_t ]t i_t ∗
+      ![ x := v_s ]s i_s ∗
       uval_rel v_t v_s ∗
       local_bij i_t i_s (alist_remove x L_t) (alist_remove x L_s).
   Proof.
@@ -500,8 +500,8 @@ Section logical_invariant_properties.
   (* Add an new related id pair to the local bijection. *)
   Lemma local_bij_add {i_t i_s L_t L_s} x v_t v_s:
     x ∉ L_t.*1 ->
-    [ x := v_t ]t i_t -∗
-    [ x := v_s ]s i_s -∗
+    ![ x := v_t ]t i_t -∗
+    ![ x := v_s ]s i_s -∗
     uval_rel v_t v_s -∗
     local_bij i_t i_s L_t L_s -∗
     local_bij i_t i_s (alist_add x v_t L_t) (alist_add x v_s L_s).
@@ -521,8 +521,8 @@ Section logical_invariant_properties.
     L_t.*1 = L_s.*1 ->
     L_t !! i = Some (x, v_t) ->
     L_s !! i = Some (x, v_s) ->
-    [ x := v_t ]t i_t -∗
-    [ x := v_s ]s i_s -∗
+    ![ x := v_t ]t i_t -∗
+    ![ x := v_s ]s i_s -∗
     uval_rel v_t v_s -∗
     local_bij i_t i_s (alist_remove x L_t) (alist_remove x L_s) -∗
     local_bij i_t i_s L_t L_s.
@@ -538,8 +538,8 @@ Section logical_invariant_properties.
   Lemma local_env_update_target {i_t i_s x v_t C} {L_t L_s : local_env}:
     x ∈ L_t.*1 ->
     frameR i_t i_s L_t.*1 L_s.*1 C -∗
-    ([∗ list] '(l_t, v_t0) ∈ L_t, [ l_t := v_t0 ]t i_t) -∗
-    [∗ list] '(l_t, v_t0) ∈ alist_add x v_t L_t, [ l_t := v_t0 ]t i_t.
+    ([∗ list] '(l_t, v_t0) ∈ L_t, ![ l_t := v_t0 ]t i_t) -∗
+    [∗ list] '(l_t, v_t0) ∈ alist_add x v_t L_t, ![ l_t := v_t0 ]t i_t.
   Proof.
     iIntros (H) "Hf Hl_t".
     apply elem_of_fst in H. destruct H as (v&Hin).
@@ -1132,10 +1132,10 @@ Section logical_relations_properties.
   Lemma sim_local_write_frame
     (x_t x_s : LLVMAst.raw_id) (v_t v_s : uvalue) v_t' v_s' i_t i_s L_t L_s C:
     ⊢ frameR i_t i_s L_t L_s C -∗
-      [ x_t := v_t ]t i_t -∗ [ x_s := v_s ]s i_s -∗
+      ![ x_t := v_t ]t i_t -∗ ![ x_s := v_s ]s i_s -∗
     trigger (LocalWrite x_t v_t') ⪯ trigger (LocalWrite x_s v_s')
       [{ (v_t, v_s),
-          [ x_t := v_t' ]t i_t ∗ [ x_s := v_s' ]s i_s ∗ frameR i_t i_s L_t L_s C }].
+          ![ x_t := v_t' ]t i_t ∗ ![ x_s := v_s' ]s i_s ∗ frameR i_t i_s L_t L_s C }].
   Proof.
     iIntros "Hf Hxt Hxs".
     destruct_frame.
@@ -1153,7 +1153,7 @@ Section logical_relations_properties.
     ⊢ frameR i_t i_s L_t L_s C -∗
     trigger (LocalWrite x_t v_t) ⪯ trigger (LocalWrite x_s v_s)
       [{ (v1, v2),
-          [ x_t := v_t ]t i_t ∗ [ x_s := v_s ]s i_s ∗
+          ![ x_t := v_t ]t i_t ∗ ![ x_s := v_s ]s i_s ∗
           frameR i_t i_s (x_t :: L_t) (x_s :: L_s) C }].
   Proof.
     iIntros (Hnt Hns) "Hf".
@@ -1253,13 +1253,13 @@ Section logical_relations_properties.
 
   Lemma sim_local_read_frame
     (x_t x_s : LLVMAst.raw_id) (v_t v_s : uvalue) i_t i_s L_t L_s C:
-    ⊢ [ x_t := v_t ]t i_t -∗
-      [ x_s := v_s ]s i_s -∗
+    ⊢ ![ x_t := v_t ]t i_t -∗
+      ![ x_s := v_s ]s i_s -∗
       frameR i_t i_s L_t L_s C -∗
     trigger (LocalRead x_t) ⪯ trigger (LocalRead x_s)
       [{ (v_t', v_s'),
         ⌜v_t = v_t'⌝ ∗ ⌜v_s = v_s'⌝
-         ∗ [ x_t := v_t ]t i_t ∗ [ x_s := v_s ]s i_s
+         ∗ ![ x_t := v_t ]t i_t ∗ ![ x_s := v_s ]s i_s
          ∗ frameR i_t i_s L_t L_s C }].
   Proof.
     iIntros "Ht Hs Hf".

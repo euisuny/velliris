@@ -266,8 +266,8 @@ Section instr_properties.
   (* Read a register *)
   Lemma target_local_id {i_t id v Φ}:
     stack_tgt i_t -∗
-    [ id := v ]t i_t -∗
-    (stack_tgt i_t -∗ [id := v]t i_t -∗ Φ (Ret v)) -∗
+    ![ id := v ]t i_t -∗
+    (stack_tgt i_t -∗ ![id := v]t i_t -∗ Φ (Ret v)) -∗
     (target_red (exp_conv (denote_op (EXP_Ident (ID_Local id)))) Φ).
   Proof.
     iIntros "Hs_t Ht HΦ"; cbn.
@@ -288,7 +288,7 @@ Section instr_properties.
         ∃ i L, ldomain_tgt i L ∗
         stack_tgt i ∗
         ⌜x ∉ L⌝ ∗
-        ([ x := v ]t i -∗
+        (![ x := v ]t i -∗
           ldomain_tgt i ({[x]} ∪ L) -∗
           stack_tgt i -∗
           Ψ (Ret ())))) -∗
@@ -316,8 +316,8 @@ Section instr_properties.
     ⊢ target_red (η := vir_handler) (instr_conv (denote_instr_exp e)) (lift_unary_post (λ v,
         ∃ i v',
         stack_tgt i ∗
-        [ x := v' ]t i ∗
-        ([ x := v ]t i -∗
+        ![ x := v' ]t i ∗
+        (![ x := v ]t i -∗
           stack_tgt i -∗
           Ψ (Ret ())))) -∗
       target_red (η := vir_handler) (<{ %(IId x) = e }>) Ψ.
@@ -345,7 +345,7 @@ Section instr_properties.
         ∃ i L, ldomain_tgt i L ∗
         stack_tgt i ∗
         ⌜x ∉ L⌝ ∗
-        ([ x := v ]t i -∗
+        (![ x := v ]t i -∗
           ldomain_tgt i ({[x]} ∪ L) -∗
           stack_tgt i -∗
           Ψ (Ret ())))) -∗
@@ -360,8 +360,8 @@ Section instr_properties.
 
   Lemma target_instr_pure (x : LLVMAst.raw_id) (v : uvalue) o Ψ:
     target_red (η := vir_handler) (exp_conv (denote_op o)) (lift_unary_post (λ v,
-      ∃ i v', stack_tgt i ∗ [ x := v' ]t i ∗
-      ([ x := v ]t i -∗ stack_tgt i -∗ Ψ (Ret tt)))) -∗
+      ∃ i v', stack_tgt i ∗ ![ x := v' ]t i ∗
+      (![ x := v ]t i -∗ stack_tgt i -∗ Ψ (Ret tt)))) -∗
     target_red (η := vir_handler) (<{ %(IId x) = (INSTR_Op o) }>) Ψ.
   Proof.
     iIntros "Ha".
@@ -373,8 +373,8 @@ Section instr_properties.
 
   Lemma source_local_id {i_s id v Φ}:
     stack_src i_s -∗
-    [ id := v ]s i_s -∗
-    (stack_src i_s -∗ [id := v]s i_s -∗ Φ (Ret v)) -∗
+    ![ id := v ]s i_s -∗
+    (stack_src i_s -∗ ![id := v]s i_s -∗ Φ (Ret v)) -∗
     (source_red (exp_conv (denote_op (EXP_Ident (ID_Local id)))) Φ).
   Proof.
     iIntros "Hs_t Ht HΦ".
@@ -396,7 +396,7 @@ Section instr_properties.
         ∃ i L, ldomain_src i L ∗
         stack_src i ∗
         ⌜x ∉ L⌝ ∗
-        ([ x := v ]s i -∗
+        (![ x := v ]s i -∗
           ldomain_src i ({[x]} ∪ L) -∗
           stack_src i -∗
           Ψ (Ret ())))) -∗
@@ -424,8 +424,8 @@ Section instr_properties.
     ⊢ source_red (η := vir_handler) (instr_conv (denote_instr_exp e)) (lift_unary_post (λ v,
         ∃ i v',
         stack_src i ∗
-        [ x := v' ]s i ∗
-        ([ x := v ]s i -∗
+        ![ x := v' ]s i ∗
+        (![ x := v ]s i -∗
           stack_src i -∗
           Ψ (Ret ())))) -∗
       source_red (η := vir_handler) (<{ %(IId x) = e }>) Ψ.
@@ -453,7 +453,7 @@ Section instr_properties.
         ∃ i L, ldomain_src i L ∗
         stack_src i ∗
         ⌜x ∉ L⌝ ∗
-        ([ x := v ]s i -∗
+        (![ x := v ]s i -∗
           ldomain_src i ({[x]} ∪ L) -∗
           stack_src i -∗
           Ψ (Ret ())))) -∗
@@ -468,8 +468,8 @@ Section instr_properties.
 
   Lemma source_instr_pure (x : LLVMAst.raw_id) (v : uvalue) o Ψ:
     source_red (η := vir_handler) (exp_conv (denote_op o)) (lift_unary_post (λ v,
-      ∃ i v', stack_src i ∗ [ x := v' ]s i ∗
-      ([ x := v ]s i -∗ stack_src i -∗ Ψ (Ret tt)))) -∗
+      ∃ i v', stack_src i ∗ ![ x := v' ]s i ∗
+      (![ x := v ]s i -∗ stack_src i -∗ Ψ (Ret tt)))) -∗
     source_red (η := vir_handler) (<{ %(IId x) = (INSTR_Op o) }>) Ψ.
   Proof.
     iIntros "Ha".
@@ -483,7 +483,7 @@ Section instr_properties.
   Lemma sim_instr_pure1
     (x_t x_s : LLVMAst.raw_id) (v_t v_s v_t' v_s' : uvalue) o_t o_s i_t i_s:
     ⊢ stack_tgt i_t -∗ stack_src i_s -∗
-      [ x_t := v_t ]t i_t -∗ [ x_s := v_s ]s i_s -∗
+      ![ x_t := v_t ]t i_t -∗ ![ x_s := v_s ]s i_s -∗
       exp_conv (denote_op o_t)
       ⪯
       exp_conv (denote_op o_s)
@@ -491,7 +491,7 @@ Section instr_properties.
       <{ %(IId x_t) = (INSTR_Op o_t) }> ⪯
       <{ %(IId x_s) = (INSTR_Op o_s) }>
       [{ (v1, v2),
-          [ x_t := v_t' ]t i_t ∗ [ x_s := v_s' ]s i_s ∗
+          ![ x_t := v_t' ]t i_t ∗ ![ x_s := v_s' ]s i_s ∗
           stack_tgt i_t ∗ stack_src i_s }].
   Proof.
     iIntros "Hf_t Hf_s Hp_t Hp_s H".
@@ -538,7 +538,7 @@ Section instr_properties.
       <{ %(IId x_t) = (INSTR_Op o_t) }> ⪯
       <{ %(IId x_s) = (INSTR_Op o_s) }>
       [{ (v1, v2),
-          [ x_t := v_t' ]t i_t ∗ [ x_s := v_s' ]s i_s ∗
+          ![ x_t := v_t' ]t i_t ∗ ![ x_s := v_s' ]s i_s ∗
           ldomain_tgt i_t ({[x_t]} ∪ L_t) ∗ ldomain_src i_s ({[x_s]} ∪ L_s) ∗
           stack_tgt i_t ∗ stack_src i_s }].
   Proof with vsimp.
@@ -567,7 +567,7 @@ Section instr_properties.
       l_t0 ↦t [make_empty_logical_block dt] -∗
       alloca_tgt i_t ({[l_t0]} ∪ S_t) -∗
       ldomain_tgt i_t ({[ l_t ]} ∪ L_t) -∗
-      [ l_t := UVALUE_Addr (l_t0, 0%Z) ]t i_t -∗
+      ![ l_t := UVALUE_Addr (l_t0, 0%Z) ]t i_t -∗
       stack_tgt i_t -∗
       target_block_size l_t0 (Some (N.to_nat (sizeof_dtyp dt))) -∗
       Φ (Ret ())
@@ -594,7 +594,7 @@ Section instr_properties.
       l_s0 ↦s [make_empty_logical_block dt] -∗
       alloca_src i_s ({[l_s0]} ∪ S_s) -∗
       ldomain_src i_s ({[ l_s ]} ∪ L_s) -∗
-      [ l_s := UVALUE_Addr (l_s0, 0%Z) ]s i_s -∗
+      ![ l_s := UVALUE_Addr (l_s0, 0%Z) ]s i_s -∗
       stack_src i_s -∗
       source_block_size l_s0 (Some (N.to_nat (sizeof_dtyp dt))) -∗
       Φ (Ret ())
@@ -633,8 +633,8 @@ Section instr_properties.
           alloca_src i_s ({[l_s0]} ∪ S_s) ∗
           ldomain_tgt i_t ({[ l_t ]} ∪ L_t) ∗
           ldomain_src i_s ({[ l_s ]} ∪ L_s) ∗
-          [ l_t := UVALUE_Addr (l_t0, 0%Z) ]t i_t ∗
-          [ l_s := UVALUE_Addr (l_s0, 0%Z) ]s i_s ∗
+          ![ l_t := UVALUE_Addr (l_t0, 0%Z) ]t i_t ∗
+          ![ l_s := UVALUE_Addr (l_s0, 0%Z) ]s i_s ∗
           stack_tgt i_t ∗
           stack_src i_s ∗
           target_block_size l_t0 (Some (N.to_nat (sizeof_dtyp dt))) ∗
@@ -666,11 +666,11 @@ Section instr_properties.
     is_supported dt ->
     pid ∉ L ->
     ⊢ l ↦{q}t [ LBlock size bytes cid ] -∗
-      [ id := UVALUE_Addr (l, 0%Z) ]t i -∗
+      ![ id := UVALUE_Addr (l, 0%Z) ]t i -∗
       ldomain_tgt i L -∗
       stack_tgt i -∗
-      ([ id := UVALUE_Addr (l, 0%Z) ]t i -∗
-        [ pid := (read_in_mem_block bytes 0%Z dt)]t i -∗
+      (![ id := UVALUE_Addr (l, 0%Z) ]t i -∗
+        ![ pid := (read_in_mem_block bytes 0%Z dt)]t i -∗
         l ↦{q}t [ LBlock size bytes cid ] -∗
         ldomain_tgt i ({[ pid ]} ∪ L) -∗
         stack_tgt i -∗
@@ -698,11 +698,11 @@ Section instr_properties.
     dvalue_has_dtyp v dt  ->
     pid ∉ L ->
     ⊢ l ↦{q}t v -∗
-      [ id := UVALUE_Addr (l, 0%Z) ]t i -∗
+      ![ id := UVALUE_Addr (l, 0%Z) ]t i -∗
       ldomain_tgt i L -∗
       stack_tgt i -∗
-      ([ id := UVALUE_Addr (l, 0%Z) ]t i -∗
-        [ pid := dvalue_to_uvalue v ]t i -∗
+      (![ id := UVALUE_Addr (l, 0%Z) ]t i -∗
+        ![ pid := dvalue_to_uvalue v ]t i -∗
         l ↦{q}t v -∗
         ldomain_tgt i ({[ pid ]} ∪ L) -∗
         stack_tgt i -∗
@@ -728,11 +728,11 @@ Section instr_properties.
     is_supported dt ->
     pid ∉ L ->
     ⊢ l ↦{q}s [ LBlock size bytes cid ] -∗
-      [ id := UVALUE_Addr (l, 0%Z) ]s i -∗
+      ![ id := UVALUE_Addr (l, 0%Z) ]s i -∗
       ldomain_src i L -∗
       stack_src i -∗
-      ([ id := UVALUE_Addr (l, 0%Z) ]s i -∗
-        [ pid := (read_in_mem_block bytes 0%Z dt)]s i -∗
+      (![ id := UVALUE_Addr (l, 0%Z) ]s i -∗
+        ![ pid := (read_in_mem_block bytes 0%Z dt)]s i -∗
         l ↦{q}s [ LBlock size bytes cid ] -∗
         ldomain_src i ({[ pid ]} ∪ L) -∗
         stack_src i -∗
@@ -760,11 +760,11 @@ Section instr_properties.
     dvalue_has_dtyp v dt  ->
     pid ∉ L ->
     ⊢ l ↦{q}s v -∗
-      [ id := UVALUE_Addr (l, 0%Z) ]s i -∗
+      ![ id := UVALUE_Addr (l, 0%Z) ]s i -∗
       ldomain_src i L -∗
       stack_src i -∗
-      ([ id := UVALUE_Addr (l, 0%Z) ]s i -∗
-        [ pid := dvalue_to_uvalue v ]s i -∗
+      (![ id := UVALUE_Addr (l, 0%Z) ]s i -∗
+        ![ pid := dvalue_to_uvalue v ]s i -∗
         l ↦{q}s v -∗
         ldomain_src i ({[ pid ]} ∪ L) -∗
         stack_src i -∗
@@ -809,12 +809,12 @@ Section instr_properties.
               ⌜dvalue_has_dtyp_fun dv dt⌝ ∗
               ldomain_tgt i L ∗
               stack_tgt i ∗
-              [ id' := UVALUE_Addr (ptr, 0%Z) ]t i ∗
+              ![ id' := UVALUE_Addr (ptr, 0%Z) ]t i ∗
               ptr ↦t v ∗
               (* post *)
               (ldomain_tgt i L -∗
               stack_tgt i -∗
-              [ id' := UVALUE_Addr (ptr, 0%Z) ]t i -∗
+              ![ id' := UVALUE_Addr (ptr, 0%Z) ]t i -∗
               ptr ↦t dv -∗
               Ψ (Ret ()))
       )) -∗
@@ -858,12 +858,12 @@ Section instr_properties.
               ⌜dvalue_has_dtyp_fun dv dt⌝ ∗
               ldomain_tgt i L ∗
               stack_tgt i ∗
-              [ id' := UVALUE_Addr (ptr, 0%Z) ]t i ∗
+              ![ id' := UVALUE_Addr (ptr, 0%Z) ]t i ∗
               ptr ↦t [ LBlock size bytes idx ] ∗
               (* post *)
               (ldomain_tgt i L -∗
               stack_tgt i -∗
-              [ id' := UVALUE_Addr (ptr, 0%Z) ]t i -∗
+              ![ id' := UVALUE_Addr (ptr, 0%Z) ]t i -∗
               ptr ↦t [ LBlock size (add_all_index (serialize_dvalue dv) 0%Z bytes) idx ] -∗
               Ψ (Ret ()))
       )) -∗
@@ -907,12 +907,12 @@ Section instr_properties.
               ⌜dvalue_has_dtyp_fun dv dt⌝ ∗
               ldomain_src i L ∗
               stack_src i ∗
-              [ id' := UVALUE_Addr (ptr, 0%Z) ]s i ∗
+              ![ id' := UVALUE_Addr (ptr, 0%Z) ]s i ∗
               ptr ↦s v ∗
               (* post *)
               (ldomain_src i L -∗
               stack_src i -∗
-              [ id' := UVALUE_Addr (ptr, 0%Z) ]s i -∗
+              ![ id' := UVALUE_Addr (ptr, 0%Z) ]s i -∗
               ptr ↦s dv -∗
               Ψ (Ret ()))
       )) -∗
@@ -956,12 +956,12 @@ Section instr_properties.
               ⌜dvalue_has_dtyp_fun dv dt⌝ ∗
               ldomain_src i L ∗
               stack_src i ∗
-              [ id' := UVALUE_Addr (ptr, 0%Z) ]s i ∗
+              ![ id' := UVALUE_Addr (ptr, 0%Z) ]s i ∗
               ptr ↦s [ LBlock size bytes idx ] ∗
               (* post *)
               (ldomain_src i L -∗
               stack_src i -∗
-              [ id' := UVALUE_Addr (ptr, 0%Z) ]s i -∗
+              ![ id' := UVALUE_Addr (ptr, 0%Z) ]s i -∗
               ptr ↦s [ LBlock size (add_all_index (serialize_dvalue dv) 0%Z bytes) idx ] -∗
               Ψ (Ret ()))
       )) -∗
@@ -1158,14 +1158,14 @@ Section exp_laws.
   Lemma sim_local_read_exp_conv x_t x_s v_t v_s i_t i_s :
     stack_tgt i_t -∗
     stack_src i_s -∗
-    [ x_t := v_t ]t i_t -∗
-    [ x_s := v_s ]s i_s -∗
+    ![ x_t := v_t ]t i_t -∗
+    ![ x_s := v_s ]s i_s -∗
     exp_conv (translate LU_to_exp (trigger (LLVMEvents.LocalRead x_t)))
     ⪯
     exp_conv (translate LU_to_exp (trigger (LLVMEvents.LocalRead x_s)))
     [{ (r_t, r_s), ⌜r_t = v_t⌝ ∗ ⌜r_s = v_s⌝ ∗
         stack_tgt i_t ∗ stack_src i_s ∗
-        [ x_t := v_t ]t i_t ∗ [ x_s := v_s ]s i_s  }].
+        ![ x_t := v_t ]t i_t ∗ ![ x_s := v_s ]s i_s  }].
   Proof.
     iIntros "Hs_t Hs_s Ht Hs".
     rewrite /exp_conv.
@@ -1212,8 +1212,8 @@ Section exp_laws.
               (Frame ({[l_s0]} ∪ S_s) ({[l_s]} ∪ L_s)) ∗
           l_t0 ↦t [make_empty_logical_block dt] ∗
           l_s0 ↦s [make_empty_logical_block dt] ∗
-          [ l_t := UVALUE_Addr (l_t0, 0%Z) ]t i_t ∗
-          [ l_s := UVALUE_Addr (l_s0, 0%Z) ]s i_s ∗
+          ![ l_t := UVALUE_Addr (l_t0, 0%Z) ]t i_t ∗
+          ![ l_s := UVALUE_Addr (l_s0, 0%Z) ]s i_s ∗
           target_block_size l_t0 (Some (N.to_nat (sizeof_dtyp dt))) ∗
           source_block_size l_s0 (Some (N.to_nat (sizeof_dtyp dt))) }].
   Proof.
@@ -1253,8 +1253,8 @@ Section exp_laws.
           alloca_src i_s ({[l_s0]} ∪ S_s) ∗
           ldomain_tgt i_t ({[ l_t ]} ∪ L_t) ∗
           ldomain_src i_s ({[ l_s ]} ∪ L_s) ∗
-          [ l_t := UVALUE_Addr (l_t0, 0%Z) ]t i_t ∗
-          [ l_s := UVALUE_Addr (l_s0, 0%Z) ]s i_s ∗
+          ![ l_t := UVALUE_Addr (l_t0, 0%Z) ]t i_t ∗
+          ![ l_s := UVALUE_Addr (l_s0, 0%Z) ]s i_s ∗
           stack_tgt i_t ∗
           stack_src i_s ∗
           target_block_size l_t0 (Some (N.to_nat (sizeof_dtyp dt))) ∗
@@ -1348,11 +1348,11 @@ Section exp_laws.
     pid ∉ L ->
     ⊢ l_t ↔h l -∗
       checkout C -∗
-      [ id := UVALUE_Addr l ]s i -∗
+      ![ id := UVALUE_Addr l ]s i -∗
       ldomain_src i L -∗
       stack_src i -∗
-      (∀ v, [ id := UVALUE_Addr l ]s i -∗
-        [ pid := v ]s i -∗
+      (∀ v, ![ id := UVALUE_Addr l ]s i -∗
+        ![ pid := v ]s i -∗
         checkout C -∗
         ldomain_src i ({[ pid ]} ∪ L) -∗
         stack_src i -∗
@@ -1376,7 +1376,7 @@ Section exp_laws.
       2 : done. iApply "H'".
       iIntros "Hl Hst".
       Unshelve.
-      2 : exact (fun x => ⌜x = Ret (UVALUE_Addr l)⌝ ∗ [ id := UVALUE_Addr l ]s i ∗ stack_src i)%I.
+      2 : exact (fun x => ⌜x = Ret (UVALUE_Addr l)⌝ ∗ ![ id := UVALUE_Addr l ]s i ∗ stack_src i)%I.
       by iFrame. }
     cbn.
     iIntros (?) "(%Hs & Hid & Hs)" ;subst.
@@ -1455,11 +1455,11 @@ Section more_properties.
     is_supported dt ->
     dvalue_has_dtyp v dt ->
     ⊢ l ↦{q}t v -∗
-      [ id := UVALUE_Addr (l, 0%Z) ]t i -∗
-      [ pid := u ]t i -∗
+      ![ id := UVALUE_Addr (l, 0%Z) ]t i -∗
+      ![ pid := u ]t i -∗
       stack_tgt i -∗
-      ([ id := UVALUE_Addr (l, 0%Z) ]t i -∗
-        [ pid := dvalue_to_uvalue v]t i -∗
+      (![ id := UVALUE_Addr (l, 0%Z) ]t i -∗
+        ![ pid := dvalue_to_uvalue v]t i -∗
         l ↦{q}t v -∗
         stack_tgt i -∗
         Ψ (Ret ())) -∗
@@ -1474,7 +1474,7 @@ Section more_properties.
     { iIntros "Hl Hf".
       Unshelve.
       2 : exact (lift_unary_post (fun x => ⌜x = UVALUE_Addr (l, 0%Z)⌝
-       ∗ stack_tgt i ∗ [id := UVALUE_Addr (l, 0%Z)]t i)%I).
+       ∗ stack_tgt i ∗ ![id := UVALUE_Addr (l, 0%Z)]t i)%I).
       iExists _. do 2 (iSplitL ""; [ done | ]). iFrame. }
 
     iIntros (?) "HP"; iDestruct "HP" as (???) "(Hf & Hl)"...
@@ -1496,11 +1496,11 @@ Section more_properties.
     is_supported dt ->
     dvalue_has_dtyp v dt  ->
     ⊢ l ↦{q}s v -∗
-      [ id := UVALUE_Addr (l, 0%Z) ]s i -∗
-      [ pid := u ]s i -∗
+      ![ id := UVALUE_Addr (l, 0%Z) ]s i -∗
+      ![ pid := u ]s i -∗
       stack_src i -∗
-      ([ id := UVALUE_Addr (l, 0%Z) ]s i -∗
-        [ pid := dvalue_to_uvalue v ]s i -∗
+      (![ id := UVALUE_Addr (l, 0%Z) ]s i -∗
+        ![ pid := dvalue_to_uvalue v ]s i -∗
         l ↦{q}s v -∗
         stack_src i -∗
         Ψ (Ret ())) -∗
@@ -1515,7 +1515,7 @@ Section more_properties.
     { iIntros "Hl Hf".
       Unshelve.
       2 : exact (lift_unary_post (fun x => ⌜x = UVALUE_Addr (l, 0%Z)⌝
-       ∗ stack_src i ∗ [id := UVALUE_Addr (l, 0%Z)]s i)%I).
+       ∗ stack_src i ∗ ![id := UVALUE_Addr (l, 0%Z)]s i)%I).
       iExists _. do 2 (iSplitL ""; [ done | ]). iFrame. }
 
     iIntros (?) "HP"; iDestruct "HP" as (???) "(Hf & Hl)"...
@@ -1546,8 +1546,8 @@ Section more_properties.
       ldomain_src i_s L_s -∗
       stack_tgt i_t -∗
       stack_src i_s -∗
-      [ id_t := UVALUE_Addr l_t ]t i_t -∗
-      [ id_s := UVALUE_Addr l_s ]s i_s -∗
+      ![ id_t := UVALUE_Addr l_t ]t i_t -∗
+      ![ id_s := UVALUE_Addr l_s ]s i_s -∗
       <{ %(IId l_t0) =
           (INSTR_Load b dt (du, EXP_Ident (ID_Local id_t)) o) }> ⪯
       <{ %(IId l_s0) =
@@ -1558,10 +1558,10 @@ Section more_properties.
           ldomain_src i_s ({[ l_s0 ]} ∪ L_s) ∗
           stack_tgt i_t ∗
           stack_src i_s ∗
-          [ id_t := UVALUE_Addr l_t ]t i_t ∗
-          [ id_s := UVALUE_Addr l_s ]s i_s ∗
+          ![ id_t := UVALUE_Addr l_t ]t i_t ∗
+          ![ id_s := UVALUE_Addr l_s ]s i_s ∗
           ∃ v_t v_s,
-          [ l_t0 := v_t ]t i_t ∗ [ l_s0 := v_s ]s i_s ∗
+          ![ l_t0 := v_t ]t i_t ∗ ![ l_s0 := v_s ]s i_s ∗
           uval_rel v_t v_s
       }].
   Proof with vsimp.
@@ -1617,8 +1617,8 @@ Section more_properties.
       stack_tgt i_t -∗
       stack_src i_s -∗
       dval_rel v_t v_s -∗
-      [ id_t := UVALUE_Addr l_t ]t i_t -∗
-      [ id_s := UVALUE_Addr l_s ]s i_s -∗
+      ![ id_t := UVALUE_Addr l_t ]t i_t -∗
+      ![ id_s := UVALUE_Addr l_s ]s i_s -∗
       target_red (η := vir_handler)
         (exp_conv (denote_exp (Some dt) val_t))
         (lift_unary_post
@@ -1643,8 +1643,8 @@ Section more_properties.
           ldomain_src i_s L_s ∗
           stack_tgt i_t ∗
           stack_src i_s ∗
-          [ id_t := UVALUE_Addr l_t ]t i_t ∗
-          [ id_s := UVALUE_Addr l_s ]s i_s }].
+          ![ id_t := UVALUE_Addr l_t ]t i_t ∗
+          ![ id_s := UVALUE_Addr l_s ]s i_s }].
   Proof with vsimp.
     iIntros (WF Htyp_t Htyp_s H)
       "#Hl HC Hd_t Hd_s Hf_t Hf_s #Hdv Hid_t Hid_s Hdt Hds"...
