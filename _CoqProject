@@ -44,6 +44,7 @@ theories/vir/rules/event_laws.v
 theories/vir/rules/bij_laws.v
 theories/vir/rules/frame_laws.v
 theories/vir/rules/instr_laws.v
+theories/vir/rules/block_laws.v
 theories/vir/rules/rules.v
 
 theories/vir/logrel/wellformedness.v

@@ -559,6 +559,12 @@ Proof.
   by setoid_rewrite interp_bind.
 Qed.
 
+Lemma L0'expr_conv_tau {R} x :
+  L0'expr_conv (Tau x) ≅ Tau (L0'expr_conv (R:=R) x).
+Proof.
+  rewrite /L0'expr_conv/= interp_tau//.
+Qed.
+
 Lemma exp_conv_ret {R} (r : R):
   exp_conv (Ret r) ≅ Ret r.
 Proof.
@@ -569,6 +575,12 @@ Lemma exp_conv_bind {X R} (e : _ X) (k : _ -> _ R) :
   exp_conv (x <- e ;; k x) ≅ x <- exp_conv e ;; exp_conv (k x).
 Proof.
   by setoid_rewrite interp_bind.
+Qed.
+
+Lemma exp_conv_tau {R} x :
+  exp_conv (Tau x) ≅ Tau (exp_conv (R:=R) x).
+Proof.
+  rewrite /exp_conv/= interp_tau//.
 Qed.
 
 Lemma instr_conv_ret {R} (x : R):
@@ -584,7 +596,13 @@ Proof.
   by setoid_rewrite interp_bind.
 Qed.
 
-Lemma instr_conv_nil :
+Lemma instr_conv_tau {R} x :
+  instr_conv (Tau x) ≅ Tau (instr_conv (R:=R) x).
+Proof.
+  rewrite /instr_conv/= interp_tau//.
+Qed.
+
+Lemma instr_conv_denote_code_nil :
   instr_conv (denote_code nil) ≅ Ret tt.
 Proof.
   cbn. go.

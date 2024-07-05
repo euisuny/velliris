@@ -4,7 +4,6 @@ From velliris Require Import vir.lang.spec.
 From ITree Require Import Interp.TranslateFacts Events.StateFacts.
 
 (* General properties about the simulation instantiated for [vir]. *)
-
 Section vir_sim_properties.
 
   Context {Σ} `{!vellirisGS Σ}.
@@ -21,6 +20,7 @@ Section vir_sim_properties.
     iApply sim_coind_exc.
   Qed.
 
+  (* TODO: make less redundant with [sim_pick]/ do we need this at all? *)
   Lemma sim_expr_pick fn P:
     ⊢ trigger (pick fn P) ⪯ trigger (pick fn P) [{ (v_t, v_s), ⌜v_t = v_s⌝}].
   Proof.

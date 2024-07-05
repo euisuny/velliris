@@ -8,6 +8,12 @@ Declare Custom Entry vir.
 Notation "<{ e }>" :=
   (instr_conv (denote_instr e))
       (e custom vir at level 99).
+Notation "'<{' e '@' dt '}>e'" :=
+  (exp_conv (denote_exp dt e))
+      (e custom vir at level 99).
+Notation "'<{' e '}>te'" :=
+  (exp_conv (denote_exp (Some e.1) e.2))
+      (e custom vir at level 99).
 Notation "x" := x (in custom vir at level 0, x constr at level 0).
 Notation "% id '=' e" := (id, e)
     (in custom vir at level 50,
@@ -55,7 +61,7 @@ Ltac instr_conv_normalize :=
 Ltac to_instr :=
   repeat setoid_rewrite denote_code_cons;
   instr_conv_normalize;
-  setoid_rewrite instr_conv_nil.
+  setoid_rewrite instr_conv_denote_code_nil.
 
 Ltac cont :=
   let Hret1 := fresh "Hret1" in

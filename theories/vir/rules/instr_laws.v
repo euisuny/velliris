@@ -47,24 +47,57 @@ Proof.
   apply eqit_Tau. by tau_steps.
 Qed.
 
+Lemma instr_conv_alloca {t} :
+  instr_conv (trigger (Alloca t)) ≅
+    x <- trigger (Alloca t) ;; Tau (Ret x).
+Proof.
+  setoid_rewrite interp_vis; tau_steps.
+  apply eqit_Vis; intros. tau_steps.
+  apply eqit_Tau. by tau_steps.
+Qed.
+
+Lemma denote_phis_nil bfrom :
+  denote_phis bfrom [] ≅ Ret ().
+Proof.
+  rewrite /denote_phis/=. by eq_itree_simp.
+Qed.
+Lemma denote_code_nil :
+  denote_code [] ≅ Ret ().
+Proof.
+  rewrite /denote_code/=.
+  by rewrite bind_ret_l.
+Qed.
+
+(* TODO add more instructions *)
 Ltac normalize_instr_tree e :=
   lazymatch e with
     | ITree.bind (ITree.bind _ _) _ => rewrite bind_bind
     | ITree.bind (Ret _) _ => rewrite bind_ret_l
     | ITree.bind (ret _) _ => rewrite bind_ret_l
     | ITree.bind (Tau _) _ => rewrite bind_tau
+    (* Instr *)
     | instr_conv (Ret _) => rewrite instr_conv_ret
     | instr_conv (ITree.bind _ _) => rewrite instr_conv_bind
     | instr_conv (bind _ _) => rewrite instr_conv_bind
+    | instr_conv (Tau _) => rewrite instr_conv_tau
+    (* Expr *)
+    | exp_conv (Ret _) => rewrite exp_conv_ret
+    | exp_conv (ITree.bind _ _) => rewrite exp_conv_bind
+    | exp_conv (bind _ _) => rewrite exp_conv_bind
+    | exp_conv (Tau _) => rewrite exp_conv_tau
     (* Trigger *)
     | instr_conv (trigger (Load _ _)) => rewrite instr_conv_load
     | instr_conv (trigger (Store _ _)) => rewrite instr_conv_store
+    | instr_conv (trigger (Alloca _)) => rewrite instr_conv_alloca
     | instr_conv (trigger (LocalWrite _ _)) => rewrite instr_conv_localwrite
     | instr_conv (translate exp_to_instr _) =>
         rewrite eq_itree_exp_conv_to_instr
     | exp_conv (translate LU_to_exp _) =>
         rewrite exp_conv_translate_local_read
     | ITree.bind ?e' _ => progress normalize_instr_tree e'
+    (* Denotations *)
+    | context[(denote_phis _ [])] => rewrite denote_phis_nil
+    | context[(denote_code [])] => rewrite denote_code_nil
   end.
 
 Ltac normalize_instr :=
@@ -72,10 +105,7 @@ Ltac normalize_instr :=
     match goal with
       | |- ?e ≅ _ => repeat normalize_instr_tree e
     end.
-
-Ltac target_simp :=
-  do 2 (
-  iApply target_red_eq_itree; [ by normalize_instr | ];
+Ltac target_simp_goal :=
   try match goal with
   | |- environments.envs_entails _
       (target_red (ITree.bind _ _) _) => iApply target_red_bind
@@ -85,11 +115,37 @@ Ltac target_simp :=
       (target_red (Tau _) _) => iApply target_red_tau
   | |- environments.envs_entails _
       (target_red (Ret _) _) => iApply target_red_base
-  end).
+  end.
+Ltac target_simp_goal_notau :=
+  try match goal with
+  | |- environments.envs_entails _
+      (target_red (ITree.bind _ _) _) => iApply target_red_bind
+  | |- environments.envs_entails _
+      (target_red (bind _ _) _) => iApply target_red_bind
+  | |- environments.envs_entails _
+      (target_red (Ret _) _) => iApply target_red_base
+  end.
 
-Ltac source_simp :=
-  do 2 (
-  iApply source_red_eq_itree; [ by normalize_instr | ];
+Ltac target_simp1 :=
+  progress (
+  match goal with
+  | |- environments.envs_entails _ (target_red _ _) =>
+        iApply target_red_eq_itree; [ by normalize_instr | ]
+  end;
+  target_simp_goal
+  ).
+Ltac target_simp1_notau :=
+  progress (
+  match goal with
+  | |- environments.envs_entails _ (target_red _ _) =>
+        iApply target_red_eq_itree; [ by normalize_instr | ]
+  end;
+  target_simp_goal_notau
+  ).
+
+Ltac target_simp := target_simp1; try target_simp1.
+
+Ltac source_simp_goal :=
   try match goal with
   | |- environments.envs_entails _
       (source_red (ITree.bind _ _) _) => iApply source_red_bind
@@ -99,7 +155,36 @@ Ltac source_simp :=
       (source_red (Tau _) _) => iApply source_red_tau
   | |- environments.envs_entails _
       (source_red (Ret _) _) => iApply source_red_base
-  end).
+  end.
+Ltac source_simp_goal_notau :=
+  try match goal with
+  | |- environments.envs_entails _
+      (source_red (ITree.bind _ _) _) => iApply source_red_bind
+  | |- environments.envs_entails _
+      (source_red (bind _ _) _) => iApply source_red_bind
+  (*| |- environments.envs_entails _*)
+      (*(source_red (Tau _) _) => iApply source_red_tau*)
+  | |- environments.envs_entails _
+      (source_red (Ret _) _) => iApply source_red_base
+  end.
+Ltac source_simp1 :=
+  progress (
+  match goal with
+  | |- environments.envs_entails _ (source_red _ _) =>
+        iApply source_red_eq_itree; [ by normalize_instr | ]
+  end;
+  source_simp_goal
+  ).
+Ltac source_simp1_notau :=
+  progress (
+  match goal with
+  | |- environments.envs_entails _ (source_red _ _) =>
+        iApply source_red_eq_itree; [ by normalize_instr | ]
+  end;
+  source_simp_goal_notau
+  ).
+
+Ltac source_simp := source_simp1; try source_simp1.
 
 (* ------------------------------------------------------------------------ *)
   (* Utilities later useful for proving properties about [map_monad] over
@@ -178,6 +263,7 @@ Section instr_properties.
 
 (* ------------------------------------------------------------------------ *)
 
+  (* Read a register *)
   Lemma target_local_id {i_t id v Φ}:
     stack_tgt i_t -∗
     [ id := v ]t i_t -∗
@@ -196,112 +282,93 @@ Section instr_properties.
     iApply ("HΦ" with "Hs_t Ht").
   Qed.
 
-  Lemma target_instr_local_write (x : LLVMAst.raw_id) (v : uvalue) e i L Ψ:
-    x ∉ L ->
-    match e with
-    | INSTR_Comment _ | INSTR_Call _ _ _ | INSTR_Store _ _ _ _ => False
-    | _ => True
-    end ->
-    ⊢ stack_tgt i -∗
-      ldomain_tgt i L -∗
-      (ldomain_tgt i L -∗
-        stack_tgt i -∗
-        target_red (η := vir_handler) (instr_conv (denote_instr_exp e))
-        (lift_unary_post (fun y => ⌜y = v⌝ ∗
-        ldomain_tgt i L ∗
-        stack_tgt i))) -∗
-      ([ x := v ]t i -∗
-        ldomain_tgt i ({[x]} ∪ L) -∗
-        stack_tgt i -∗
-        Ψ (Ret ())) -∗
+  (* Allocate a new register *)
+  Lemma target_instr_local_write_new (x : LLVMAst.raw_id) e Ψ:
+    ⊢ target_red (η := vir_handler) (instr_conv (denote_instr_exp e)) (lift_unary_post (λ v,
+        ∃ i L, ldomain_tgt i L ∗
+        stack_tgt i ∗
+        ⌜x ∉ L⌝ ∗
+        ([ x := v ]t i -∗
+          ldomain_tgt i ({[x]} ∪ L) -∗
+          stack_tgt i -∗
+          Ψ (Ret ())))) -∗
       target_red (η := vir_handler) (<{ %(IId x) = e }>) Ψ.
   Proof.
-    iIntros (Hnin He) "Hf Hd H HΨ".
+    iIntros "Ha".
     cbn. rewrite /instr_conv.
     iApply target_red_eq_itree.
     { rewrite interp_bind. reflexivity. }
     iApply target_red_bind.
-    iApply (target_red_mono with "[HΨ]");
-      last iApply ("H" with "Hd Hf").
-    iIntros (?) "HΦ".
-    iDestruct "HΦ" as (???) "HΦ"; subst.
-    iApply target_red_eq_itree; first by rewrite H bind_ret_l.
-    iDestruct "HΦ" as "(Hd & Hs)".
-    destruct e; eauto; try inv He.
-    all: iApply target_red_eq_itree; [ by rewrite interp_vis | ];
-      iApply target_red_bind;
-      iApply (target_local_write_alloc with "Hd Hs [HΨ]"); auto;
-      iIntros "Hi Hd Hs";
-      iApply target_red_eq_itree; [ by rewrite bind_ret_l interp_ret | ];
-      iApply target_red_tau; iApply target_red_base;
-      iApply ("HΨ" with "Hi Hd Hs").
+    iApply (target_red_wand with "Ha").
+    iIntros (?) "(%v & %Heq & %i & %L & Hd & Hs & %Hnin & Hp)".
+    target_simp. target_simp.
+    iApply target_red_eq_itree; [ by rewrite interp_vis | ].
+    iApply target_red_bind.
+    iApply (target_local_write_alloc with "Hd Hs [Hp]"); first done.
+    iIntros "Hx Hd Hs".
+    iApply target_red_eq_itree; [ by rewrite bind_ret_l interp_ret | ].
+    target_simp.
+    iApply ("Hp" with "Hx Hd Hs").
   Qed.
 
-  Lemma target_instr_local_write1 (x : LLVMAst.raw_id) (v v' : uvalue) e i L Ψ:
-    match e with
-    | INSTR_Comment _ | INSTR_Call _ _ _ | INSTR_Store _ _ _ _ => False
-    | _ => True
-    end ->
-    ⊢ stack_tgt i -∗
-      ldomain_tgt i L -∗
-      [ x := v' ]t i -∗
-      ([ x := v' ]t i -∗
-        ldomain_tgt i L -∗
-        stack_tgt i -∗
-        target_red (η := vir_handler) (instr_conv (denote_instr_exp e))
-        (lift_unary_post (fun y => ⌜y = v⌝ ∗
-       [x := v']t i ∗
-        ldomain_tgt i L ∗
-        stack_tgt i))) -∗
-      ([ x := v ]t i -∗
-        ldomain_tgt i L -∗
-        stack_tgt i -∗
-        Ψ (Ret ())) -∗
+  (* Write to existing register *)
+  Lemma target_instr_local_write (x : LLVMAst.raw_id) e Ψ:
+    ⊢ target_red (η := vir_handler) (instr_conv (denote_instr_exp e)) (lift_unary_post (λ v,
+        ∃ i v',
+        stack_tgt i ∗
+        [ x := v' ]t i ∗
+        ([ x := v ]t i -∗
+          stack_tgt i -∗
+          Ψ (Ret ())))) -∗
       target_red (η := vir_handler) (<{ %(IId x) = e }>) Ψ.
   Proof.
-    iIntros (He) "Hf Hd Hv H HΨ".
+    iIntros "Ha".
     cbn. rewrite /instr_conv.
     iApply target_red_eq_itree.
     { rewrite interp_bind. reflexivity. }
     iApply target_red_bind.
-    iApply (target_red_mono with "[HΨ]");
-      last iApply ("H" with "Hv Hd Hf").
-    iIntros (?) "HΦ".
-    iDestruct "HΦ" as (???) "HΦ"; subst.
-    iApply target_red_eq_itree; first by rewrite H bind_ret_l.
-    iDestruct "HΦ" as "(Hv & Hd & Hs)".
-    destruct e; eauto; try inv He.
-    all: iApply target_red_eq_itree; [ by rewrite interp_vis | ];
-      iApply target_red_bind;
-      iApply (target_local_write with "Hv Hs [Hd HΨ]"); auto;
-      iIntros "Hi Hs";
-      iApply target_red_eq_itree; [ by rewrite bind_ret_l interp_ret | ];
-      iApply target_red_tau; iApply target_red_base;
-      iApply ("HΨ" with "Hi Hd Hs").
+    iApply (target_red_wand with "Ha").
+    iIntros (?) "(%v & %Heq & %i & %v'& Hs & Hx & Hp)".
+    target_simp. target_simp.
+    iApply target_red_eq_itree; [ by rewrite interp_vis | ].
+    iApply target_red_bind.
+    iApply (target_local_write with "Hx Hs [Hp]").
+    iIntros "Hx Hs".
+    iApply target_red_eq_itree; [ by rewrite bind_ret_l interp_ret | ].
+    target_simp.
+    iApply ("Hp" with "Hx Hs").
   Qed.
 
-  Lemma target_instr_pure (x : LLVMAst.raw_id) (v : uvalue) o i L Ψ:
-    x ∉ L ->
-    ⊢ stack_tgt i -∗
-      ldomain_tgt i L -∗
-      (ldomain_tgt i L -∗
-        stack_tgt i -∗
-        target_red (η := vir_handler) (exp_conv (denote_op o))
-        (lift_unary_post (fun y => ⌜y = v⌝ ∗
-        ldomain_tgt i L ∗
-        stack_tgt i))) -∗
-      ([ x := v ]t i -∗
-        ldomain_tgt i ({[x]} ∪ L) -∗
-        stack_tgt i -∗
-        Ψ (Ret ())) -∗
+  (* Special case for a pure expression on the RHS *)
+  Lemma target_instr_pure_new (x : LLVMAst.raw_id) (v : uvalue) o Ψ:
+    ⊢ target_red (η := vir_handler) (exp_conv (denote_op o)) (lift_unary_post (λ v,
+        ∃ i L, ldomain_tgt i L ∗
+        stack_tgt i ∗
+        ⌜x ∉ L⌝ ∗
+        ([ x := v ]t i -∗
+          ldomain_tgt i ({[x]} ∪ L) -∗
+          stack_tgt i -∗
+          Ψ (Ret ())))) -∗
       target_red (η := vir_handler) (<{ %(IId x) = (INSTR_Op o) }>) Ψ.
   Proof.
-    iIntros (?) "Hf Hd H HΨ".
-    iApply (target_instr_local_write with "Hf Hd [H] [HΨ]"); eauto.
-    iIntros "Hd Hs".
-    cbn. iApply target_red_eq_itree.
+    iIntros "Ha".
+    iApply target_instr_local_write_new.
+    iApply target_red_eq_itree.
     { by rewrite eq_itree_exp_conv_to_instr. }
-    iApply ("H" with "Hd Hs").
+    iApply "Ha".
+  Qed.
+
+  Lemma target_instr_pure (x : LLVMAst.raw_id) (v : uvalue) o Ψ:
+    target_red (η := vir_handler) (exp_conv (denote_op o)) (lift_unary_post (λ v,
+      ∃ i v', stack_tgt i ∗ [ x := v' ]t i ∗
+      ([ x := v ]t i -∗ stack_tgt i -∗ Ψ (Ret tt)))) -∗
+    target_red (η := vir_handler) (<{ %(IId x) = (INSTR_Op o) }>) Ψ.
+  Proof.
+    iIntros "Ha".
+    iApply target_instr_local_write.
+    iApply target_red_eq_itree.
+    { by rewrite eq_itree_exp_conv_to_instr. }
+    iApply "Ha".
   Qed.
 
   Lemma source_local_id {i_s id v Φ}:
@@ -323,90 +390,96 @@ Section instr_properties.
     iApply ("HΦ" with "Hs_t Ht").
   Qed.
 
-  Lemma source_instr_local_write (x : LLVMAst.raw_id) (v : uvalue) e i L Ψ:
-    x ∉ L ->
-    match e with
-    | INSTR_Comment _ | INSTR_Call _ _ _ | INSTR_Store _ _ _ _ => False
-    | _ => True
-    end ->
-    ⊢ stack_src i -∗
-      ldomain_src i L -∗
-      (ldomain_src i L -∗
-        stack_src i -∗
-        source_red (η := vir_handler) (instr_conv (denote_instr_exp e))
-        (lift_unary_post (fun y => ⌜y = v⌝ ∗
-        ldomain_src i L ∗
-        stack_src i))) -∗
-      ([ x := v ]s i -∗
-        ldomain_src i ({[x]} ∪ L) -∗
-        stack_src i -∗
-        Ψ (Ret ())) -∗
+  (* Allocate a new register *)
+  Lemma source_instr_local_write_new (x : LLVMAst.raw_id) e Ψ:
+    ⊢ source_red (η := vir_handler) (instr_conv (denote_instr_exp e)) (lift_unary_post (λ v,
+        ∃ i L, ldomain_src i L ∗
+        stack_src i ∗
+        ⌜x ∉ L⌝ ∗
+        ([ x := v ]s i -∗
+          ldomain_src i ({[x]} ∪ L) -∗
+          stack_src i -∗
+          Ψ (Ret ())))) -∗
       source_red (η := vir_handler) (<{ %(IId x) = e }>) Ψ.
   Proof.
-    iIntros (Hnin He) "Hf Hd H HΨ".
+    iIntros "Ha".
     cbn. rewrite /instr_conv.
     iApply source_red_eq_itree.
     { rewrite interp_bind. reflexivity. }
     iApply source_red_bind.
-    iApply (source_red_mono with "[HΨ]");
-      last iApply ("H" with "Hd Hf").
-    iIntros (?) "HΦ".
-    iDestruct "HΦ" as (???) "HΦ"; subst.
-    iApply source_red_eq_itree; first by rewrite H bind_ret_l.
-    iDestruct "HΦ" as "(Hd & Hs)".
-    destruct e; eauto; try inv He.
-    all: iApply source_red_eq_itree; [ by rewrite interp_vis | ];
-      iApply source_red_bind;
-      iApply (source_local_write_alloc with "Hd Hs [HΨ]"); auto;
-      iIntros "Hi Hd Hs";
-      iApply source_red_eq_itree; [ by rewrite bind_ret_l interp_ret | ];
-      iApply source_red_tau; iApply source_red_base;
-      iApply ("HΨ" with "Hi Hd Hs").
+    iApply (source_red_wand with "Ha").
+    iIntros (?) "(%v & %Heq & %i & %L & Hd & Hs & %Hnin & Hp)".
+    source_simp. source_simp.
+    iApply source_red_eq_itree; [ by rewrite interp_vis | ].
+    iApply source_red_bind.
+    iApply (source_local_write_alloc with "Hd Hs [Hp]"); first done.
+    iIntros "Hx Hd Hs".
+    iApply source_red_eq_itree; [ by rewrite bind_ret_l interp_ret | ].
+    source_simp.
+    iApply ("Hp" with "Hx Hd Hs").
   Qed.
 
-  Lemma source_instr_local_write1 (x : LLVMAst.raw_id) (v v' : uvalue) e i L Ψ:
-    match e with
-    | INSTR_Comment _ | INSTR_Call _ _ _ | INSTR_Store _ _ _ _ => False
-    | _ => True
-    end ->
-    ⊢ stack_src i -∗
-      ldomain_src i L -∗
-      [ x := v' ]s i -∗
-      ([ x := v' ]s i -∗
-        ldomain_src i L -∗
-        stack_src i -∗
-        source_red (η := vir_handler) (instr_conv (denote_instr_exp e))
-        (lift_unary_post (fun y => ⌜y = v⌝ ∗
-       [x := v']s i ∗
-        ldomain_src i L ∗
-        stack_src i))) -∗
-      ([ x := v ]s i -∗
-        ldomain_src i L -∗
-        stack_src i -∗
-        Ψ (Ret ())) -∗
+  (* Write to existing register *)
+  Lemma source_instr_local_write (x : LLVMAst.raw_id) e Ψ:
+    ⊢ source_red (η := vir_handler) (instr_conv (denote_instr_exp e)) (lift_unary_post (λ v,
+        ∃ i v',
+        stack_src i ∗
+        [ x := v' ]s i ∗
+        ([ x := v ]s i -∗
+          stack_src i -∗
+          Ψ (Ret ())))) -∗
       source_red (η := vir_handler) (<{ %(IId x) = e }>) Ψ.
   Proof.
-    iIntros (He) "Hf Hd Hv H HΨ".
+    iIntros "Ha".
     cbn. rewrite /instr_conv.
     iApply source_red_eq_itree.
     { rewrite interp_bind. reflexivity. }
     iApply source_red_bind.
-    iApply (source_red_mono with "[HΨ]");
-      last iApply ("H" with "Hv Hd Hf").
-    iIntros (?) "HΦ".
-    iDestruct "HΦ" as (???) "HΦ"; subst.
-    iApply source_red_eq_itree; first by rewrite H bind_ret_l.
-    iDestruct "HΦ" as "(Hv & Hd & Hs)".
-    destruct e; eauto; try inv He.
-    all: iApply source_red_eq_itree; [ by rewrite interp_vis | ];
-      iApply source_red_bind;
-      iApply (source_local_write with "Hv Hs [Hd HΨ]"); auto;
-      iIntros "Hi Hs";
-      iApply source_red_eq_itree; [ by rewrite bind_ret_l interp_ret | ];
-      iApply source_red_tau; iApply source_red_base;
-      iApply ("HΨ" with "Hi Hd Hs").
+    iApply (source_red_wand with "Ha").
+    iIntros (?) "(%v & %Heq & %i & %v'& Hs & Hx & Hp)".
+    source_simp. source_simp.
+    iApply source_red_eq_itree; [ by rewrite interp_vis | ].
+    iApply source_red_bind.
+    iApply (source_local_write with "Hx Hs [Hp]").
+    iIntros "Hx Hs".
+    iApply source_red_eq_itree; [ by rewrite bind_ret_l interp_ret | ].
+    source_simp.
+    iApply ("Hp" with "Hx Hs").
   Qed.
 
+  (* Special case for a pure expression on the RHS *)
+  Lemma source_instr_pure_new (x : LLVMAst.raw_id) (v : uvalue) o Ψ:
+    ⊢ source_red (η := vir_handler) (exp_conv (denote_op o)) (lift_unary_post (λ v,
+        ∃ i L, ldomain_src i L ∗
+        stack_src i ∗
+        ⌜x ∉ L⌝ ∗
+        ([ x := v ]s i -∗
+          ldomain_src i ({[x]} ∪ L) -∗
+          stack_src i -∗
+          Ψ (Ret ())))) -∗
+      source_red (η := vir_handler) (<{ %(IId x) = (INSTR_Op o) }>) Ψ.
+  Proof.
+    iIntros "Ha".
+    iApply source_instr_local_write_new.
+    iApply source_red_eq_itree.
+    { by rewrite eq_itree_exp_conv_to_instr. }
+    iApply "Ha".
+  Qed.
+
+  Lemma source_instr_pure (x : LLVMAst.raw_id) (v : uvalue) o Ψ:
+    source_red (η := vir_handler) (exp_conv (denote_op o)) (lift_unary_post (λ v,
+      ∃ i v', stack_src i ∗ [ x := v' ]s i ∗
+      ([ x := v ]s i -∗ stack_src i -∗ Ψ (Ret tt)))) -∗
+    source_red (η := vir_handler) (<{ %(IId x) = (INSTR_Op o) }>) Ψ.
+  Proof.
+    iIntros "Ha".
+    iApply source_instr_local_write.
+    iApply source_red_eq_itree.
+    { by rewrite eq_itree_exp_conv_to_instr. }
+    iApply "Ha".
+  Qed.
+
+  (* TODO refactor *)
   Lemma sim_instr_pure1
     (x_t x_s : LLVMAst.raw_id) (v_t v_s v_t' v_s' : uvalue) o_t o_s i_t i_s:
     ⊢ stack_tgt i_t -∗ stack_src i_s -∗
@@ -446,66 +519,7 @@ Section instr_properties.
     rewrite H H0 !bind_ret_l; subst. do 2 vfinal.
   Qed.
 
-  Lemma target_instr_pure1 (x : LLVMAst.raw_id) (v : uvalue) o i L Ψ:
-    ⊢ stack_tgt i -∗
-      ldomain_tgt i L -∗
-      [ x := v ]t i -∗
-      ([ x := v ]t i -∗
-        ldomain_tgt i L -∗
-        stack_tgt i -∗
-        Ψ (Ret tt)) -∗
-      target_red (η := vir_handler) (exp_conv (denote_op o)) (lift_unary_post (fun x => ⌜x = v⌝)) -∗
-      target_red (η := vir_handler) (<{ %(IId x) = (INSTR_Op o) }>) Ψ.
-  Proof.
-    iIntros "Hf Hd Hl Ht He".
-    iApply (target_instr_local_write1 with "Hf Hd Hl [He] [Ht]"); eauto.
-    iIntros "Ht Hd Hs".
-    iApply target_red_eq_itree.
-    { by rewrite eq_itree_exp_conv_to_instr. }
-    iApply (target_red_mono with "[Ht Hd Hs]"); last iApply "He".
-    iIntros (??). destruct H as (?&?&?); subst; sfinal.
-  Qed.
-
-  Lemma source_instr_pure1 (x : LLVMAst.raw_id) (v : uvalue) o i L Φ:
-    ⊢ stack_src i -∗
-      ldomain_src i L -∗
-      [ x := v ]s i -∗
-      ([ x := v ]s i -∗
-        ldomain_src i L -∗
-        stack_src i -∗
-        Φ (Ret tt)) -∗
-      source_red (η := vir_handler) (exp_conv (denote_op o)) (lift_unary_post (fun x => ⌜x = v⌝)) -∗
-      source_red (η := vir_handler) (<{ %(IId x) = (INSTR_Op o) }>) Φ.
-  Proof.
-    iIntros "Hf Hd Hl Ht He".
-    iApply (source_instr_local_write1 with "Hf Hd Hl [He] [Ht]"); eauto.
-    iIntros "Ht Hd Hs".
-    iApply source_red_eq_itree.
-    { by rewrite eq_itree_exp_conv_to_instr. }
-    iApply (source_red_mono with "[Ht Hd Hs]"); last iApply "He".
-    iIntros (??). destruct H as (?&?&?); subst; sfinal.
-  Qed.
-
-  Lemma source_instr_pure (x : LLVMAst.raw_id) (v : uvalue) o i L Φ:
-    x ∉ L ->
-    ⊢ stack_src i -∗
-      ldomain_src i L -∗
-      source_red (η := vir_handler) (exp_conv (denote_op o)) (lift_unary_post (fun x => ⌜x = v⌝)) -∗
-      ([ x := v ]s i -∗
-        ldomain_src i ({[x]} ∪ L) -∗
-        stack_src i -∗
-        Φ (Ret tt)) -∗
-      source_red (η := vir_handler) (<{ %(IId x) = (INSTR_Op o) }>) Φ.
-  Proof.
-    iIntros (Hn) "Hf Hd Ht He".
-    iApply (source_instr_local_write with "Hf Hd [Ht] [He]"); eauto.
-    iIntros "Hd Hs".
-    iApply source_red_eq_itree.
-    { by rewrite eq_itree_exp_conv_to_instr. }
-    iApply (source_red_mono with "[Hd Hs]"); last iApply "Ht".
-    iIntros (??). destruct H as (?&?&?); subst; sfinal.
-  Qed.
-
+  (* TODO refactor *)
   Lemma sim_instr_pure
     (x_t x_s : LLVMAst.raw_id)
     (v_t v_s v_t' v_s' : uvalue) o_t o_s i_t i_s L_t L_s:
@@ -542,6 +556,62 @@ Section instr_properties.
     vfinal.
   Qed.
 
+  (** ** Alloca laws *)
+  Lemma target_instr_alloca l_t dt t o i_t S_t `{non_void dt} L_t Φ :
+    l_t ∉ L_t ->
+    alloca_tgt i_t S_t -∗
+    ldomain_tgt i_t L_t -∗
+    stack_tgt i_t -∗
+    (∀ l_t0,
+      ⌜l_t0 ∉ S_t⌝ -∗
+      l_t0 ↦t [make_empty_logical_block dt] -∗
+      alloca_tgt i_t ({[l_t0]} ∪ S_t) -∗
+      ldomain_tgt i_t ({[ l_t ]} ∪ L_t) -∗
+      [ l_t := UVALUE_Addr (l_t0, 0%Z) ]t i_t -∗
+      stack_tgt i_t -∗
+      target_block_size l_t0 (Some (N.to_nat (sizeof_dtyp dt))) -∗
+      Φ (Ret ())
+    ) -∗
+    target_red <{ %(IId l_t) = (INSTR_Alloca dt t o) }> Φ.
+  Proof.
+    iIntros (Hnt) "Ha_t Hd_t Hf_t Hpost". simpl. target_simp.
+    iApply (target_alloca with "Ha_t Hf_t"); first done.
+    iIntros (x ?) "Hx Ha_t Hf_t Hb".
+    target_simp.
+    iApply (target_local_write_alloc with "Hd_t Hf_t"); first done.
+    iIntros "Hx' Hd_t Hf_t".
+    target_simp.
+    iApply ("Hpost" with "[//] Hx Ha_t Hd_t Hx' Hf_t Hb").
+  Qed.
+
+  Lemma source_instr_alloca l_s dt t o i_s S_s `{non_void dt} L_s Φ :
+    l_s ∉ L_s ->
+    alloca_src i_s S_s -∗
+    ldomain_src i_s L_s -∗
+    stack_src i_s -∗
+    (∀ l_s0,
+      ⌜l_s0 ∉ S_s⌝ -∗
+      l_s0 ↦s [make_empty_logical_block dt] -∗
+      alloca_src i_s ({[l_s0]} ∪ S_s) -∗
+      ldomain_src i_s ({[ l_s ]} ∪ L_s) -∗
+      [ l_s := UVALUE_Addr (l_s0, 0%Z) ]s i_s -∗
+      stack_src i_s -∗
+      source_block_size l_s0 (Some (N.to_nat (sizeof_dtyp dt))) -∗
+      Φ (Ret ())
+    ) -∗
+    source_red <{ %(IId l_s) = (INSTR_Alloca dt t o) }> Φ.
+  Proof.
+    iIntros (Hnt) "Ha_s Hd_s Hf_s Hpost". simpl. source_simp.
+    iApply (source_alloca with "Ha_s Hf_s"); first done.
+    iIntros (x ?) "Hx Ha_s Hf_s Hb".
+    source_simp.
+    iApply (source_local_write_alloc with "Hd_s Hf_s"); first done.
+    iIntros "Hx' Hd_s Hf_s".
+    source_simp.
+    iApply ("Hpost" with "[//] Hx Ha_s Hd_s Hx' Hf_s Hb").
+  Qed.
+
+  (* TODO refactor to pred transformer style *)
   Lemma sim_instr_alloca
     l_t l_s dt t o i_t S_t i_s S_s `{non_void dt} L_t L_s:
     l_t ∉ L_t ->
@@ -591,7 +661,8 @@ Section instr_properties.
     vfinal. sfinal.
   Qed.
 
-   Lemma target_instr_load1 l dt du b o L i pid id q Ψ size bytes cid:
+  (** ** Load laws *)
+  Lemma target_instr_load_block l dt du b o L i pid id q Ψ size bytes cid:
     is_supported dt ->
     pid ∉ L ->
     ⊢ l ↦{q}t [ LBlock size bytes cid ] -∗
@@ -609,33 +680,17 @@ Section instr_properties.
         Ψ.
   Proof with target_simp.
     iIntros (WF Ht) "Hp Hl Hd Hf H"; cbn...
-
-    iApply (target_red_mono with "[Hp Hd H] [Hf Hl]");
-      [ | iApply (target_local_read with "Hl Hf"); auto]; cycle 1.
-    { iIntros "Hl Hf".
-      Unshelve.
-      2 : exact (lift_unary_post (fun x => ⌜x = UVALUE_Addr (l, 0%Z)⌝
-       ∗ stack_tgt i ∗ [id := UVALUE_Addr (l, 0%Z)]t i)%I).
-      iExists _. do 2 (iSplitL ""; [ done | ]). iFrame. }
-
-    iIntros (?) "HP".
-    iDestruct "HP" as (???) "(Hf & Hl)".
-    iApply target_red_eq_itree.
-    { by rewrite H bind_ret_l. }
-
-    target_simp. rewrite H0; cbn...
+    iApply (target_local_read with "Hl Hf").
+    iIntros "Hl Hf"...
 
     destruct (dvalue_eq_dec (d1:=DVALUE_Addr (l, 0%Z)) (d2:=DVALUE_Poison)) eqn: Heq ; [ done | ]...
-
     change l with ((l, 0%Z).1) at 1.
     iApply (target_load_block with "Hp").
-
-    iIntros "H'"... target_simp.
-
-    iApply (target_local_write_alloc _ _ _ _ _ Ht with "Hd Hf").
-    iIntros "Hi H_t H_s"...
-
-    by iSpecialize ("H" with "Hl Hi H' H_t H_s").
+    iIntros "H'"...
+    target_simp.
+    iApply (target_local_write_alloc with "Hd Hf"); first done.
+    iIntros "Hpl Hd Hf"...
+    iApply ("H" with "Hl Hpl H' Hd Hf").
   Qed.
 
    Lemma target_instr_load l dt du b o L i pid v id q Ψ:
@@ -657,53 +712,19 @@ Section instr_properties.
         Ψ.
   Proof with target_simp.
     iIntros (WF Hdt Ht) "Hp Hl Hd Hf H"; cbn...
-    iApply (target_red_mono with "[Hp Hd H] [Hf Hl]");
-      [ | iApply (target_local_read with "Hl Hf"); auto]; cycle 1.
-    { iIntros "Hl Hf".
-      Unshelve.
-      2 : exact (lift_unary_post (fun x => ⌜x = UVALUE_Addr (l, 0%Z)⌝
-       ∗ stack_tgt i ∗ [id := UVALUE_Addr (l, 0%Z)]t i)%I).
-      iExists _. do 2 (iSplitL ""; [ done | ]). iFrame. }
-
-    iIntros (?) "HP".
-    iDestruct "HP" as (???) "(Hf & Hl)".
-    iApply target_red_eq_itree; first by rewrite H bind_ret_l.
-
-    target_simp... rewrite H0; cbn...
+    iApply (target_local_read with "Hl Hf").
+    iIntros "Hl Hf"...
 
     destruct (dvalue_eq_dec (d1:=DVALUE_Addr (l, 0%Z)) (d2:=DVALUE_Poison)) eqn: Heq ; [ done | ]...
-
-    iApply (target_red_mono with "[Hd Hf H Hl] [Hp]");
-      [ | iApply (target_load _ _ _ _ _ WF Hdt with "Hp")]; cycle 1.
-
-    Unshelve.
-    3 : exact (lift_unary_post
-          (fun x : uvalue => ⌜x = dvalue_to_uvalue v⌝ ∗ l ↦{q}t v)%I).
-    { iIntros.
-      iExists _; eauto. }
-
-    iIntros (?) "H'".
-    iDestruct "H'" as (???) "H'"; subst... target_simp.
-
-    iApply target_red_eq_itree ; first by rewrite H1... target_simp.
-
-    iApply (target_red_mono with "[H Hl H'] [Hd Hf]");
-      [ | iApply (target_local_write_alloc _ _ _ _ _ Ht with "Hd Hf")]; cycle 1.
-
-    Unshelve.
-    3 : exact (lift_unary_post
-          (fun (_ : ()) => [ pid := dvalue_to_uvalue v ]t i ∗
-            ldomain_tgt i ({[pid]} ∪ L) ∗ stack_tgt i))%I.
-    { iIntros; iExists _; by iFrame. }
-
-    iIntros (?) "HP".
-    iDestruct "HP" as (??)"(Hpl&Hd&Hf)".
-    iSpecialize ("H" with "Hl Hpl H' Hd Hf").
-    apply EqAxiom.bisimulation_is_eq in H0; rewrite H0...
-    by destruct v0.
+    iApply (target_load with "Hp"); [done.. | ].
+    iIntros "H'"...
+    target_simp.
+    iApply (target_local_write_alloc with "Hd Hf"); first done.
+    iIntros "Hpl Hd Hf"...
+    iApply ("H" with "Hl Hpl H' Hd Hf").
   Qed.
 
-   Lemma source_instr_load1 l dt du b o L i pid id q Ψ size bytes cid:
+   Lemma source_instr_load_block l dt du b o L i pid id q Ψ size bytes cid:
     is_supported dt ->
     pid ∉ L ->
     ⊢ l ↦{q}s [ LBlock size bytes cid ] -∗
@@ -721,33 +742,17 @@ Section instr_properties.
         Ψ.
   Proof with source_simp.
     iIntros (WF Ht) "Hp Hl Hd Hf H"; cbn...
-
-    iApply (source_red_mono with "[Hp Hd H] [Hf Hl]");
-      [ | iApply (source_local_read with "Hl Hf"); auto]; cycle 1.
-    { iIntros "Hl Hf".
-      Unshelve.
-      2 : exact (lift_unary_post (fun x => ⌜x = UVALUE_Addr (l, 0%Z)⌝
-       ∗ stack_src i ∗ [id := UVALUE_Addr (l, 0%Z)]s i)%I).
-      iExists _. do 2 (iSplitL ""; [ done | ]). iFrame. }
-
-    iIntros (?) "HP".
-    iDestruct "HP" as (???) "(Hf & Hl)".
-    iApply source_red_eq_itree.
-    { by rewrite H bind_ret_l. }
-
-    source_simp; rewrite H0; cbn...
+    iApply (source_local_read with "Hl Hf").
+    iIntros "Hl Hf"...
 
     destruct (dvalue_eq_dec (d1:=DVALUE_Addr (l, 0%Z)) (d2:=DVALUE_Poison)) eqn: Heq ; [ done | ]...
-
     change l with ((l, 0%Z).1) at 1.
     iApply (source_load_block with "Hp").
-
-    iIntros "H'"... source_simp.
-
-    iApply (source_local_write_alloc _ _ _ _ _ Ht with "Hd Hf").
-    iIntros "Hi H_t H_s"...
-
-    by iSpecialize ("H" with "Hl Hi H' H_t H_s").
+    iIntros "H'"...
+    source_simp.
+    iApply (source_local_write_alloc with "Hd Hf"); first done.
+    iIntros "Hpl Hd Hf"...
+    iApply ("H" with "Hl Hpl H' Hd Hf").
   Qed.
 
   Lemma source_instr_load l dt du b o L i pid v id q Ψ:
@@ -769,277 +774,225 @@ Section instr_properties.
         Ψ.
   Proof with source_simp.
     iIntros (WF Hdt Ht) "Hp Hl Hd Hf H"; cbn...
-    iApply (source_red_mono with "[Hp Hd H] [Hf Hl]");
-      [ | iApply (source_local_read with "Hl Hf"); auto]; cycle 1.
-    { iIntros "Hl Hf".
-      Unshelve.
-      2 : exact (lift_unary_post (fun x => ⌜x = UVALUE_Addr (l, 0%Z)⌝
-       ∗ stack_src i ∗ [id := UVALUE_Addr (l, 0%Z)]s i)%I).
-      iExists _. do 2 (iSplitL ""; [ done | ]). iFrame. }
-
-    iIntros (?) "HP".
-    iDestruct "HP" as (???) "(Hf & Hl)".
-    iApply source_red_eq_itree; first by rewrite H bind_ret_l.
-
-    source_simp... rewrite H0; cbn...
+    iApply (source_local_read with "Hl Hf").
+    iIntros "Hl Hf"...
 
     destruct (dvalue_eq_dec (d1:=DVALUE_Addr (l, 0%Z)) (d2:=DVALUE_Poison)) eqn: Heq ; [ done | ]...
-
-    iApply (source_red_mono with "[Hd Hf H Hl] [Hp]");
-      [ | iApply (source_load _ _ _ _ _ WF Hdt with "Hp")]; cycle 1.
-
-    Unshelve.
-    3 : exact (lift_unary_post
-          (fun x : uvalue => ⌜x = dvalue_to_uvalue v⌝ ∗ l ↦{q}s v)%I).
-    { iIntros; iExists _; eauto. }
-
-    iIntros (?) "H'".
-    iDestruct "H'" as (???) "H'"; subst.
-
-    iApply source_red_eq_itree; first by rewrite H1... source_simp.
-
-    iApply (source_red_mono with "[H Hl H'] [Hd Hf]");
-      [ | iApply (source_local_write_alloc _ _ _ _ _ Ht with "Hd Hf")]; cycle 1.
-
-    Unshelve.
-    3 : exact (lift_unary_post
-          (fun (_ : ()) => [ pid := dvalue_to_uvalue v ]s i ∗
-            ldomain_src i ({[pid]} ∪ L) ∗ stack_src i))%I.
-    { iIntros; iExists _; by iFrame. }
-
-    iIntros (?) "HP".
-    iDestruct "HP" as (??)"(Hpl&Hd&Hf)".
-    iSpecialize ("H" with "Hl Hpl H' Hd Hf").
-    apply EqAxiom.bisimulation_is_eq in H0; rewrite H0...
-    by destruct v0.
+    iApply (source_load with "Hp"); [done.. | ].
+    iIntros "H'"...
+    source_simp.
+    iApply (source_local_write_alloc with "Hd Hf"); first done.
+    iIntros "Hpl Hd Hf"...
+    iApply ("H" with "Hl Hpl H' Hd Hf").
   Qed.
 
-  Lemma target_instr_store b dt val o ptr i n id' v L Ψ dv:
+  (* TODO move *)
+  Lemma concretize_or_pick_is_concrete E dv `{PickE -< E} `{FailureE -< E} :
+    is_concrete (dvalue_to_uvalue dv) →
+    (concretize_or_pick (dvalue_to_uvalue dv) True : itree E dvalue) = Ret dv.
+  Proof.
+    intros Ha.
+    rewrite /concretize_or_pick.
+    destruct is_concrete; last done.
+    rewrite uvalue_to_dvalue_of_dvalue_to_uvalue. done.
+  Qed.
+
+  (** ** Store laws *)
+  Lemma target_instr_store b dt val o ptr i n id' v L Ψ :
     dvalue_has_dtyp_fun v dt ->
-    ⊢ ptr ↦t v -∗
-      ldomain_tgt i L -∗
-      stack_tgt i -∗
-      [ id' := UVALUE_Addr (ptr, 0%Z) ]t i -∗
+    ⊢
       target_red (η := vir_handler)
-        (exp_conv (denote_exp (Some dt) val))
+        <{ val @ Some dt }>e
         (lift_unary_post
-           (fun x =>
+           (λ x, ∃ dv,
               ⌜is_concrete x⌝ ∗ ⌜dvalue_to_uvalue dv = x⌝ ∗
-              ⌜dvalue_has_dtyp_fun dv dt⌝)) -∗
-      (ldomain_tgt i L -∗
-        stack_tgt i -∗
-        [ id' := UVALUE_Addr (ptr, 0%Z) ]t i -∗
-        ptr ↦t dv -∗
-        Ψ (Ret ())) -∗
+              ⌜dvalue_has_dtyp_fun dv dt⌝ ∗
+              ldomain_tgt i L ∗
+              stack_tgt i ∗
+              [ id' := UVALUE_Addr (ptr, 0%Z) ]t i ∗
+              ptr ↦t v ∗
+              (* post *)
+              (ldomain_tgt i L -∗
+              stack_tgt i -∗
+              [ id' := UVALUE_Addr (ptr, 0%Z) ]t i -∗
+              ptr ↦t dv -∗
+              Ψ (Ret ()))
+      )) -∗
       target_red (η := vir_handler)
         (<{ %(IVoid n) =
             (INSTR_Store b (dt, val) (DTYPE_Pointer, EXP_Ident (ID_Local id')) o) }>)
         Ψ.
   Proof with target_simp.
-    iIntros (Htyp) "Hp Hd Hf Hl H HP"; cbn...
-    iApply (target_red_mono with "[Hp Hd Hf Hl HP]"); [ |  iApply "H"].
+    iIntros (Htyp) "Hp"; cbn...
+    iApply (target_red_mono with "[] Hp").
 
-    iIntros (?) "H"; iDestruct "H" as (????) "%Ht"... target_simp.
+    iIntros (?) "Ha".
 
-    rewrite /concretize_or_pick.
-    destruct (is_concrete v0); inversion H0; cbn.
-    rewrite -H1 uvalue_to_dvalue_of_dvalue_to_uvalue /lift_err...
-    destruct (dvalue_has_dtyp_fun dv dt) eqn: Ht'; try inversion Ht...
-
-    iApply (target_red_mono with "[Hp Hd HP] [Hf Hl]");
-      [ | iApply (target_local_read with "Hl Hf"); auto]; cycle 1.
-    { iIntros "Hl Hf".
-      Unshelve.
-      2 : exact (lift_unary_post (fun x => ⌜x = UVALUE_Addr (ptr, 0%Z)⌝
-       ∗ stack_tgt i ∗ [id' := UVALUE_Addr (ptr, 0%Z)]t i)%I).
-      iExists _. do 2 (iSplitL ""; [ done | ]). iFrame. }
-
-    iIntros (?) "HΦ".
-    iDestruct "HΦ" as (???) "(Hf & Hl)"... target_simp. subst; cbn...
-
-    destruct (dvalue_eq_dec (d1:=DVALUE_Addr (ptr, 0%Z)) (d2:=DVALUE_Poison)) eqn: Heq ; [ done | ]...
-
-    destruct (dvalue_has_dtyp_fun v dt) eqn: Hdt; subst; try done.
-    destruct (dvalue_has_dtyp_fun dv dt) eqn: Hdt'; subst; try done.
-    apply dvalue_has_dtyp_fun_sound in Hdt, Hdt'.
-
-    pose proof (dvalue_has_dtyp_serialize _ _ _ Hdt Hdt').
-    iApply (target_red_mono with "[Hd Hf Hl HP]");
-      last iApply (target_store _ _ _ _ H1 with "Hp").
-    { Unshelve.
-      2 : exact (lift_unary_post (fun x => ptr ↦t dv))%I.
-    iIntros (?) "(%x & %eq & H)"... destruct x...
-    iApply target_red_eq_itree; first by rewrite eq...
+    rewrite /lift_unary_post. iDestruct "Ha" as "(%v' & %Heq & %dv & %Hconcr & <- & %Hdt & Hl & Hs & Hid & Hptr & Hpost)".
     target_simp.
-    iApply target_red_eq_itree; first by rewrite eq...
+    target_simp.
 
-    iApply ("HP" with "Hd Hf Hl H"). }
-    iIntros "H". iExists _; by iFrame.
+    rewrite concretize_or_pick_is_concrete; last done.
+    target_simp.
+    destruct (dvalue_has_dtyp_fun dv dt) eqn:Ht'; last done.
+    target_simp.
+
+    iApply (target_local_read with "Hid Hs").
+    iIntros "Hid Hs"...
+    destruct (dvalue_eq_dec) eqn: Heq' ; [ done | ]...
+
+    iApply (target_store with "Hptr").
+    { eapply dvalue_has_dtyp_serialize; eapply dvalue_has_dtyp_fun_sound.
+      all: destruct dvalue_has_dtyp_fun eqn:Hdt'; subst; done. }
+    iIntros "Hptr"...
+    target_simp.
+    by iApply ("Hpost" with "Hl Hs Hid").
   Qed.
 
-  Lemma source_instr_store b dt val o Ψ ptr i n id' v L dv:
-    dvalue_has_dtyp_fun v dt ->
-    ⊢ ptr ↦s v -∗
-      ldomain_src i L -∗
-      stack_src i -∗
-      [ id' := UVALUE_Addr (ptr, 0%Z) ]s i -∗
-      source_red (η := vir_handler)
-        (exp_conv (denote_exp (Some dt) val))
+  Lemma target_instr_store_block b dt val o ptr i n id' size bytes idx L Ψ :
+    ⊢ target_red (η := vir_handler)
+        <{ val @ Some dt }>e
         (lift_unary_post
-           (fun x =>
+           (λ x, ∃ dv,
               ⌜is_concrete x⌝ ∗ ⌜dvalue_to_uvalue dv = x⌝ ∗
-                ⌜dvalue_has_dtyp_fun dv dt⌝)) -∗
-      (ldomain_src i L -∗
-        stack_src i -∗
-        [ id' := UVALUE_Addr (ptr, 0%Z) ]s i -∗
-        ptr ↦s dv -∗
-        Ψ (Ret ())) -∗
-      source_red (η := vir_handler)
-        (<{ %(IVoid n) =
-            (INSTR_Store b (dt, val)
-               (DTYPE_Pointer, EXP_Ident (ID_Local id')) o) }>)
-        Ψ.
-  Proof with source_simp.
-    iIntros (Htyp) "Hp Hd Hf Hl H HP"; cbn...
-    iApply (source_red_mono with "[Hp Hd Hf Hl HP]"); [ |  iApply "H"].
-
-    iIntros (?) "H"; iDestruct "H" as (????) "%Ht"... source_simp.
-
-    rewrite /concretize_or_pick; destruct (is_concrete v0); inversion H0; cbn.
-    rewrite -H1 uvalue_to_dvalue_of_dvalue_to_uvalue /lift_err...
-    destruct (dvalue_has_dtyp_fun dv dt) eqn: Ht'; try done...
-
-    iApply (source_red_mono with "[Hp Hd HP] [Hf Hl]");
-      [ | iApply (source_local_read with "Hl Hf"); auto]; cycle 1.
-    { iIntros "Hl Hf".
-      Unshelve.
-      2 : exact (lift_unary_post (fun x => ⌜x = UVALUE_Addr (ptr, 0%Z)⌝
-       ∗ stack_src i ∗ [id' := UVALUE_Addr (ptr, 0%Z)]s i)%I).
-      iExists _. do 2 (iSplitL ""; [ done | ]). iFrame. }
-
-    iIntros (?) "HΦ"; iDestruct "HΦ" as (???) "(Hf & Hl)"...
-    source_simp; subst; cbn...
-
-    destruct (dvalue_eq_dec (d1:=DVALUE_Addr (ptr, 0%Z)) (d2:=DVALUE_Poison)) eqn: Heq ; [ done | ]...
-
-    destruct (dvalue_has_dtyp_fun v dt) eqn: Hdt; subst; try done.
-    destruct (dvalue_has_dtyp_fun dv dt) eqn: Hdt'; subst; try done.
-    apply dvalue_has_dtyp_fun_sound in Hdt, Hdt'.
-
-    pose proof (dvalue_has_dtyp_serialize _ _ _ Hdt Hdt')...
-    iApply (source_red_mono with "[Hd Hf Hl HP]");
-      last iApply (source_store _ _ _ _ H1 with "Hp").
-    { Unshelve.
-      2 : exact (lift_unary_post (fun x => ptr ↦s dv))%I.
-    iIntros (?) "(%x & %eq & H)"... destruct x...
-    iApply source_red_eq_itree; first by rewrite eq...
-    source_simp.
-    iApply source_red_eq_itree; first by rewrite eq...
-
-    iApply ("HP" with "Hd Hf Hl H"). }
-    iIntros "H". iExists _; by iFrame.
-  Qed.
-
-  Lemma source_instr_store1 b dt val o ptr i n id' dv Ψ L size bytes idx:
-    ⊢ ptr ↦s [ LBlock size bytes idx ] -∗
-      ldomain_src i L -∗
-      stack_src i -∗
-      [ id' := UVALUE_Addr (ptr, 0%Z) ]s i -∗
-      source_red (η := vir_handler)
-        (exp_conv (denote_exp (Some dt) val))
-        (lift_unary_post
-           (fun x =>
-              ⌜is_concrete x⌝ ∗ ⌜dvalue_to_uvalue dv = x⌝ ∗
-                    ⌜dvalue_has_dtyp_fun dv dt⌝)) -∗
-      (ldomain_src i L -∗
-        stack_src i -∗
-        [ id' := UVALUE_Addr (ptr, 0%Z) ]s i -∗
-        ptr ↦s [ LBlock size (add_all_index (serialize_dvalue dv) 0%Z bytes) idx ] -∗
-        Ψ (Ret ())) -∗
-      source_red (η := vir_handler)
-        (<{ %(IVoid n) =
-            (INSTR_Store b (dt, val)
-               (DTYPE_Pointer, EXP_Ident (ID_Local id')) o) }>)
-        Ψ.
-  Proof with source_simp.
-    iIntros "Hp Hd Hf Hl H HP"; cbn...
-    iApply (source_red_mono with "[Hp Hd Hf Hl HP]"); [ |  iApply "H"].
-    iIntros (?) "H"; iDestruct "H" as (????) "%Ht"... subst; cbn...
-
-    rewrite /concretize_or_pick; destruct (is_concrete (dv ̂)); inversion H0.
-    cbn; rewrite uvalue_to_dvalue_of_dvalue_to_uvalue /lift_err...
-    destruct (dvalue_has_dtyp_fun dv dt) eqn : Htyp ; [ | done]...
-
-    iApply (source_red_mono with "[Hp Hd HP] [Hf Hl]");
-      [ | iApply (source_local_read with "Hl Hf"); auto]; cycle 1.
-    { iIntros "Hl Hf".
-      Unshelve.
-      2 : exact (lift_unary_post (fun x => ⌜x = UVALUE_Addr (ptr, 0%Z)⌝
-       ∗ stack_src i ∗ [id' := UVALUE_Addr (ptr, 0%Z)]s i)%I).
-      iExists _. do 2 (iSplitL ""; [ done | ]). iFrame. }
-
-    iIntros (?) "HΦ"; iDestruct "HΦ" as (???) "(Hf & Hl)".
-    subst.
-    iApply source_red_eq_itree; first by rewrite H1...
-
-    destruct (dvalue_eq_dec (d1:=DVALUE_Addr (ptr, 0%Z)) (d2:=DVALUE_Poison)) eqn: Heq ; [ done | ]...
-
-    change (ptr) with ((ptr, 0%Z).1) at 1.
-    iApply (source_store_block with "Hp").
-    iIntros "Hp"... source_simp.
-    by iSpecialize ("HP" with "Hd Hf Hl Hp").
-  Qed.
-
-  Lemma target_instr_store1 b dt val o ptr i n id' dv Ψ L size bytes idx:
-    ⊢ ptr ↦t [ LBlock size bytes idx ] -∗
-      ldomain_tgt i L -∗
-      stack_tgt i -∗
-      [ id' := UVALUE_Addr (ptr, 0%Z) ]t i -∗
-      target_red (η := vir_handler)
-        (exp_conv (denote_exp (Some dt) val))
-        (lift_unary_post
-           (fun x =>
-              ⌜is_concrete x⌝ ∗ ⌜dvalue_to_uvalue dv = x⌝ ∗
-                    ⌜dvalue_has_dtyp_fun dv dt⌝)) -∗
-      (ldomain_tgt i L -∗
-        stack_tgt i -∗
-        [ id' := UVALUE_Addr (ptr, 0%Z) ]t i -∗
-        ptr ↦t [ LBlock size (add_all_index (serialize_dvalue dv) 0%Z bytes) idx ] -∗
-        Ψ (Ret ())) -∗
+              ⌜dvalue_has_dtyp_fun dv dt⌝ ∗
+              ldomain_tgt i L ∗
+              stack_tgt i ∗
+              [ id' := UVALUE_Addr (ptr, 0%Z) ]t i ∗
+              ptr ↦t [ LBlock size bytes idx ] ∗
+              (* post *)
+              (ldomain_tgt i L -∗
+              stack_tgt i -∗
+              [ id' := UVALUE_Addr (ptr, 0%Z) ]t i -∗
+              ptr ↦t [ LBlock size (add_all_index (serialize_dvalue dv) 0%Z bytes) idx ] -∗
+              Ψ (Ret ()))
+      )) -∗
       target_red (η := vir_handler)
         (<{ %(IVoid n) =
-            (INSTR_Store b (dt, val)
-               (DTYPE_Pointer, EXP_Ident (ID_Local id')) o) }>)
+            (INSTR_Store b (dt, val) (DTYPE_Pointer, EXP_Ident (ID_Local id')) o) }>)
         Ψ.
   Proof with target_simp.
-    iIntros "Hp Hd Hf Hl H HP"; cbn...
-    iApply (target_red_mono with "[Hp Hd Hf Hl HP]"); [ |  iApply "H"].
-    iIntros (?) "H"; iDestruct "H" as (????) "%Ht"... subst; cbn...
+    iIntros "Hp"; cbn...
+    iApply (target_red_mono with "[] Hp").
 
-    rewrite /concretize_or_pick; destruct (is_concrete (dv ̂)); inversion H0.
-    cbn; rewrite uvalue_to_dvalue_of_dvalue_to_uvalue /lift_err...
-    destruct (dvalue_has_dtyp_fun dv dt) eqn : Htyp ; [ | done]...
+    iIntros (?) "Ha".
 
-    iApply (target_red_mono with "[Hp Hd HP] [Hf Hl]");
-      [ | iApply (target_local_read with "Hl Hf"); auto]; cycle 1.
-    { iIntros "Hl Hf".
-      Unshelve.
-      2 : exact (lift_unary_post (fun x => ⌜x = UVALUE_Addr (ptr, 0%Z)⌝
-       ∗ stack_tgt i ∗ [id' := UVALUE_Addr (ptr, 0%Z)]t i)%I).
-      iExists _. do 2 (iSplitL ""; [ done | ]). iFrame. }
+    rewrite /lift_unary_post. iDestruct "Ha" as "(%v' & %Heq & %dv & %Hconcr & <- & %Hdt & Hl & Hs & Hid & Hptr & Hpost)".
+    target_simp.
+    target_simp.
 
-    iIntros (?) "HΦ"; iDestruct "HΦ" as (???) "(Hf & Hl)".
-    subst.
-    iApply target_red_eq_itree; first by rewrite H1...
+    rewrite concretize_or_pick_is_concrete; last done.
+    target_simp.
+    destruct (dvalue_has_dtyp_fun dv dt) eqn:Ht'; last done.
+    target_simp.
 
-    destruct (dvalue_eq_dec (d1:=DVALUE_Addr (ptr, 0%Z)) (d2:=DVALUE_Poison)) eqn: Heq ; [ done | ]...
+    iApply (target_local_read with "Hid Hs").
+    iIntros "Hid Hs"...
+    destruct (dvalue_eq_dec) eqn: Heq' ; [ done | ]...
 
-    change (ptr) with ((ptr, 0%Z).1) at 1.
-    iApply (target_store_block with "Hp").
-    iIntros "Hp"... target_simp.
-    by iSpecialize ("HP" with "Hd Hf Hl Hp").
+    iApply (target_store_block _ _ _ _ _ (ptr, 0%Z) with "Hptr").
+    iIntros "Hptr"...
+    target_simp.
+    by iApply ("Hpost" with "Hl Hs Hid").
   Qed.
 
+  Lemma source_instr_store b dt val o ptr i n id' v L Ψ :
+    dvalue_has_dtyp_fun v dt ->
+    ⊢
+      source_red (η := vir_handler)
+        <{ val @ Some dt }>e
+        (lift_unary_post
+           (λ x, ∃ dv,
+              ⌜is_concrete x⌝ ∗ ⌜dvalue_to_uvalue dv = x⌝ ∗
+              ⌜dvalue_has_dtyp_fun dv dt⌝ ∗
+              ldomain_src i L ∗
+              stack_src i ∗
+              [ id' := UVALUE_Addr (ptr, 0%Z) ]s i ∗
+              ptr ↦s v ∗
+              (* post *)
+              (ldomain_src i L -∗
+              stack_src i -∗
+              [ id' := UVALUE_Addr (ptr, 0%Z) ]s i -∗
+              ptr ↦s dv -∗
+              Ψ (Ret ()))
+      )) -∗
+      source_red (η := vir_handler)
+        (<{ %(IVoid n) =
+            (INSTR_Store b (dt, val) (DTYPE_Pointer, EXP_Ident (ID_Local id')) o) }>)
+        Ψ.
+  Proof with source_simp.
+    iIntros (Htyp) "Hp"; cbn...
+    iApply (source_red_mono with "[] Hp").
+
+    iIntros (?) "Ha".
+
+    rewrite /lift_unary_post. iDestruct "Ha" as "(%v' & %Heq & %dv & %Hconcr & <- & %Hdt & Hl & Hs & Hid & Hptr & Hpost)".
+    source_simp.
+    source_simp.
+
+    rewrite concretize_or_pick_is_concrete; last done.
+    source_simp.
+    destruct (dvalue_has_dtyp_fun dv dt) eqn:Ht'; last done.
+    source_simp.
+
+    iApply (source_local_read with "Hid Hs").
+    iIntros "Hid Hs"...
+    destruct (dvalue_eq_dec) eqn: Heq' ; [ done | ]...
+
+    iApply (source_store with "Hptr").
+    { eapply dvalue_has_dtyp_serialize; eapply dvalue_has_dtyp_fun_sound.
+      all: destruct dvalue_has_dtyp_fun eqn:Hdt'; subst; done. }
+    iIntros "Hptr"...
+    source_simp.
+    by iApply ("Hpost" with "Hl Hs Hid").
+  Qed.
+
+  Lemma source_instr_store_block b dt val o ptr i n id' size bytes idx L Ψ :
+    ⊢ source_red (η := vir_handler)
+        <{ val @ Some dt }>e
+        (lift_unary_post
+           (λ x, ∃ dv,
+              ⌜is_concrete x⌝ ∗ ⌜dvalue_to_uvalue dv = x⌝ ∗
+              ⌜dvalue_has_dtyp_fun dv dt⌝ ∗
+              ldomain_src i L ∗
+              stack_src i ∗
+              [ id' := UVALUE_Addr (ptr, 0%Z) ]s i ∗
+              ptr ↦s [ LBlock size bytes idx ] ∗
+              (* post *)
+              (ldomain_src i L -∗
+              stack_src i -∗
+              [ id' := UVALUE_Addr (ptr, 0%Z) ]s i -∗
+              ptr ↦s [ LBlock size (add_all_index (serialize_dvalue dv) 0%Z bytes) idx ] -∗
+              Ψ (Ret ()))
+      )) -∗
+      source_red (η := vir_handler)
+        (<{ %(IVoid n) =
+            (INSTR_Store b (dt, val) (DTYPE_Pointer, EXP_Ident (ID_Local id')) o) }>)
+        Ψ.
+  Proof with source_simp.
+    iIntros "Hp"; cbn...
+    iApply (source_red_mono with "[] Hp").
+
+    iIntros (?) "Ha".
+
+    rewrite /lift_unary_post. iDestruct "Ha" as "(%v' & %Heq & %dv & %Hconcr & <- & %Hdt & Hl & Hs & Hid & Hptr & Hpost)".
+    source_simp.
+    source_simp.
+
+    rewrite concretize_or_pick_is_concrete; last done.
+    source_simp.
+    destruct (dvalue_has_dtyp_fun dv dt) eqn:Ht'; last done.
+    source_simp.
+
+    iApply (source_local_read with "Hid Hs").
+    iIntros "Hid Hs"...
+    destruct (dvalue_eq_dec) eqn: Heq' ; [ done | ]...
+
+    iApply (source_store_block _ _ _ _ _ (ptr, 0%Z) with "Hptr").
+    iIntros "Hptr"...
+    source_simp.
+    by iApply ("Hpost" with "Hl Hs Hid").
+  Qed.
 End instr_properties.
 
 
