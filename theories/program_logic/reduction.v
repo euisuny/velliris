@@ -6,7 +6,7 @@
 From iris.prelude Require Import options.
 From iris.bi Require Import bi lib.fixpoint.
 
-From velliris.program_logic Require Export weakest_pre.
+From velliris.program_logic Require Export weakest_pre sim_properties.
 From velliris.utils Require Import tactics.
 
 From ITree Require Import ITree
@@ -125,6 +125,27 @@ Section reduction.
     iMod ("Htarget" with "SI") as "Hsim".
     provide_case: STUTTER_R.
     by rewrite /sim_coind sim_coindF_unfold.
+  Qed.
+
+  Lemma source_red_sim_expr' {R1 R2} (e_s : _ R1) (e_t : _ R2) Φ :
+    source_red e_s (λ e_s' : expr Λ R1, e_t ⪯ e_s' ⦉ Φ ⦊) -∗ e_t ⪯ e_s ⦉ Φ ⦊.
+  Proof.
+    iIntros "Hsource".
+    rewrite source_red_eq.
+    iApply (source_red_ind _ (λ e_s, e_t ⪯ e_s ⦉  Φ ⦊)%I); last by rewrite /flip.
+    iModIntro. clear e_s. iIntros (e_s) "Hsource".
+    rewrite /source_red_rec.
+    iDestruct "Hsource" as "[Hsource | Hsource]"; last done.
+    rewrite /sim_expr'.
+    iIntros (??) "Hstate".
+    iMod ("Hsource" with "Hstate") as (X v_s k_s σ_s' Heq) "[SI Hsource]".
+
+    rewrite /sim_coind'.
+    iApply sim_coindF_Proper;
+      [eapply lift_rel_Φ_Proper | reflexivity | rewrite Heq bind_tau bind_ret_l; reflexivity |].
+    simpl.
+    iApply sim_coindF_tauR.
+    iApply ("Hsource" with "SI").
   Qed.
 
   Lemma source_red_bind {R1 R2} (e_s : _ R1) (k_s : _ -> _ R2) Ψ :
@@ -291,6 +312,28 @@ Section reduction.
     provide_case: STUTTER_L.
     by rewrite /sim_coind sim_coindF_unfold.
   Qed.
+
+  Lemma target_red_sim_expr' {R1 R2} (e_s : _ R1) (e_t : _ R2) Φ :
+    target_red e_t (λ e_t' : expr Λ R2, e_t' ⪯ e_s ⦉ Φ ⦊) -∗ e_t ⪯ e_s ⦉ Φ ⦊.
+  Proof.
+    iIntros "Htarget".
+    rewrite target_red_eq.
+    iApply (target_red_ind _ (λ e_t, e_t ⪯ e_s ⦉  Φ ⦊)%I); last by rewrite /flip.
+    iModIntro. clear e_t. iIntros (e_t) "Htarget".
+    rewrite /target_red_rec.
+    iDestruct "Htarget" as "[Htarget | Htarget]"; last done.
+    rewrite /sim_expr'.
+    iIntros (??) "Hstate".
+    iMod ("Htarget" with "Hstate") as (X v_t k_t σ_t' Heq) "[SI Htarget]".
+
+    rewrite /sim_coind'.
+    iApply sim_coindF_Proper;
+      [eapply lift_rel_Φ_Proper | rewrite Heq bind_tau bind_ret_l; reflexivity | reflexivity |].
+    simpl.
+    iApply sim_coindF_tauL.
+    iApply ("Htarget" with "SI").
+  Qed.
+
 
   Lemma target_red_bind {R1 R2} (e_t : _ R1) (k_t : _ -> _ R2) Ψ :
     target_red e_t (λ e_t', target_red (ITree.bind e_t' k_t) Ψ) -∗

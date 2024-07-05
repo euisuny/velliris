@@ -58,7 +58,7 @@ Section sim_expr_properties.
 
   Local Instance sim_expr_stutter : SimE PROP Λ := (sim_expr_aux (η := η)).(unseal).
 
-  (* Auxiliary facts about simulation relation *)
+  (* Auxiliary facts aboutsimulation relation *)
   Lemma sim_expr_bind {R1 R2} {Re1 Re2} (Φ : expr_rel R1 R2) (e_t : expr Λ Re1) (e_s : expr Λ Re2) k_t k_s:
     e_t ⪯ e_s [{ fun e_t'' e_s'' => ITree.bind e_t'' k_t ⪯ ITree.bind e_s'' k_s [{ Φ }] }] -∗
     ITree.bind e_t k_t ⪯ ITree.bind e_s k_s [{ Φ }].
@@ -264,7 +264,7 @@ Section sim_expr_properties.
 
     iMod "Hpre".
     iModIntro.
-    rewrite (sim_coindF_unfold (lift_expr_rel Φ)). 
+    rewrite (sim_coindF_unfold (lift_expr_rel Φ)).
     rewrite sim_indF_unfold.
     unfold sim_expr_inner; cbn.
     by provide_case: TAU_STEP.
@@ -703,6 +703,29 @@ Section sim_expr_properties.
       { iRight. rewrite /lift_rel_st.
         iSpecialize ("H" with "SI"). iMod "H".
         subst. rewrite /lift. auto. }
+  Qed.
+
+  (* A version specialized to having a [Tau] at the head *)
+  Definition sim_expr_paco_tau_pred {R1 R2} (F : expr_rel R1 R2 -d> expr_rel R1 R2) : expr_rel R1 R2 -d> expr_rel R1 R2 :=
+    λ Φ (e_t : expr Λ R1) (e_s : expr Λ R2), (∃ e_t' e_s', ⌜e_t = Tau e_t'⌝ ∗ ⌜e_s = Tau e_s'⌝ ∗ F Φ e_t' e_s')%I.
+  Lemma sim_expr_paco_tau {R1 R2} F (Φ : expr_rel R1 R2) (e_t:expr Λ R1) (e_s: expr Λ R2):
+    NonExpansive (F: expr_rel R1 R2 -d> expr_rel R1 R2) →
+    □ (∀ Φ Φ', (∀ e_t e_s, Φ e_t e_s ==∗ Φ' e_t e_s)%I -∗
+         ∀ e_t e_s, F Φ e_t e_s -∗ F Φ' e_t e_s) -∗
+    □ (∀ Φ e_t e_s, F Φ e_t e_s -∗ join_expr (sim_expr_paco_tau_pred F) Φ e_t e_s) -∗
+    F Φ (e_t) (e_s) -∗ Tau e_t ⪯ Tau e_s [[ Φ ]].
+  Proof.
+    iIntros (?) "#Ha #Hb HF".
+    iApply (sim_expr_paco (sim_expr_paco_tau_pred F)).
+    { solve_proper. }
+    { iModIntro. iIntros (??) "Hupd". iIntros (e_t' e_s').
+      rewrite /sim_expr_paco_tau_pred.
+      iIntros "(%e_t'' & %e_s'' & -> & -> & Hf)".
+      iExists _, _. iSplitR; first done. iSplitR; first done.
+      iApply ("Ha" with "Hupd Hf"). }
+    { iModIntro. iIntros (? e_t' e_s') "(%e_t'' & %e_s'' & -> & -> & Hpred)".
+      cbn. by iApply "Hb". }
+    iExists _, _. iSplitR; first done. iSplitR; first done. done.
   Qed.
 
   (* LATER: Should be simpler corollary of [sim_expr_lift] *)
@@ -1281,7 +1304,6 @@ Section sim_expr_properties.
       setoid_rewrite interp_state_ret in Ht. by apply eqit_inv in Ht. }
     eauto.
   Qed.
-
 
   (* The trigger for [state_events] should be stated as primitive laws for the
     specific language: it is not possible in advance to know how the
